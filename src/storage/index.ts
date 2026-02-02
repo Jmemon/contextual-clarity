@@ -33,3 +33,23 @@ export type {
   SessionMessage,
   NewSessionMessage,
 } from './schema';
+
+// Export repository layer for data access abstraction
+export {
+  RecallSetRepository,
+  RecallPointRepository,
+  SessionRepository,
+  SessionMessageRepository,
+} from './repositories';
+
+export type {
+  Repository,
+  CreateRecallSetInput,
+  UpdateRecallSetInput,
+  CreateRecallPointInput,
+  UpdateRecallPointInput,
+  CreateSessionInput,
+  UpdateSessionInput,
+  CreateSessionMessageInput,
+  UpdateSessionMessageInput,
+} from './repositories';
