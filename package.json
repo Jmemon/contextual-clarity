@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "check": "bun tsc --noEmit",
+    "test": "bun test",
+    "test:e2e": "bun test tests/e2e",
+    "test:unit": "bun test src",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run src/storage/migrate.ts",
     "db:studio": "drizzle-kit studio",
