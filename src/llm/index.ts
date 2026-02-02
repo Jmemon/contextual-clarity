@@ -6,13 +6,26 @@
  * - AnthropicClient: Main client class for making API calls
  * - Type definitions for messages, configs, and responses
  * - Custom error types for better error handling
+ * - Prompt builders for Socratic tutoring and recall evaluation
  *
  * @example
  * ```typescript
- * import { AnthropicClient, LLMError } from './llm';
+ * import {
+ *   AnthropicClient,
+ *   LLMError,
+ *   buildSocraticTutorPrompt,
+ *   buildRecallEvaluatorPrompt,
+ * } from './llm';
  *
  * const client = new AnthropicClient();
- * client.setSystemPrompt('You are a helpful tutor.');
+ *
+ * // Set up Socratic tutor with built prompt
+ * const tutorPrompt = buildSocraticTutorPrompt({
+ *   recallSet,
+ *   targetPoints,
+ *   currentPointIndex: 0,
+ * });
+ * client.setSystemPrompt(tutorPrompt);
  *
  * // Non-streaming
  * const response = await client.complete('What is machine learning?');
@@ -39,3 +52,14 @@ export type {
 
 // Re-export the error class (needs to be a value export, not just type)
 export { LLMError } from './types';
+
+// Re-export prompt builders and types for Socratic tutoring and recall evaluation
+export {
+  buildSocraticTutorPrompt,
+  buildRecallEvaluatorPrompt,
+  buildRecallEvaluatorSystemPrompt,
+  buildRecallEvaluatorUserMessage,
+  parseRecallEvaluationResponse,
+  type SocraticTutorPromptParams,
+  type RecallEvaluationResult,
+} from './prompts';
