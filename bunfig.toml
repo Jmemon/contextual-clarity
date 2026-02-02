@@ -1,0 +1,14 @@
+# Bun configuration file
+# See: https://bun.sh/docs/runtime/bunfig
+
+[install]
+# Use exact versions for reproducible builds
+exact = true
+
+[run]
+# Enable source maps for better error traces
+smol = false
+
+[test]
+# Test configuration
+coverage = false
