@@ -8,6 +8,10 @@
  * Available Commands:
  * - `session <name>` - Start an interactive recall session for a recall set
  * - `list` - List all available recall sets
+ * - `stats <name>` - Display recall statistics for a recall set
+ * - `export ...` - Export data to JSON or CSV files
+ * - `sessions <name>` - List recent sessions for a recall set
+ * - `replay <id>` - Replay a past session transcript
  * - (no args) - Show help with available commands
  *
  * Usage:
@@ -17,6 +21,24 @@
  *
  * # List all available recall sets
  * bun run cli list
+ *
+ * # Show statistics for a recall set
+ * bun run cli stats "ATP Synthesis"
+ *
+ * # Export session data
+ * bun run cli export session <session-id> [--format json|csv] [--output file]
+ *
+ * # Export recall set with all sessions
+ * bun run cli export set "ATP Synthesis" [--format json|csv] [--from date] [--to date]
+ *
+ * # Export analytics summary
+ * bun run cli export analytics "ATP Synthesis" [--format json|csv]
+ *
+ * # List recent sessions for a recall set
+ * bun run cli sessions "ATP Synthesis"
+ *
+ * # Replay a past session transcript
+ * bun run cli replay <session-id>
  *
  * # Show help
  * bun run cli
@@ -43,6 +65,9 @@ import { FSRSScheduler } from '../core/fsrs/scheduler';
 import { AnthropicClient } from '../llm/client';
 import { RecallEvaluator } from '../core/scoring/recall-evaluator';
 import { runSessionCommand } from './commands/session';
+import { runStatsCommand } from './commands/stats';
+import { listSessions, replaySession } from './commands/replay';
+import { createExportCommand } from './commands/export';
 import { bold, dim, green, yellow, red, formatSeparator, printBlankLine } from './utils/terminal';
 
 /**
@@ -62,7 +87,8 @@ async function main(): Promise<void> {
   const command = args[0];
 
   // Handle help flag anywhere in args
-  if (args.includes('--help') || args.includes('-h')) {
+  // Note: Skip this check for 'export' command which uses commander.js for help
+  if ((args.includes('--help') || args.includes('-h')) && command !== 'export') {
     printHelp();
     process.exit(0);
   }
@@ -135,6 +161,72 @@ async function main(): Promise<void> {
     case 'l':
       // List all available recall sets
       await listRecallSets(recallSetRepo);
+      break;
+
+    case 'stats':
+    case 'stat':
+      // Stats command requires a recall set name
+      const statsSetName = args.slice(1).join(' ');
+      if (!statsSetName) {
+        console.log(red('Error: Recall set name is required.'));
+        console.log(dim('Usage: bun run cli stats <recall-set-name>'));
+        console.log(dim('Example: bun run cli stats "ATP Synthesis"'));
+        process.exit(1);
+      }
+
+      // Display statistics for the recall set
+      await runStatsCommand(db, statsSetName);
+      break;
+
+    case 'export':
+      // Export command uses commander.js for sub-command parsing
+      // Pass remaining args to the export command handler
+      const exportCmd = createExportCommand();
+      // Parse the remaining arguments (after 'export')
+      // Commander expects the full argv array with program name
+      await exportCmd.parseAsync(['node', 'cli', ...args.slice(1)]);
+      break;
+
+    case 'sessions':
+      // Sessions command lists recent sessions for a recall set
+      // Requires a recall set name to look up sessions
+      const sessionsSetName = args.slice(1).join(' ');
+      if (!sessionsSetName) {
+        console.log(red('Error: Recall set name is required.'));
+        console.log(dim('Usage: bun run cli sessions <recall-set-name>'));
+        console.log(dim('Example: bun run cli sessions "ATP Synthesis"'));
+        process.exit(1);
+      }
+
+      // Parse optional --limit flag (defaults to 10)
+      // Allows users to control how many sessions to display
+      const limitIdx = args.indexOf('--limit');
+      const limitArg = args.indexOf('-n');
+      let sessionsLimit = 10;
+      if (limitIdx !== -1 && args[limitIdx + 1]) {
+        sessionsLimit = parseInt(args[limitIdx + 1], 10) || 10;
+      } else if (limitArg !== -1 && args[limitArg + 1]) {
+        sessionsLimit = parseInt(args[limitArg + 1], 10) || 10;
+      }
+
+      // List recent sessions for the specified recall set
+      // Clean the set name of any option flags that may have been included
+      await listSessions(sessionsSetName.replace(/--limit.*|-n.*/g, '').trim(), sessionsLimit);
+      break;
+
+    case 'replay':
+      // Replay command displays a full session transcript with annotations
+      // Requires a session ID to look up the session
+      const replaySessionId = args[1];
+      if (!replaySessionId) {
+        console.log(red('Error: Session ID is required.'));
+        console.log(dim('Usage: bun run cli replay <session-id>'));
+        console.log(dim('Find session IDs with: bun run cli sessions "<recall-set-name>"'));
+        process.exit(1);
+      }
+
+      // Replay the specified session with timestamps and annotations
+      await replaySession(replaySessionId);
       break;
 
     case 'help':
@@ -218,9 +310,13 @@ function printHelp(): void {
   console.log('  bun run cli <command> [options]');
   printBlankLine();
   console.log(bold('Commands:'));
-  console.log(`  ${green('session <name>')}  Start an interactive recall session`);
-  console.log(`  ${green('list')}            List all available recall sets`);
-  console.log(`  ${green('help')}            Show this help message`);
+  console.log(`  ${green('session <name>')}   Start an interactive recall session`);
+  console.log(`  ${green('list')}             List all available recall sets`);
+  console.log(`  ${green('stats <name>')}     Display recall statistics for a set`);
+  console.log(`  ${green('sessions <name>')}  List recent sessions for a recall set`);
+  console.log(`  ${green('replay <id>')}      Replay a past session transcript`);
+  console.log(`  ${green('export ...')}       Export data to JSON or CSV files`);
+  console.log(`  ${green('help')}             Show this help message`);
   printBlankLine();
   console.log(bold('Session Commands:'));
   console.log(`  ${yellow('/quit')}           Abandon session and exit`);
@@ -234,6 +330,24 @@ function printHelp(): void {
   printBlankLine();
   console.log(dim('  # Start a session for a recall set'));
   console.log('  bun run cli session "ATP Synthesis"');
+  printBlankLine();
+  console.log(dim('  # View statistics for a recall set'));
+  console.log('  bun run cli stats "ATP Synthesis"');
+  printBlankLine();
+  console.log(dim('  # List recent sessions for a recall set'));
+  console.log('  bun run cli sessions "ATP Synthesis"');
+  printBlankLine();
+  console.log(dim('  # Replay a past session transcript'));
+  console.log('  bun run cli replay <session-id>');
+  printBlankLine();
+  console.log(dim('  # Export session data to JSON'));
+  console.log('  bun run cli export session <session-id>');
+  printBlankLine();
+  console.log(dim('  # Export recall set to CSV'));
+  console.log('  bun run cli export set "ATP Synthesis" --format csv');
+  printBlankLine();
+  console.log(dim('  # Export analytics summary'));
+  console.log('  bun run cli export analytics "ATP Synthesis"');
   printBlankLine();
   console.log(bold('Environment Variables:'));
   console.log(`  ${green('ANTHROPIC_API_KEY')}  Required for session commands`);
