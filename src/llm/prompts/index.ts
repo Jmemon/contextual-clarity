@@ -47,4 +47,21 @@ export {
   buildRecallEvaluatorUserMessage,
   parseRecallEvaluationResponse,
   type RecallEvaluationResult,
+  // Enhanced evaluation exports (Phase 2+)
+  buildEnhancedRecallEvaluatorPrompt,
+  parseEnhancedRecallEvaluationResponse,
+  deriveRatingFromConfidence,
+  type EnhancedRecallEvaluationResult,
+  type EnhancedEvaluationContext,
 } from './recall-evaluator';
+
+// Rabbithole detector prompt builders, types, and utilities
+export {
+  buildRabbitholeDetectorPrompt,
+  buildRabbitholeReturnPrompt,
+  parseRabbitholeDetectionResponse,
+  parseRabbitholeReturnResponse,
+  type RabbitholeDetectionResult,
+  type RabbitholeDetectorParams,
+  type RabbitholeReturnResult,
+} from './rabbithole-detector';

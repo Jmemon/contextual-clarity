@@ -36,9 +36,13 @@ import { AnthropicClient } from '../../llm/client';
 import {
   buildRecallEvaluatorPrompt,
   parseRecallEvaluationResponse,
+  buildEnhancedRecallEvaluatorPrompt,
+  parseEnhancedRecallEvaluationResponse,
+  deriveRatingFromConfidence,
+  type EnhancedEvaluationContext,
 } from '../../llm/prompts';
 import type { RecallPoint, SessionMessage } from '../models';
-import type { RecallEvaluation } from './types';
+import type { RecallEvaluation, EnhancedRecallEvaluation } from './types';
 
 /**
  * Default number of recent messages to include in the conversation excerpt.
@@ -229,5 +233,140 @@ export class RecallEvaluator {
         reasoning: `Evaluation failed due to an error: ${errorMessage}`,
       };
     }
+  }
+
+  /**
+   * Performs enhanced evaluation with detailed concept analysis and suggested FSRS rating.
+   *
+   * This method provides more nuanced evaluation than the basic `evaluate()` method:
+   * - Identifies specific concepts the user demonstrated understanding of
+   * - Lists concepts that were missed or incorrectly recalled
+   * - Suggests an appropriate FSRS rating based on recall quality
+   * - Provides more detailed reasoning for the evaluation
+   *
+   * Use this method when you need:
+   * - Detailed feedback about which concepts were recalled
+   * - Automatic FSRS rating suggestions
+   * - Analytics on concept-level recall patterns
+   * - More actionable feedback for learners
+   *
+   * The method is backward-compatible: you can continue using `evaluate()` for
+   * simpler use cases or when enhanced details aren't needed.
+   *
+   * @param recallPoint - The recall point being evaluated (contains target content)
+   * @param conversationMessages - The session's message history
+   * @param context - Optional session context for more consistent evaluation
+   * @returns Promise resolving to an EnhancedRecallEvaluation with concept analysis
+   *
+   * @throws Never throws - returns a default failed evaluation on any error
+   *
+   * @example
+   * ```typescript
+   * const evaluation = await evaluator.evaluateEnhanced(
+   *   recallPoint,
+   *   messages,
+   *   { attemptNumber: 2, previousSuccesses: 1, topic: 'Biology' }
+   * );
+   *
+   * if (evaluation.success) {
+   *   console.log(`Great! You recalled: ${evaluation.keyDemonstratedConcepts.join(', ')}`);
+   *   scheduler.recordReview(recallPoint, evaluation.suggestedRating);
+   * } else {
+   *   console.log(`Review these concepts: ${evaluation.missedConcepts.join(', ')}`);
+   * }
+   * ```
+   */
+  async evaluateEnhanced(
+    recallPoint: RecallPoint,
+    conversationMessages: SessionMessage[],
+    context?: EnhancedEvaluationContext
+  ): Promise<EnhancedRecallEvaluation> {
+    // Step 1: Extract relevant conversation context
+    // For enhanced evaluation, we use the same excerpt extraction to focus on
+    // the actual recall attempt rather than initial session setup
+    const conversationExcerpt = this.extractExcerpt(conversationMessages);
+
+    // Step 2: Build the enhanced evaluation prompt
+    // This prompt includes instructions for concept-level analysis and rating suggestions
+    const evaluationPrompt = buildEnhancedRecallEvaluatorPrompt(
+      recallPoint.content,
+      conversationExcerpt,
+      context
+    );
+
+    try {
+      // Step 3: Call the LLM with low temperature for consistent evaluation
+      // Enhanced evaluations use the same temperature and token limits as basic ones
+      // to ensure reproducible results
+      const response = await this.llmClient.complete(evaluationPrompt, {
+        temperature: EVALUATION_TEMPERATURE,
+        maxTokens: EVALUATION_MAX_TOKENS,
+      });
+
+      // Step 4: Parse the enhanced JSON response
+      // The parser handles various response formats and validates all fields,
+      // including the concept arrays and suggested rating
+      const parsedResult = parseEnhancedRecallEvaluationResponse(response.text);
+
+      // Step 5: Convert to the scoring module's EnhancedRecallEvaluation type
+      // This ensures the evaluation aligns with our type definitions
+      return {
+        success: parsedResult.success,
+        confidence: parsedResult.confidence,
+        reasoning: parsedResult.reasoning,
+        keyDemonstratedConcepts: parsedResult.keyDemonstratedConcepts,
+        missedConcepts: parsedResult.missedConcepts,
+        suggestedRating: parsedResult.suggestedRating,
+      };
+    } catch (error) {
+      // Step 6: Handle any errors gracefully with a default enhanced result
+      // Unlike the basic evaluation, we also provide empty concept arrays and
+      // a 'forgot' rating, which is the safest default when we can't evaluate
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+
+      return {
+        success: false,
+        confidence: 0,
+        reasoning: `Enhanced evaluation failed due to an error: ${errorMessage}`,
+        keyDemonstratedConcepts: [],
+        missedConcepts: [],
+        suggestedRating: 'forgot',
+      };
+    }
+  }
+
+  /**
+   * Converts a basic RecallEvaluation to an EnhancedRecallEvaluation.
+   *
+   * This utility method is useful when you have a basic evaluation but need
+   * to work with code that expects an enhanced evaluation format. It derives
+   * a suggested rating from the confidence score and provides empty concept
+   * arrays since those weren't captured in the basic evaluation.
+   *
+   * Note: This conversion loses no information from the basic evaluation,
+   * but the enhanced fields (concepts, rating) will be derived/default values.
+   *
+   * @param basicEvaluation - A RecallEvaluation from the basic evaluate() method
+   * @returns An EnhancedRecallEvaluation with derived/default enhanced fields
+   *
+   * @example
+   * ```typescript
+   * const basic = await evaluator.evaluate(recallPoint, messages);
+   * const enhanced = evaluator.toEnhanced(basic);
+   * // enhanced.suggestedRating is derived from basic.confidence
+   * ```
+   */
+  toEnhanced(basicEvaluation: RecallEvaluation): EnhancedRecallEvaluation {
+    return {
+      success: basicEvaluation.success,
+      confidence: basicEvaluation.confidence,
+      reasoning: basicEvaluation.reasoning,
+      // Basic evaluation doesn't capture concepts, so we default to empty arrays
+      keyDemonstratedConcepts: [],
+      missedConcepts: [],
+      // Derive the rating from the confidence score using the standard thresholds
+      suggestedRating: deriveRatingFromConfidence(basicEvaluation.confidence),
+    };
   }
 }

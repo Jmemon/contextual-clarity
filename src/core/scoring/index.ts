@@ -34,4 +34,4 @@
 export { RecallEvaluator } from './recall-evaluator';
 
 // Types for recall evaluation results
-export type { RecallEvaluation } from './types';
+export type { RecallEvaluation, EnhancedRecallEvaluation } from './types';
