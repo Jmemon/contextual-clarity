@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "commander": "14.0.3",
     "drizzle-orm": "^0.38.4",
     "hono": "^4.6.18",
     "ts-fsrs": "^4.4.1",
