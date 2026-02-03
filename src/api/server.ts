@@ -32,6 +32,7 @@
  */
 
 import { Hono } from 'hono';
+import type { ServerWebSocket, Server } from 'bun';
 import {
   corsMiddleware,
   errorHandler,
@@ -39,7 +40,17 @@ import {
   generalRateLimiter,
   llmRateLimiter,
   getProductionCorsConfig,
+  userContext,
 } from './middleware';
+import { createApiRouter, healthRoutes } from './routes';
+import {
+  createWebSocketHandlers,
+  extractSessionIdFromUrl,
+  isWebSocketUpgradeRequest,
+  createInitialSessionData,
+  type WebSocketSessionData,
+  type WebSocketHandlerDependencies,
+} from './ws';
 
 // ============================================================================
 // Server Configuration
@@ -152,28 +163,26 @@ function createApp(): Hono {
   app.use('*', corsMiddleware(corsConfig));
 
   // ---------------------------------------------------------------------------
-  // Health Check Endpoint
+  // Health Check Route (mounted at root, not under /api)
   // ---------------------------------------------------------------------------
 
   /**
-   * Health check endpoint for container orchestration and load balancers.
-   * Returns basic server status information.
+   * Mount health check routes from the health module.
+   * This endpoint is used by container orchestration and load balancers
+   * to verify server availability.
    *
    * GET /health
-   * Response: { status: 'ok', timestamp: string, environment: string }
+   * Response: { success: true, data: { status: 'ok', timestamp, environment, version } }
    */
-  app.get('/health', (c) => {
-    return c.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      environment: config.nodeEnv,
-      version: '0.1.0',
-    });
-  });
+  app.route('/health', healthRoutes());
 
   // ---------------------------------------------------------------------------
-  // API Routes with Rate Limiting
+  // API Routes with Rate Limiting and User Context
   // ---------------------------------------------------------------------------
+
+  // User context middleware - injects authenticated user into all API requests
+  // Future: This will validate auth tokens and fetch user from database
+  app.use('/api/*', userContext());
 
   // General API rate limit (100 req/min) for most endpoints
   app.use('/api/*', generalRateLimiter());
@@ -184,62 +193,85 @@ function createApp(): Hono {
   app.use('/api/evaluate/*', llmRateLimiter());
 
   // ---------------------------------------------------------------------------
-  // Placeholder API Routes (to be implemented in subsequent tasks)
+  // Mount API Routes from Route Modules
   // ---------------------------------------------------------------------------
 
   /**
-   * Root API endpoint - returns API information
+   * Mount all API routes from the centralized router.
+   * This includes:
+   * - GET /api - API information
+   * - GET /api/recall-sets - RecallSet operations (placeholder)
+   * - GET /api/sessions - Session operations (placeholder)
+   * - GET /api/analytics - Analytics operations (placeholder)
+   *
+   * Route implementations are defined in src/api/routes/
    */
-  app.get('/api', (c) => {
-    return c.json({
-      name: 'Contextual Clarity API',
-      version: '0.1.0',
-      documentation: '/api/docs', // Future: OpenAPI documentation
-    });
-  });
+  app.route('/api', createApiRouter());
+
+  // ---------------------------------------------------------------------------
+  // WebSocket Session Endpoint
+  // ---------------------------------------------------------------------------
 
   /**
-   * Placeholder for recall sets routes (P3-T02)
+   * WebSocket endpoint for real-time session communication.
+   *
+   * This endpoint handles WebSocket upgrade requests for recall sessions.
+   * Clients connect with a sessionId query parameter:
+   *   ws://localhost:3001/api/session/ws?sessionId=sess_xxx
+   *
+   * The WebSocket connection enables:
+   * - Real-time streaming of LLM responses
+   * - Instant delivery of evaluation results
+   * - Efficient bi-directional communication during sessions
+   *
+   * Note: The actual WebSocket handling is done by Bun's native WebSocket
+   * support. This route just validates the request and initiates the upgrade.
+   * The server's fetch handler will detect upgrade requests and pass them
+   * to the websocket handlers defined in Bun.serve().
+   *
+   * @see createWebSocketHandlers for the actual message handling logic
    */
-  app.get('/api/recall-sets', (c) => {
-    return c.json({
-      message: 'Recall sets endpoint - to be implemented in P3-T02',
-      routes: [
-        'GET /api/recall-sets - List all recall sets',
-        'GET /api/recall-sets/:id - Get a specific recall set',
-        'POST /api/recall-sets - Create a new recall set',
-        'PUT /api/recall-sets/:id - Update a recall set',
-        'DELETE /api/recall-sets/:id - Delete a recall set',
-      ],
-    });
-  });
+  app.get('/api/session/ws', (c) => {
+    // Validate this is a WebSocket upgrade request
+    if (!isWebSocketUpgradeRequest(c.req.raw)) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'UPGRADE_REQUIRED',
+            message: 'This endpoint requires a WebSocket connection',
+          },
+        },
+        426
+      );
+    }
 
-  /**
-   * Placeholder for sessions routes (P3-T03)
-   */
-  app.get('/api/sessions', (c) => {
-    return c.json({
-      message: 'Sessions endpoint - to be implemented in P3-T03',
-      routes: [
-        'GET /api/sessions - List all sessions',
-        'POST /api/sessions - Start a new session',
-        'GET /api/sessions/:id - Get session details',
-        'POST /api/sessions/:id/messages - Send a message',
-      ],
-    });
-  });
+    // Extract and validate sessionId from query parameters
+    const url = new URL(c.req.url);
+    const result = extractSessionIdFromUrl(url);
 
-  /**
-   * Placeholder for analytics routes (P3-T04)
-   */
-  app.get('/api/analytics', (c) => {
-    return c.json({
-      message: 'Analytics endpoint - to be implemented in P3-T04',
-      routes: [
-        'GET /api/analytics/dashboard - Dashboard summary',
-        'GET /api/analytics/sessions - Session analytics',
-        'GET /api/analytics/recall-points - Recall point analytics',
-      ],
+    if ('error' in result) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'INVALID_SESSION_ID',
+            message: result.error,
+          },
+        },
+        400
+      );
+    }
+
+    // The actual upgrade is handled by the server's websocket configuration.
+    // We need to return a response that tells Bun to perform the upgrade.
+    // This is handled in the fetch wrapper in startServer().
+    // Store the sessionId in a header for the fetch wrapper to extract.
+    return new Response(null, {
+      status: 101,
+      headers: {
+        'X-Session-Id': result.sessionId,
+      },
     });
   });
 
@@ -268,13 +300,58 @@ function createApp(): Hono {
 // ============================================================================
 
 /**
- * Starts the HTTP server on an available port.
+ * Creates a mock WebSocket handler dependencies object.
+ *
+ * This is a temporary implementation until T06 (Sessions API) is complete.
+ * In production, these would be real repository instances connected to the database.
+ *
+ * @returns Mock dependencies for WebSocket handler
+ */
+function createMockWsDependencies(): WebSocketHandlerDependencies {
+  // Import repositories when T06 is complete
+  // For now, create mock implementations that return placeholder data
+  return {
+    sessionRepo: {
+      findById: async (id: string) => {
+        // Mock: Return a placeholder session for testing
+        console.log(`[WS Mock] Looking up session: ${id}`);
+        return {
+          id,
+          recallSetId: 'rs_mock_001',
+          status: 'in_progress' as const,
+          targetRecallPointIds: ['rp_mock_001', 'rp_mock_002'],
+          startedAt: new Date(),
+          endedAt: null,
+        };
+      },
+    } as unknown as WebSocketHandlerDependencies['sessionRepo'],
+    recallSetRepo: {
+      findById: async (id: string) => {
+        // Mock: Return a placeholder recall set for testing
+        console.log(`[WS Mock] Looking up recall set: ${id}`);
+        return {
+          id,
+          name: 'Mock Recall Set',
+          description: 'A mock recall set for WebSocket testing',
+          systemPrompt: 'You are a helpful tutor.',
+          status: 'active' as const,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      },
+    } as unknown as WebSocketHandlerDependencies['recallSetRepo'],
+  };
+}
+
+/**
+ * Starts the HTTP server on an available port with WebSocket support.
  *
  * This function:
  * 1. Finds an available port (starting from preferred)
  * 2. Creates the Hono application with middleware
- * 3. Starts the Bun server
- * 4. Logs startup information
+ * 3. Creates WebSocket handlers for real-time sessions
+ * 4. Starts the Bun server with both HTTP and WebSocket support
+ * 5. Logs startup information
  */
 async function startServer(): Promise<void> {
   try {
@@ -284,10 +361,73 @@ async function startServer(): Promise<void> {
     // Create the configured application
     const app = createApp();
 
-    // Start the server using Bun's built-in server
-    const server = Bun.serve({
+    // Create WebSocket dependencies (mock for now, real after T06)
+    const wsDeps = createMockWsDependencies();
+
+    // Create WebSocket handlers
+    const wsHandlers = createWebSocketHandlers(wsDeps);
+
+    // Store reference to server for WebSocket upgrades
+    let server: Server;
+
+    // Start the server using Bun's built-in server with WebSocket support
+    server = Bun.serve<WebSocketSessionData>({
       port,
-      fetch: app.fetch,
+
+      // Custom fetch handler that handles WebSocket upgrades
+      fetch(req, server) {
+        const url = new URL(req.url);
+
+        // Check if this is a WebSocket upgrade request for the session endpoint
+        if (
+          url.pathname === '/api/session/ws' &&
+          isWebSocketUpgradeRequest(req)
+        ) {
+          // Extract session ID from query parameters
+          const result = extractSessionIdFromUrl(url);
+
+          if ('error' in result) {
+            return new Response(JSON.stringify({
+              success: false,
+              error: {
+                code: 'INVALID_SESSION_ID',
+                message: result.error,
+              },
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Perform the WebSocket upgrade
+          const upgraded = server.upgrade(req, {
+            data: createInitialSessionData(result.sessionId),
+          });
+
+          if (upgraded) {
+            // Return undefined to indicate Bun should handle the WebSocket
+            return undefined;
+          }
+
+          // Upgrade failed
+          return new Response(JSON.stringify({
+            success: false,
+            error: {
+              code: 'UPGRADE_FAILED',
+              message: 'WebSocket upgrade failed',
+            },
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        // For all other requests, delegate to the Hono app
+        return app.fetch(req, { server });
+      },
+
+      // WebSocket handlers from the session handler module
+      websocket: wsHandlers,
     });
 
     // Log startup information
@@ -295,12 +435,13 @@ async function startServer(): Promise<void> {
     console.log('╔═══════════════════════════════════════════════════════════╗');
     console.log('║           Contextual Clarity API Server                   ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
-    console.log(`║  🚀 Server running on http://localhost:${port}              ║`);
-    console.log(`║  📝 Environment: ${config.nodeEnv.padEnd(39)}║`);
+    console.log(`║  Server running on http://localhost:${port}                 ║`);
+    console.log(`║  Environment: ${config.nodeEnv.padEnd(42)}║`);
     console.log('║                                                           ║');
     console.log('║  Endpoints:                                               ║');
     console.log(`║    Health:    http://localhost:${port}/health               ║`);
     console.log(`║    API:       http://localhost:${port}/api                  ║`);
+    console.log(`║    WebSocket: ws://localhost:${port}/api/session/ws         ║`);
     console.log('║                                                           ║');
     console.log('║  Rate Limits:                                             ║');
     console.log('║    General:   100 requests/minute                         ║');

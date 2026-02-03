@@ -64,3 +64,19 @@ export {
   RATE_LIMITS,
   type RateLimitConfig,
 } from './rate-limit';
+
+// User context middleware for authentication and authorization
+export {
+  userContext,
+  getUser,
+  getUserOptional,
+  isAuthenticated,
+} from './user-context';
+
+// Request body validation with Zod schemas
+export {
+  validate,
+  validateQuery,
+  getValidatedBody,
+  getValidatedQuery,
+} from './validate';
