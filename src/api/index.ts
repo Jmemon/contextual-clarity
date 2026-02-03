@@ -111,3 +111,39 @@ export {
   forbidden,
   internalError,
 } from './utils/response';
+
+// Re-export WebSocket session handler and types
+export {
+  // Handler factory
+  createWebSocketHandlers,
+  WebSocketSessionHandler,
+
+  // Utility functions
+  extractSessionIdFromUrl,
+  isWebSocketUpgradeRequest,
+  createInitialSessionData,
+
+  // Configuration
+  DEFAULT_WS_CONFIG,
+
+  // Message parsing/serialization
+  parseClientMessage,
+  serializeServerMessage,
+  createErrorPayload,
+  isClientMessageType,
+
+  // Constants
+  CLIENT_MESSAGE_TYPES,
+  WS_CLOSE_CODES,
+  ERROR_CODE_DESCRIPTIONS,
+
+  // Types
+  type WebSocketSessionConfig,
+  type WebSocketSessionData,
+  type WebSocketHandlerDependencies,
+  type ClientMessage,
+  type ServerMessage,
+  type SessionSummary,
+  type WebSocketErrorCode,
+  type WebSocketCloseCode,
+} from './ws';

@@ -32,7 +32,7 @@
  */
 
 import { Hono } from 'hono';
-import type { ServerWebSocket, Server } from 'bun';
+import type { Server } from 'bun';
 import {
   corsMiddleware,
   errorHandler,
@@ -368,7 +368,7 @@ async function startServer(): Promise<void> {
     const wsHandlers = createWebSocketHandlers(wsDeps);
 
     // Store reference to server for WebSocket upgrades
-    let server: Server;
+    let server: Server<WebSocketSessionData>;
 
     // Start the server using Bun's built-in server with WebSocket support
     server = Bun.serve<WebSocketSessionData>({
