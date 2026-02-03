@@ -32,9 +32,15 @@
 
 import { Hono } from 'hono';
 import { success } from '../utils/response';
+import { recallSetsRoutes } from './recall-sets';
+import { dashboardRoutes } from './dashboard';
+import { sessionsRoutes } from './sessions';
 
 // Re-export individual route modules for direct access
 export { healthRoutes, healthCheckHandler } from './health';
+export { recallSetsRoutes } from './recall-sets';
+export { dashboardRoutes } from './dashboard';
+export { sessionsRoutes } from './sessions';
 
 // ============================================================================
 // Type Definitions
@@ -128,7 +134,8 @@ export function createApiRouter(): Hono {
       endpoints: [
         { path: '/api/recall-sets', description: 'RecallSet CRUD operations' },
         { path: '/api/sessions', description: 'Study session management' },
-        { path: '/api/analytics', description: 'Learning analytics and dashboard data' },
+        { path: '/api/dashboard', description: 'Dashboard data and analytics' },
+        { path: '/api/analytics', description: 'Learning analytics and reports' },
         { path: '/health', description: 'Health check endpoint' },
       ],
     };
@@ -140,49 +147,20 @@ export function createApiRouter(): Hono {
   // Route Module Mounts
   // -------------------------------------------------------------------------
 
-  // Note: Additional route modules will be mounted here as they are implemented
-  // in future tasks. For now, placeholder routes are defined below.
-
-  // Future: app.route('/recall-sets', recallSetsRoutes());
-  // Future: app.route('/sessions', sessionsRoutes());
-  // Future: app.route('/analytics', analyticsRoutes());
-
   // -------------------------------------------------------------------------
-  // Placeholder Routes (to be replaced with actual implementations)
+  // Route Module Mounts
   // -------------------------------------------------------------------------
 
-  /**
-   * Placeholder for recall sets routes.
-   * Will be replaced by actual implementation in a future task.
-   */
-  router.get('/recall-sets', (c) => {
-    return success(c, {
-      message: 'Recall sets endpoint - to be implemented',
-      routes: [
-        'GET /api/recall-sets - List all recall sets',
-        'GET /api/recall-sets/:id - Get a specific recall set',
-        'POST /api/recall-sets - Create a new recall set',
-        'PUT /api/recall-sets/:id - Update a recall set',
-        'DELETE /api/recall-sets/:id - Delete a recall set',
-      ],
-    });
-  });
+  // Mount recall sets CRUD routes
+  router.route('/recall-sets', recallSetsRoutes());
 
-  /**
-   * Placeholder for sessions routes.
-   * Will be replaced by actual implementation in a future task.
-   */
-  router.get('/sessions', (c) => {
-    return success(c, {
-      message: 'Sessions endpoint - to be implemented',
-      routes: [
-        'GET /api/sessions - List all sessions',
-        'POST /api/sessions - Start a new session',
-        'GET /api/sessions/:id - Get session details',
-        'POST /api/sessions/:id/messages - Send a message',
-      ],
-    });
-  });
+  // Mount dashboard data routes (overview, recent sessions, upcoming reviews)
+  router.route('/dashboard', dashboardRoutes());
+
+  // Mount sessions routes (list, details, transcript, start, abandon)
+  router.route('/sessions', sessionsRoutes());
+
+  // Future: router.route('/analytics', analyticsRoutes());
 
   /**
    * Placeholder for analytics routes.
