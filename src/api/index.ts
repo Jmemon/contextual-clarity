@@ -69,4 +69,45 @@ export {
   clearRateLimitStore,
   RATE_LIMITS,
   type RateLimitConfig,
+
+  // Validation
+  validate,
+  validateQuery,
+  getValidatedBody,
+  getValidatedQuery,
 } from './middleware';
+
+// Re-export route modules
+export { createApiRouter, healthRoutes } from './routes';
+
+// Re-export API types
+export {
+  // Response types
+  type ApiResponse,
+  type ApiError,
+  type ApiResult,
+  type ValidationErrorDetail,
+
+  // Zod schemas for request validation
+  createRecallSetSchema,
+  createRecallPointSchema,
+  updateRecallSetSchema,
+  updateRecallPointSchema,
+
+  // Inferred TypeScript types from schemas
+  type CreateRecallSetInput,
+  type CreateRecallPointInput,
+  type UpdateRecallSetInput,
+  type UpdateRecallPointInput,
+} from './types';
+
+// Re-export response utilities
+export {
+  success,
+  error,
+  notFound,
+  badRequest,
+  unauthorized,
+  forbidden,
+  internalError,
+} from './utils/response';
