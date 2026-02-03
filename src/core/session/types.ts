@@ -22,7 +22,12 @@ import type {
   SessionRepository,
   SessionMessageRepository,
   RecallSetRepository,
+  SessionMetricsRepository,
+  RecallOutcomeRepository,
+  RabbitholeEventRepository,
 } from '../../storage/repositories';
+import type { SessionMetricsCollector } from './metrics-collector';
+import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
 
 /**
  * Types of events that can occur during a session.
@@ -155,6 +160,9 @@ export const DEFAULT_SESSION_CONFIG: SessionEngineConfig = {
  * Using dependency injection makes the engine testable and
  * allows swapping implementations (e.g., mock LLM for testing).
  *
+ * Phase 2 additions include optional metrics-related dependencies.
+ * If metrics components are not provided, metrics collection is disabled.
+ *
  * @example
  * ```typescript
  * const deps: SessionEngineDependencies = {
@@ -165,6 +173,12 @@ export const DEFAULT_SESSION_CONFIG: SessionEngineConfig = {
  *   recallPointRepo: new RecallPointRepository(db),
  *   sessionRepo: new SessionRepository(db),
  *   messageRepo: new SessionMessageRepository(db),
+ *   // Phase 2: Metrics collection (optional)
+ *   metricsCollector: new SessionMetricsCollector(),
+ *   rabbitholeDetector: new RabbitholeDetector(llmClient),
+ *   metricsRepo: new SessionMetricsRepository(db),
+ *   recallOutcomeRepo: new RecallOutcomeRepository(db),
+ *   rabbitholeRepo: new RabbitholeEventRepository(db),
  * };
  *
  * const engine = new SessionEngine(deps);
@@ -191,6 +205,47 @@ export interface SessionEngineDependencies {
 
   /** Repository for SessionMessage data access */
   messageRepo: SessionMessageRepository;
+
+  // === Phase 2: Metrics Collection Dependencies (Optional) ===
+  // These enable comprehensive session metrics tracking when provided.
+  // If omitted, the engine operates without metrics collection.
+
+  /**
+   * Collector for aggregating session metrics during conversations.
+   * When provided, enables tracking of message timing, token usage,
+   * recall outcomes, and engagement scoring.
+   * @since Phase 2
+   */
+  metricsCollector?: SessionMetricsCollector;
+
+  /**
+   * Detector for identifying conversational tangents (rabbitholes).
+   * When provided, enables real-time detection and tracking of when
+   * conversations drift from the main recall topic.
+   * @since Phase 2
+   */
+  rabbitholeDetector?: RabbitholeDetector;
+
+  /**
+   * Repository for persisting session-level metrics.
+   * Required if metricsCollector is provided.
+   * @since Phase 2
+   */
+  metricsRepo?: SessionMetricsRepository;
+
+  /**
+   * Repository for persisting individual recall outcomes.
+   * Required if metricsCollector is provided.
+   * @since Phase 2
+   */
+  recallOutcomeRepo?: RecallOutcomeRepository;
+
+  /**
+   * Repository for persisting rabbithole events.
+   * Required if rabbitholeDetector is provided.
+   * @since Phase 2
+   */
+  rabbitholeRepo?: RabbitholeEventRepository;
 }
 
 /**

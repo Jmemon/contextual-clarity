@@ -45,6 +45,9 @@
 // Main SessionEngine class
 export { SessionEngine } from './session-engine';
 
+// Metrics collection
+export { SessionMetricsCollector } from './metrics-collector';
+
 // Type exports
 export type {
   SessionEventType,

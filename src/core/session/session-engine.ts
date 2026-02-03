@@ -72,6 +72,13 @@ import {
   DEFAULT_SESSION_CONFIG,
   EVALUATION_TRIGGER_PHRASES,
 } from './types';
+import type { SessionMetricsCollector } from './metrics-collector';
+import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
+import type {
+  SessionMetricsRepository,
+  RecallOutcomeRepository,
+  RabbitholeEventRepository,
+} from '../../storage/repositories';
 
 /**
  * Generates a unique ID with a prefix.
@@ -126,6 +133,31 @@ export class SessionEngine {
   /** Repository for SessionMessage data access */
   private messageRepo: SessionEngineDependencies['messageRepo'];
 
+  // === Phase 2: Metrics Collection Dependencies (Optional) ===
+  // These enable comprehensive session metrics tracking when provided.
+
+  /**
+   * Collector for aggregating session metrics during conversations.
+   * When provided, enables tracking of message timing, token usage,
+   * recall outcomes, and engagement scoring.
+   */
+  private metricsCollector: SessionMetricsCollector | null = null;
+
+  /**
+   * Detector for identifying conversational tangents (rabbitholes).
+   * When provided, enables real-time detection of topic drift.
+   */
+  private rabbitholeDetector: RabbitholeDetector | null = null;
+
+  /** Repository for persisting session-level metrics */
+  private metricsRepo: SessionMetricsRepository | null = null;
+
+  /** Repository for persisting individual recall outcomes */
+  private recallOutcomeRepo: RecallOutcomeRepository | null = null;
+
+  /** Repository for persisting rabbithole events */
+  private rabbitholeRepo: RabbitholeEventRepository | null = null;
+
   // === Configuration ===
 
   /** Engine configuration settings */
@@ -154,6 +186,26 @@ export class SessionEngine {
   /** Optional event listener for session events */
   private eventListener?: (event: SessionEvent) => void;
 
+  // === Phase 2: Metrics Tracking State ===
+
+  /**
+   * Tracks the starting message index for the current recall point.
+   * Used to determine the message range when recording recall outcomes.
+   */
+  private currentPointStartIndex: number = 0;
+
+  /**
+   * Flag indicating whether metrics collection is enabled for this session.
+   * True when metricsCollector is provided in dependencies.
+   */
+  private metricsEnabled: boolean = false;
+
+  /**
+   * The LLM model being used for this session.
+   * Tracked for metrics cost calculation.
+   */
+  private currentModel: string = 'claude-3-5-sonnet-20241022';
+
   /**
    * Creates a new SessionEngine instance.
    *
@@ -177,7 +229,7 @@ export class SessionEngine {
     deps: SessionEngineDependencies,
     config?: Partial<SessionEngineConfig>
   ) {
-    // Assign dependencies
+    // Assign core dependencies
     this.scheduler = deps.scheduler;
     this.evaluator = deps.evaluator;
     this.llmClient = deps.llmClient;
@@ -185,6 +237,25 @@ export class SessionEngine {
     this.recallPointRepo = deps.recallPointRepo;
     this.sessionRepo = deps.sessionRepo;
     this.messageRepo = deps.messageRepo;
+
+    // === Phase 2: Initialize metrics collection dependencies ===
+    // These are optional - if not provided, metrics collection is disabled
+    if (deps.metricsCollector) {
+      this.metricsCollector = deps.metricsCollector;
+      this.metricsEnabled = true;
+    }
+    if (deps.rabbitholeDetector) {
+      this.rabbitholeDetector = deps.rabbitholeDetector;
+    }
+    if (deps.metricsRepo) {
+      this.metricsRepo = deps.metricsRepo;
+    }
+    if (deps.recallOutcomeRepo) {
+      this.recallOutcomeRepo = deps.recallOutcomeRepo;
+    }
+    if (deps.rabbitholeRepo) {
+      this.rabbitholeRepo = deps.rabbitholeRepo;
+    }
 
     // Merge provided config with defaults
     this.config = { ...DEFAULT_SESSION_CONFIG, ...config };
@@ -283,6 +354,18 @@ export class SessionEngine {
     this.currentPointIndex = 0;
     this.messages = [];
     this.currentPointMessageCount = 0;
+    this.currentPointStartIndex = 0;
+
+    // === Phase 2: Initialize metrics collection for the new session ===
+    // Start tracking session metrics if the collector is available
+    if (this.metricsCollector) {
+      this.metricsCollector.startSession(session.id, this.currentModel);
+    }
+
+    // Reset rabbithole detector state for the new session
+    if (this.rabbitholeDetector) {
+      this.rabbitholeDetector.reset();
+    }
 
     // Configure the LLM with the Socratic tutor prompt for the first point
     this.updateLLMPrompt();
@@ -335,6 +418,19 @@ export class SessionEngine {
     // A more sophisticated implementation could track progress in the session
     this.currentPointIndex = 0;
     this.currentPointMessageCount = existingMessages.length;
+    this.currentPointStartIndex = 0;
+
+    // === Phase 2: Initialize metrics collection for resumed session ===
+    // Note: When resuming, we start fresh with metrics collection
+    // Historical messages from before the resume are not re-analyzed
+    if (this.metricsCollector) {
+      this.metricsCollector.startSession(session.id, this.currentModel);
+    }
+
+    // Reset rabbithole detector state for the resumed session
+    if (this.rabbitholeDetector) {
+      this.rabbitholeDetector.reset();
+    }
 
     // Configure the LLM with the appropriate prompt
     this.updateLLMPrompt();
@@ -387,8 +483,13 @@ export class SessionEngine {
       }
     );
 
-    // Save the assistant message to the database
-    await this.saveMessage('assistant', response.text);
+    // Save the assistant message to the database with token usage (Phase 2: metrics tracking)
+    await this.saveMessage(
+      'assistant',
+      response.text,
+      response.usage?.inputTokens,
+      response.usage?.outputTokens
+    );
 
     // Emit assistant message event
     this.emitEvent('assistant_message', {
@@ -438,6 +539,10 @@ export class SessionEngine {
       messageCount: this.currentPointMessageCount,
     });
 
+    // === Phase 2: Detect rabbitholes after user message ===
+    // Check if the user's message indicates a conversational tangent
+    await this.detectAndRecordRabbithole();
+
     // Check if we should trigger evaluation
     const shouldEvaluate =
       this.shouldTriggerEvaluation(content) ||
@@ -460,6 +565,10 @@ export class SessionEngine {
 
     // Generate a follow-up response from the tutor
     const response = await this.generateTutorResponse();
+
+    // === Phase 2: Check for rabbithole returns after assistant response ===
+    // Check if any active rabbitholes have concluded (returned to main topic)
+    await this.detectRabbitholeReturns();
 
     return {
       response,
@@ -595,12 +704,42 @@ export class SessionEngine {
    * Uses the RecallEvaluator to analyze the conversation and determine
    * if the user successfully recalled the target information.
    *
+   * Phase 2: When metrics collection is enabled, uses enhanced evaluation
+   * to capture detailed concept analysis and suggested FSRS rating.
+   *
    * @returns The evaluation result with success, confidence, and reasoning
    */
   private async evaluateCurrentPoint(): Promise<RecallEvaluation> {
     const currentPoint = this.targetPoints[this.currentPointIndex];
 
-    // Use the evaluator to assess recall from the conversation
+    // === Phase 2: Use enhanced evaluation when metrics are enabled ===
+    // Enhanced evaluation provides concept-level analysis and rating suggestions
+    if (this.metricsEnabled) {
+      const enhancedEvaluation = await this.evaluator.evaluateEnhanced(
+        currentPoint,
+        this.messages,
+        {
+          attemptNumber: currentPoint.fsrsState?.reps ?? 1,
+          previousSuccesses: currentPoint.fsrsState?.reps ?? 0,
+          topic: this.currentRecallSet?.name ?? 'Unknown',
+        }
+      );
+
+      // Record the recall outcome in the metrics collector
+      if (this.metricsCollector) {
+        const messageEndIndex = this.messages.length - 1;
+        this.metricsCollector.recordRecallOutcome(
+          currentPoint.id,
+          enhancedEvaluation,
+          this.currentPointStartIndex,
+          messageEndIndex
+        );
+      }
+
+      return enhancedEvaluation;
+    }
+
+    // Fallback: Use basic evaluation when metrics collection is disabled
     const evaluation = await this.evaluator.evaluate(
       currentPoint,
       this.messages
@@ -657,6 +796,10 @@ export class SessionEngine {
       // Advance to the next point
       this.currentPointIndex++;
       this.currentPointMessageCount = 0;
+
+      // === Phase 2: Track the starting message index for the next recall point ===
+      // This is used to determine the message range when recording recall outcomes
+      this.currentPointStartIndex = this.messages.length;
 
       // Update the LLM prompt for the new point
       this.updateLLMPrompt();
@@ -740,6 +883,8 @@ export class SessionEngine {
    * Builds the conversation history from session messages and requests
    * a follow-up response from the LLM.
    *
+   * Phase 2: Now tracks token usage for metrics collection.
+   *
    * @returns The tutor's response
    */
   private async generateTutorResponse(): Promise<string> {
@@ -752,8 +897,13 @@ export class SessionEngine {
       maxTokens: this.config.tutorMaxTokens,
     });
 
-    // Save the assistant message
-    await this.saveMessage('assistant', response.text);
+    // Save the assistant message with token usage (Phase 2: metrics tracking)
+    await this.saveMessage(
+      'assistant',
+      response.text,
+      response.usage?.inputTokens,
+      response.usage?.outputTokens
+    );
 
     // Emit assistant message event
     this.emitEvent('assistant_message', {
@@ -768,6 +918,8 @@ export class SessionEngine {
    * Generates a transition message after completing a point.
    *
    * Provides feedback on the completed point and introduces the next topic.
+   *
+   * Phase 2: Now tracks token usage for metrics collection.
    *
    * @param evaluation - The evaluation result from the completed point
    * @param hasNextPoint - Whether there's another point to discuss
@@ -793,8 +945,13 @@ export class SessionEngine {
       maxTokens: this.config.tutorMaxTokens,
     });
 
-    // Save the transition message
-    await this.saveMessage('assistant', response.text);
+    // Save the transition message with token usage (Phase 2: metrics tracking)
+    await this.saveMessage(
+      'assistant',
+      response.text,
+      response.usage?.inputTokens,
+      response.usage?.outputTokens
+    );
 
     // Emit assistant message event
     this.emitEvent('assistant_message', {
@@ -811,6 +968,8 @@ export class SessionEngine {
    * Celebrates the user's completion of all recall points and provides
    * a summary of their performance.
    *
+   * Phase 2: Now tracks token usage for metrics collection.
+   *
    * @param lastEvaluation - The evaluation result from the final point
    * @returns The completion message
    */
@@ -826,8 +985,13 @@ export class SessionEngine {
       maxTokens: this.config.tutorMaxTokens,
     });
 
-    // Save the completion message
-    await this.saveMessage('assistant', response.text);
+    // Save the completion message with token usage (Phase 2: metrics tracking)
+    await this.saveMessage(
+      'assistant',
+      response.text,
+      response.usage?.inputTokens,
+      response.usage?.outputTokens
+    );
 
     // Emit assistant message event
     this.emitEvent('assistant_message', {
@@ -874,15 +1038,23 @@ export class SessionEngine {
   /**
    * Saves a message to the database and local cache.
    *
+   * Also records the message in the metrics collector (Phase 2) if available,
+   * tracking timing and token usage for session analytics.
+   *
    * @param role - The role of the message sender
    * @param content - The message content
+   * @param inputTokens - For assistant messages, the input tokens used in the LLM call
+   * @param outputTokens - For assistant messages, the output tokens generated
    */
   private async saveMessage(
     role: 'user' | 'assistant',
-    content: string
+    content: string,
+    inputTokens?: number,
+    outputTokens?: number
   ): Promise<void> {
+    const messageId = generateId('msg');
     const message = await this.messageRepo.create({
-      id: generateId('msg'),
+      id: messageId,
       sessionId: this.currentSession!.id,
       role,
       content,
@@ -890,13 +1062,37 @@ export class SessionEngine {
 
     // Add to local cache for conversation history
     this.messages.push(message);
+
+    // === Phase 2: Record message in metrics collector ===
+    // Track message timing and token usage for session analytics
+    if (this.metricsCollector) {
+      // Estimate token count from content length (rough approximation)
+      // In a production system, this would use the actual tokenizer
+      const estimatedTokenCount = Math.ceil(content.length / 4);
+
+      this.metricsCollector.recordMessage(
+        messageId,
+        role,
+        estimatedTokenCount,
+        inputTokens,
+        outputTokens
+      );
+    }
   }
 
   /**
    * Marks the current session as completed.
+   *
+   * Phase 2: Also finalizes and persists session metrics, including:
+   * - Closing any active rabbitholes as abandoned
+   * - Recording all collected metrics to the database
+   * - Persisting rabbithole events and recall outcomes
    */
   private async completeSession(): Promise<void> {
     await this.sessionRepo.complete(this.currentSession!.id);
+
+    // === Phase 2: Finalize and persist session metrics ===
+    await this.finalizeAndPersistMetrics();
 
     // Emit session completed event
     this.emitEvent('session_completed', {
@@ -927,6 +1123,8 @@ export class SessionEngine {
 
   /**
    * Resets the engine state to initial values.
+   *
+   * Phase 2: Also resets metrics collection state.
    */
   private resetState(): void {
     this.currentSession = null;
@@ -936,5 +1134,239 @@ export class SessionEngine {
     this.messages = [];
     this.currentPointMessageCount = 0;
     this.llmClient.setSystemPrompt(undefined);
+
+    // === Phase 2: Reset metrics collection state ===
+    this.currentPointStartIndex = 0;
+    if (this.metricsCollector) {
+      this.metricsCollector.reset();
+    }
+    if (this.rabbitholeDetector) {
+      this.rabbitholeDetector.reset();
+    }
+  }
+
+  // ============================================================================
+  // Phase 2: Metrics Collection Helper Methods
+  // ============================================================================
+
+  /**
+   * Detects and records a new rabbithole (conversational tangent).
+   *
+   * Called after each user message to check if the conversation has
+   * diverged from the current recall topic. If a rabbithole is detected,
+   * it is recorded in both the metrics collector and the database.
+   *
+   * @private
+   */
+  private async detectAndRecordRabbithole(): Promise<void> {
+    // Skip if rabbithole detection is not enabled
+    if (!this.rabbitholeDetector || !this.currentSession) {
+      return;
+    }
+
+    const currentPoint = this.targetPoints[this.currentPointIndex];
+    const messageIndex = this.messages.length - 1;
+
+    // Detect if the conversation has entered a new rabbithole
+    const rabbitholeEvent = await this.rabbitholeDetector.detectRabbithole(
+      this.currentSession.id,
+      this.messages,
+      currentPoint,
+      this.targetPoints,
+      messageIndex
+    );
+
+    // If a rabbithole was detected, record it
+    if (rabbitholeEvent) {
+      // Record in metrics collector
+      if (this.metricsCollector) {
+        this.metricsCollector.recordRabbithole(rabbitholeEvent);
+      }
+
+      // Persist to database
+      if (this.rabbitholeRepo) {
+        await this.rabbitholeRepo.create({
+          id: rabbitholeEvent.id,
+          sessionId: this.currentSession.id,
+          topic: rabbitholeEvent.topic,
+          triggerMessageIndex: rabbitholeEvent.triggerMessageIndex,
+          returnMessageIndex: null,
+          depth: rabbitholeEvent.depth,
+          relatedRecallPointIds: rabbitholeEvent.relatedRecallPointIds,
+          userInitiated: rabbitholeEvent.userInitiated,
+          status: 'active',
+          createdAt: new Date(),
+        });
+      }
+
+      // Emit rabbithole detected event
+      this.emitEvent('point_evaluated', {
+        pointId: currentPoint.id,
+        rabbitholeDetected: true,
+        rabbitholeId: rabbitholeEvent.id,
+        rabbitholeTopic: rabbitholeEvent.topic,
+      });
+    }
+  }
+
+  /**
+   * Detects when active rabbitholes have concluded (returned to main topic).
+   *
+   * Called after generating tutor responses to check if any active
+   * rabbitholes have been resolved. Updates both the metrics collector
+   * and the database when returns are detected.
+   *
+   * @private
+   */
+  private async detectRabbitholeReturns(): Promise<void> {
+    // Skip if rabbithole detection is not enabled
+    if (!this.rabbitholeDetector || !this.currentSession) {
+      return;
+    }
+
+    const currentPoint = this.targetPoints[this.currentPointIndex];
+    const messageIndex = this.messages.length - 1;
+
+    // Detect if any active rabbitholes have concluded
+    const returnedEvents = await this.rabbitholeDetector.detectReturns(
+      this.messages,
+      currentPoint,
+      messageIndex
+    );
+
+    // Record each returned rabbithole
+    for (const event of returnedEvents) {
+      // Update metrics collector with return information
+      if (this.metricsCollector && event.returnMessageIndex !== null) {
+        this.metricsCollector.updateRabbitholeReturn(
+          event.id,
+          event.returnMessageIndex
+        );
+      }
+
+      // Update database record
+      if (this.rabbitholeRepo) {
+        await this.rabbitholeRepo.update(event.id, {
+          returnMessageIndex: event.returnMessageIndex,
+          status: 'returned',
+        });
+      }
+    }
+  }
+
+  /**
+   * Finalizes and persists all session metrics.
+   *
+   * This method is called when the session completes. It:
+   * 1. Closes any active rabbitholes as abandoned
+   * 2. Calculates final session metrics
+   * 3. Persists metrics to the session_metrics table
+   * 4. Persists recall outcomes to the recall_outcomes table
+   * 5. Records any final rabbithole events
+   *
+   * @private
+   */
+  private async finalizeAndPersistMetrics(): Promise<void> {
+    // Skip if metrics collection is not enabled
+    if (!this.metricsCollector || !this.currentSession) {
+      return;
+    }
+
+    const finalMessageIndex = this.messages.length - 1;
+
+    // Close any active rabbitholes as abandoned since session is ending
+    if (this.rabbitholeDetector) {
+      const abandonedRabbitholes = this.rabbitholeDetector.closeAllActive(finalMessageIndex);
+
+      // Record abandoned rabbitholes in metrics and database
+      for (const event of abandonedRabbitholes) {
+        this.metricsCollector.recordRabbithole(event);
+
+        // Update database record to mark as abandoned
+        if (this.rabbitholeRepo) {
+          await this.rabbitholeRepo.update(event.id, {
+            returnMessageIndex: finalMessageIndex,
+            status: 'abandoned',
+          });
+        }
+      }
+    }
+
+    // Finalize session metrics using the collector
+    const metrics = await this.metricsCollector.finalizeSession(this.currentSession);
+
+    // Get extended metrics for additional calculations
+    const extendedMetrics = this.metricsCollector.getExtendedMetrics();
+
+    // Persist session metrics to the database
+    if (this.metricsRepo) {
+      await this.metricsRepo.create({
+        id: generateId('sm'),
+        sessionId: this.currentSession.id,
+        durationMs: metrics.totalDurationMs,
+        activeTimeMs: extendedMetrics.activeTimeMs,
+        avgUserResponseTimeMs: extendedMetrics.avgUserResponseTimeMs,
+        avgAssistantResponseTimeMs: extendedMetrics.avgAssistantResponseTimeMs,
+        recallPointsAttempted: extendedMetrics.recallPointsAttempted,
+        recallPointsSuccessful: extendedMetrics.recallPointsSuccessful,
+        recallPointsFailed: extendedMetrics.recallPointsFailed,
+        overallRecallRate: extendedMetrics.overallRecallRate,
+        avgConfidence: extendedMetrics.avgConfidence,
+        totalMessages: extendedMetrics.totalMessages,
+        userMessages: Math.floor(extendedMetrics.totalMessages / 2),
+        assistantMessages: Math.ceil(extendedMetrics.totalMessages / 2),
+        avgMessageLength: this.calculateAverageMessageLength(),
+        rabbitholeCount: extendedMetrics.rabbitholeCount,
+        totalRabbitholeTimeMs: extendedMetrics.totalRabbitholeTimeMs,
+        avgRabbitholeDepth: extendedMetrics.avgRabbitholeDepth,
+        inputTokens: metrics.tokenUsage.inputTokens,
+        outputTokens: metrics.tokenUsage.outputTokens,
+        totalTokens: metrics.tokenUsage.totalTokens,
+        estimatedCostUsd: metrics.costUsd,
+        engagementScore: metrics.engagementScore,
+        calculatedAt: new Date(),
+      });
+    }
+
+    // Persist recall outcomes to the database
+    if (this.recallOutcomeRepo) {
+      const outcomes = metrics.recallOutcomes;
+      if (outcomes.length > 0) {
+        const outcomeRecords = outcomes.map((outcome) => ({
+          id: generateId('ro'),
+          sessionId: this.currentSession!.id,
+          recallPointId: outcome.recallPointId,
+          success: outcome.success,
+          confidence: outcome.confidence,
+          rating: null, // Could be derived from confidence if needed
+          reasoning: null, // Not stored in RecallOutcome model, could be added
+          messageIndexStart: outcome.messageRange.start,
+          messageIndexEnd: outcome.messageRange.end,
+          timeSpentMs: outcome.durationMs,
+          createdAt: new Date(),
+        }));
+
+        await this.recallOutcomeRepo.createMany(outcomeRecords);
+      }
+    }
+  }
+
+  /**
+   * Calculates the average message length across all session messages.
+   *
+   * @returns Average message length in characters
+   * @private
+   */
+  private calculateAverageMessageLength(): number {
+    if (this.messages.length === 0) {
+      return 0;
+    }
+
+    const totalLength = this.messages.reduce(
+      (sum, msg) => sum + msg.content.length,
+      0
+    );
+
+    return totalLength / this.messages.length;
   }
 }
