@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    /* Configuration for Node.js config files like vite.config.ts */
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "skipLibCheck": true,
+    /* Required for project references */
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "declaration": true
+  },
+  "include": ["vite.config.ts"]
+}

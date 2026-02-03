@@ -14,7 +14,9 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun run src/storage/seed.ts",
     "cli": "bun run src/cli/index.ts",
-    "server": "bun run src/api/server.ts"
+    "server": "bun run src/api/server.ts",
+    "web:dev": "cd web && bun run dev",
+    "web:build": "cd web && bun run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

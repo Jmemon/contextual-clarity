@@ -1,0 +1,67 @@
+/**
+ * Global Styles for Contextual Clarity
+ *
+ * This file contains:
+ * - Tailwind CSS directives that inject base styles, components, and utilities
+ * - Custom global styles and CSS variables
+ */
+
+/* Tailwind base styles - normalizes browser defaults */
+@tailwind base;
+
+/* Tailwind component classes - reusable component patterns */
+@tailwind components;
+
+/* Tailwind utility classes - the core utility-first classes */
+@tailwind utilities;
+
+/**
+ * Custom base layer styles
+ * These apply global defaults on top of Tailwind's base
+ */
+@layer base {
+  /* Ensure smooth scrolling for anchor links */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Default body styles */
+  body {
+    @apply antialiased text-gray-900;
+  }
+}
+
+/**
+ * Custom component classes
+ * Reusable component patterns using @apply
+ */
+@layer components {
+  /* Example: Common button styles - can be extended as needed */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+  }
+
+  .btn-primary {
+    @apply btn bg-clarity-600 text-white hover:bg-clarity-700;
+  }
+
+  .btn-secondary {
+    @apply btn bg-clarity-100 text-clarity-700 hover:bg-clarity-200;
+  }
+}
+
+/**
+ * Custom utility classes
+ * Project-specific utilities
+ */
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
