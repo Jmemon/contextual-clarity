@@ -58,3 +58,22 @@ export {
   type CreateSessionMessageInput,
   type UpdateSessionMessageInput,
 } from './session-message.repository';
+
+// SessionMetrics repository and types
+export {
+  SessionMetricsRepository,
+  type SessionMetricsSummary,
+  type RecallSetAggregateStats,
+} from './session-metrics.repository';
+
+// RecallOutcome repository and types
+export {
+  RecallOutcomeRepository,
+  type RecallPointStats,
+} from './recall-outcome.repository';
+
+// RabbitholeEvent repository and types
+export {
+  RabbitholeEventRepository,
+  type TopicStats,
+} from './rabbithole-event.repository';
