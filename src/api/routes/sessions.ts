@@ -36,6 +36,7 @@ import { success, notFound, badRequest, internalError } from '../utils/response'
 
 /**
  * Query parameters for listing sessions with filters.
+ * Uses limit/offset pagination style for direct control over result windows.
  */
 interface SessionListQuery {
   /** Filter by recall set ID */
@@ -44,26 +45,31 @@ interface SessionListQuery {
   startDate?: string;
   /** Filter by session end date (ISO 8601 format) */
   endDate?: string;
-  /** Page number for pagination (1-based) */
-  page?: string;
-  /** Number of items per page */
+  /** Maximum number of sessions to return (default: 20, max: 100) */
   limit?: string;
+  /** Number of sessions to skip (for pagination, default: 0) */
+  offset?: string;
   /** Filter by session status */
   status?: 'completed' | 'abandoned' | 'in_progress';
 }
 
 /**
  * Response type for paginated session list.
+ * Returns limit/offset pagination metadata for client-side navigation.
  */
 interface SessionListResponse {
   /** Array of sessions matching the filters */
   sessions: SessionWithMetrics[];
-  /** Pagination metadata */
+  /** Pagination metadata using limit/offset style */
   pagination: {
-    page: number;
+    /** Maximum items per page */
     limit: number;
+    /** Number of items skipped */
+    offset: number;
+    /** Total number of matching sessions */
     total: number;
-    totalPages: number;
+    /** Whether there are more results after this page */
+    hasMore: boolean;
   };
 }
 
@@ -231,23 +237,23 @@ export function sessionsRoutes(): Hono {
 
   /**
    * Lists all sessions with optional filters for recallSetId, date range,
-   * status, and pagination support.
+   * status, and pagination support using limit/offset style.
    *
    * Query Parameters:
    * - recallSetId: Filter by recall set
    * - startDate: Filter sessions started after this date (ISO 8601)
    * - endDate: Filter sessions started before this date (ISO 8601)
-   * - page: Page number (default: 1)
-   * - limit: Items per page (default: 20, max: 100)
+   * - limit: Maximum items to return (default: 20, max: 100)
+   * - offset: Number of items to skip (default: 0)
    * - status: Filter by status (completed, abandoned, in_progress)
    */
   router.get('/', async (c) => {
     try {
       const query = c.req.query() as SessionListQuery;
 
-      // Parse pagination parameters with defaults
-      const page = Math.max(1, parseInt(query.page || '1', 10));
+      // Parse pagination parameters with defaults (limit/offset style)
       const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
+      const offset = Math.max(0, parseInt(query.offset || '0', 10));
 
       // Parse date filters
       const startDate = parseDate(query.startDate);
@@ -283,11 +289,10 @@ export function sessionsRoutes(): Hono {
       // Sort by startedAt descending (most recent first)
       allSessions.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
 
-      // Calculate pagination
+      // Calculate pagination using limit/offset
       const total = allSessions.length;
-      const totalPages = Math.ceil(total / limit);
-      const offset = (page - 1) * limit;
       const paginatedSessions = allSessions.slice(offset, offset + limit);
+      const hasMore = offset + limit < total;
 
       // Fetch metrics for each session to include summary data
       const sessionsWithMetrics: SessionWithMetrics[] = await Promise.all(
@@ -316,10 +321,10 @@ export function sessionsRoutes(): Hono {
       const response: SessionListResponse = {
         sessions: sessionsWithMetrics,
         pagination: {
-          page,
           limit,
+          offset,
           total,
-          totalPages,
+          hasMore,
         },
       };
 
