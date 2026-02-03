@@ -13,7 +13,8 @@
     "db:migrate": "bun run src/storage/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun run src/storage/seed.ts",
-    "cli": "bun run src/cli/index.ts"
+    "cli": "bun run src/cli/index.ts",
+    "server": "bun run src/api/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
