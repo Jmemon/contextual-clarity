@@ -34,3 +34,20 @@ export type {
   SessionMessage,
   Session,
 } from './session';
+
+// SessionMetrics types - comprehensive session performance tracking
+export type {
+  RecallOutcome,
+  RabbitholeStatus,
+  RabbitholeEvent,
+  TokenUsage,
+  MessageTiming,
+  SessionMetrics,
+  SessionMetricsSummary,
+} from './session-metrics';
+
+// SessionMetrics helper functions
+export {
+  calculateEngagementScore,
+  calculateResponseTimeVariance,
+} from './session-metrics';
