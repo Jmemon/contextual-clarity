@@ -109,14 +109,14 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
   return (
     <Link
       to={`/recall-sets/${id}`}
-      className="block group"
+      className="block group focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-2 rounded-lg"
       aria-label={`View ${name} recall set`}
     >
-      <Card className="h-full transition-all duration-150 group-hover:border-clarity-400 group-hover:shadow-lg">
-        <CardBody className="flex flex-col h-full">
+      <Card className="h-full transition-all duration-200 group-hover:border-clarity-400 group-hover:shadow-lg group-hover:-translate-y-0.5">
+        <CardBody className="flex flex-col h-full p-4 sm:p-6">
           {/* Header row: Name and Status badge */}
           <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="text-lg font-semibold text-gray-900 group-hover:text-clarity-700 transition-colors">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 group-hover:text-clarity-700 transition-colors line-clamp-1">
               {name}
             </h3>
             <Badge status={getStatusBadgeVariant(status)}>
@@ -125,12 +125,12 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
           </div>
 
           {/* Description - truncated to prevent overflow */}
-          <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+          <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 line-clamp-2">
             {description ? truncateText(description, 100) : 'No description'}
           </p>
 
-          {/* Stats row: Total, Due, and New points */}
-          <div className="flex gap-4 text-sm mb-4">
+          {/* Stats row: Total, Due, and New points - responsive spacing */}
+          <div className="flex gap-3 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
             {/* Total points in the set */}
             <div className="flex flex-col">
               <span className="text-gray-500">Total</span>
@@ -166,6 +166,7 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
           <div className="flex-grow" />
 
           {/* Start Session button - only shown for non-archived sets */}
+          {/* Minimum 44px height for touch targets */}
           {status !== 'archived' && (
             <Button
               variant="primary"
@@ -173,7 +174,7 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
               onClick={handleStartSession}
               isLoading={startSessionMutation.isPending}
               disabled={totalPoints === 0}
-              className="w-full"
+              className="w-full min-h-[44px]"
             >
               {startSessionMutation.isPending ? 'Starting...' : 'Start Session'}
             </Button>
@@ -185,7 +186,7 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
               variant="secondary"
               size="sm"
               disabled
-              className="w-full"
+              className="w-full min-h-[44px]"
             >
               Archived
             </Button>

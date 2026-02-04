@@ -46,6 +46,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
 
         {/* Input field with conditional error styling */}
+        {/* Minimum height ensures 44px touch target on mobile */}
         <input
           ref={ref}
           id={inputId}
@@ -54,9 +55,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
           }
           className={`
-            w-full px-3 py-2
+            w-full px-3 py-2.5 sm:py-2
+            min-h-[44px] sm:min-h-[40px]
             border rounded-lg
-            text-gray-900 placeholder-gray-400
+            text-base sm:text-sm text-gray-900 placeholder-gray-400
             transition-colors duration-150
             focus:outline-none focus:ring-2 focus:ring-offset-0
             disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed

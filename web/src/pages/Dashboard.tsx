@@ -170,20 +170,21 @@ export function Dashboard() {
     : null;
 
   return (
-    <div className="p-8">
-      {/* Page header with title and description */}
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-clarity-800 mb-2">
+    <div className="p-4 sm:p-6 lg:p-8">
+      {/* Page header with title and description - responsive text sizing */}
+      <header className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-clarity-800 mb-2">
           Dashboard
         </h1>
-        <p className="text-clarity-600">
+        <p className="text-sm sm:text-base text-clarity-600">
           Your learning overview and progress at a glance.
         </p>
       </header>
 
       {/* Overview statistics grid - shows key metrics */}
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold text-clarity-700 mb-4">
+      {/* Responsive: 1 col mobile, 2 cols tablet, 3 cols desktop */}
+      <section className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-clarity-700 mb-3 sm:mb-4">
           Overview
         </h2>
         <OverviewStats
@@ -196,10 +197,10 @@ export function Dashboard() {
         />
       </section>
 
-      {/* Main dashboard content - two column layout on larger screens */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Main dashboard content - stacks on mobile, two columns on larger screens */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Left column: Due points and recent sessions */}
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Due points card - shows today's review status */}
           <DuePointsCard
             duePoints={pointsDueToday}
@@ -217,7 +218,7 @@ export function Dashboard() {
         </div>
 
         {/* Right column: Streak and upcoming reviews */}
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Streak display - shows current and longest streaks */}
           <StreakDisplay
             currentStreak={currentStreak}

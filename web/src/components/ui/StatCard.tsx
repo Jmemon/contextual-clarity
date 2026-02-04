@@ -106,6 +106,11 @@ function TrendIcon({ direction }: { direction: TrendDirection }) {
 /**
  * Statistics display card component.
  * Shows a value with label and optional trend indicator.
+ *
+ * Features responsive padding and typography:
+ * - Compact on mobile for better information density
+ * - Full padding on larger screens for spacious feel
+ * - Smooth hover transition for visual feedback
  */
 export function StatCard({
   value,
@@ -123,26 +128,27 @@ export function StatCard({
         rounded-lg
         shadow-md
         border border-gray-200
-        p-6
+        p-4 sm:p-6
+        transition-shadow duration-200 hover:shadow-lg
         ${className}
       `.trim()}
       {...props}
     >
       <div className="flex items-start justify-between">
         {/* Main content area */}
-        <div className="flex-1">
-          {/* Label - smaller, secondary text */}
-          <p className="text-sm font-medium text-gray-500 mb-1">{label}</p>
+        <div className="flex-1 min-w-0">
+          {/* Label - smaller, secondary text with truncation */}
+          <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1 truncate">{label}</p>
 
-          {/* Value - large, prominent display */}
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
+          {/* Value - responsive text size, prominent display */}
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{value}</p>
 
           {/* Trend indicator with change value */}
           {trend && change && (
             <div
               className={`
                 flex items-center mt-2
-                text-sm font-medium
+                text-xs sm:text-sm font-medium
                 ${trendColors[trend]}
               `}
             >
@@ -152,9 +158,9 @@ export function StatCard({
           )}
         </div>
 
-        {/* Optional icon on the right side */}
+        {/* Optional icon on the right side - hidden on very small screens */}
         {icon && (
-          <div className="ml-4 p-3 bg-clarity-100 rounded-lg text-clarity-600">
+          <div className="ml-3 sm:ml-4 p-2 sm:p-3 bg-clarity-100 rounded-lg text-clarity-600 shrink-0">
             {icon}
           </div>
         )}

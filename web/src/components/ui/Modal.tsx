@@ -128,6 +128,7 @@ export function Modal({
       aria-hidden="true"
     >
       {/* Modal dialog container */}
+      {/* Responsive: full width on mobile with small margins, max-width on larger screens */}
       <div
         ref={modalRef}
         role="dialog"
@@ -140,31 +141,36 @@ export function Modal({
           bg-white
           rounded-lg
           shadow-xl
-          max-w-lg w-full mx-4
-          max-h-[90vh]
+          w-[calc(100%-2rem)] sm:w-full max-w-lg mx-4
+          max-h-[85vh] sm:max-h-[90vh]
           overflow-hidden
           flex flex-col
+          animate-in fade-in zoom-in-95 duration-200
           ${className}
         `.trim()}
         {...props}
       >
         {/* Modal header with title and close button */}
+        {/* Responsive padding for mobile */}
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
             <h2
               id="modal-title"
-              className="text-lg font-semibold text-gray-900"
+              className="text-base sm:text-lg font-semibold text-gray-900 pr-2"
             >
               {title}
             </h2>
+            {/* Close button with 44px minimum touch target */}
             <button
               type="button"
               onClick={onClose}
               className="
                 text-gray-400 hover:text-gray-600
-                rounded-lg p-1
+                rounded-lg p-2 -mr-2
+                min-w-[44px] min-h-[44px]
+                flex items-center justify-center
                 focus:outline-none focus:ring-2 focus:ring-clarity-500
-                transition-colors
+                transition-colors duration-150
               "
               aria-label="Close modal"
             >
@@ -189,7 +195,8 @@ export function Modal({
         )}
 
         {/* Modal content area - scrollable if content is too long */}
-        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        {/* Responsive padding for mobile */}
+        <div className="px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

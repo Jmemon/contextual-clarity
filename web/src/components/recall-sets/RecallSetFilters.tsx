@@ -77,7 +77,7 @@ export function RecallSetFilters({
 }: RecallSetFiltersProps) {
   return (
     <nav
-      className="flex gap-1 p-1 bg-gray-100 rounded-lg"
+      className="inline-flex gap-1 p-1 bg-gray-100 rounded-lg"
       role="tablist"
       aria-label="Filter recall sets by status"
     >
@@ -97,9 +97,11 @@ export function RecallSetFilters({
             aria-controls="recall-sets-list"
             onClick={() => onChange(option.value)}
             className={`
-              px-4 py-2 text-sm font-medium rounded-md
-              transition-colors duration-150
+              px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md
+              min-h-[40px] sm:min-h-[36px]
+              transition-all duration-150
               focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-1
+              whitespace-nowrap
               ${
                 isSelected
                   ? 'bg-white text-clarity-700 shadow-sm'
@@ -112,7 +114,7 @@ export function RecallSetFilters({
             {count !== undefined && (
               <span
                 className={`
-                  ml-2 px-1.5 py-0.5 text-xs rounded-full
+                  ml-1.5 sm:ml-2 px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full
                   ${
                     isSelected
                       ? 'bg-clarity-100 text-clarity-700'

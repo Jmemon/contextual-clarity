@@ -238,21 +238,35 @@ export function SessionReplay() {
   // ============================================================================
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      {/* Breadcrumb navigation */}
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      {/* Breadcrumb navigation - larger touch target */}
       <nav className="mb-4">
         <Link
           to="/sessions"
-          className="text-clarity-600 hover:text-clarity-800 transition-colors"
+          className="inline-flex items-center gap-1 text-clarity-600 hover:text-clarity-800 transition-colors py-2 min-h-[44px]"
         >
-          &larr; Back to Sessions
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+          Back to Sessions
         </Link>
       </nav>
 
-      {/* Page header */}
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold text-clarity-800 mb-2">Session Replay</h1>
-        <p className="text-clarity-600">
+      {/* Page header - responsive typography */}
+      <header className="mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-clarity-800 mb-1 sm:mb-2">Session Replay</h1>
+        <p className="text-sm sm:text-base text-clarity-600">
           Review your study session from {new Date(session.startedAt).toLocaleDateString()}
         </p>
       </header>
@@ -284,19 +298,19 @@ export function SessionReplay() {
       />
 
       {/* Transcript Section */}
-      <section className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-clarity-700">
+      <section className="mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-3 sm:mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold text-clarity-700">
             Conversation Transcript
           </h2>
 
-          {/* Auto-scroll toggle */}
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          {/* Auto-scroll toggle - larger touch target */}
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer min-h-[44px]">
             <input
               type="checkbox"
               checked={autoScroll}
               onChange={(e) => setAutoScroll(e.target.checked)}
-              className="rounded border-gray-300 text-clarity-600 focus:ring-clarity-500"
+              className="w-5 h-5 rounded border-gray-300 text-clarity-600 focus:ring-clarity-500"
             />
             Auto-scroll to bottom
           </label>
@@ -351,13 +365,13 @@ export function SessionReplay() {
         )}
       </section>
 
-      {/* Action buttons */}
-      <div className="flex gap-4">
-        {/* Scroll to top button */}
+      {/* Action buttons - stack on mobile */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        {/* Scroll to top button - 44px min height for touch */}
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="px-4 py-2 border border-clarity-300 text-clarity-700 rounded-lg hover:bg-clarity-50 transition-colors font-medium"
+          className="px-4 py-2 border border-clarity-300 text-clarity-700 rounded-lg hover:bg-clarity-50 transition-all duration-150 font-medium min-h-[44px] active:scale-[0.98]"
         >
           Scroll to Top
         </button>
@@ -365,7 +379,7 @@ export function SessionReplay() {
         {/* Link to start a new session with the same recall set */}
         <Link
           to={`/recall-sets/${session.recallSetId}`}
-          className="px-4 py-2 bg-clarity-600 text-white rounded-lg hover:bg-clarity-700 transition-colors font-medium"
+          className="px-4 py-2 bg-clarity-600 text-white rounded-lg hover:bg-clarity-700 transition-all duration-150 font-medium min-h-[44px] text-center flex items-center justify-center active:scale-[0.98]"
         >
           View Recall Set
         </Link>

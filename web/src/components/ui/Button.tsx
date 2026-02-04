@@ -53,12 +53,13 @@ const variantClasses: Record<ButtonVariant, string> = {
 
 /**
  * Tailwind classes for each button size
- * Includes padding, font size, and minimum width for consistency
+ * Includes padding, font size, and minimum width/height for consistency
+ * Touch targets meet the 44x44px minimum for accessibility
  */
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm min-w-[64px]',
-  md: 'px-4 py-2 text-base min-w-[80px]',
-  lg: 'px-6 py-3 text-lg min-w-[96px]',
+  sm: 'px-3 py-2 text-sm min-w-[64px] min-h-[36px] sm:min-h-[32px]',
+  md: 'px-4 py-2.5 text-base min-w-[80px] min-h-[44px] sm:min-h-[40px]',
+  lg: 'px-6 py-3 text-lg min-w-[96px] min-h-[48px]',
 };
 
 /**
@@ -90,9 +91,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={`
           inline-flex items-center justify-center
           font-medium rounded-lg
-          transition-colors duration-150
+          transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-offset-2
           disabled:cursor-not-allowed
+          active:scale-[0.98]
           ${variantClasses[variant]}
           ${sizeClasses[size]}
           ${className}

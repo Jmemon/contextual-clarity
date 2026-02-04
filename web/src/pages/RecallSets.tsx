@@ -133,26 +133,26 @@ export function RecallSets() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="p-8">
-      {/* Page header with title and create button */}
-      <header className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="p-4 sm:p-6 lg:p-8">
+      {/* Page header with title and create button - stacks on mobile */}
+      <header className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-clarity-800 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-clarity-800 mb-1 sm:mb-2">
             Recall Sets
           </h1>
-          <p className="text-clarity-600">
+          <p className="text-sm sm:text-base text-clarity-600">
             Organize your learning materials into themed collections.
           </p>
         </div>
 
-        {/* Create new set button - links to create page/modal */}
-        <Link to="/recall-sets/new">
-          <Button variant="primary">+ New Set</Button>
+        {/* Create new set button - full width on mobile, auto width on larger screens */}
+        <Link to="/recall-sets/new" className="sm:shrink-0">
+          <Button variant="primary" className="w-full sm:w-auto min-h-[44px]">+ New Set</Button>
         </Link>
       </header>
 
-      {/* Filter bar for status filtering */}
-      <div className="mb-6">
+      {/* Filter bar for status filtering - scrolls horizontally on mobile if needed */}
+      <div className="mb-4 sm:mb-6 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
         <RecallSetFilters
           value={filter}
           onChange={setFilter}
@@ -161,12 +161,13 @@ export function RecallSets() {
       </div>
 
       {/* Recall sets grid or empty state */}
+      {/* Responsive: 1 col mobile, 2 cols tablet, 3 cols desktop */}
       {filteredSets.length > 0 ? (
         <section
           id="recall-sets-list"
           role="tabpanel"
           aria-label={`${filter === 'all' ? 'All' : filter} recall sets`}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"
         >
           {filteredSets.map((recallSet) => (
             <RecallSetCard key={recallSet.id} recallSet={recallSet} />

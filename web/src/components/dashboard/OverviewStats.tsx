@@ -231,7 +231,11 @@ function ActiveIcon() {
 
 /**
  * OverviewStats renders a responsive grid of key metrics.
- * Uses a 1-column layout on mobile, 2 columns on tablet, and 3 columns on desktop.
+ * Responsive breakpoints:
+ * - Mobile (<640px): 1 column - cards stack vertically
+ * - Tablet (640-1023px): 2 columns
+ * - Desktop (1024-1279px): 3 columns
+ * - Large desktop (1280px+): Can show up to 6 columns or 3x2 grid
  */
 export function OverviewStats({
   totalSets,
@@ -242,7 +246,7 @@ export function OverviewStats({
   totalStudyTimeMs,
 }: OverviewStatsProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       {/* Total Recall Sets - primary count of all sets */}
       <StatCard
         label="Total Recall Sets"

@@ -43,15 +43,17 @@ export interface TableProps extends HTMLAttributes<HTMLTableElement> {
 
 /**
  * Main table container with responsive wrapper and base styling.
+ * Features horizontal scroll on mobile for wide tables and smooth scrolling.
  */
 export function Table({ children, className = '', ...props }: TableProps) {
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto -webkit-overflow-scrolling-touch scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
       <table
         className={`
           w-full
           border-collapse
-          text-sm
+          text-xs sm:text-sm
+          min-w-[600px]
           ${className}
         `.trim()}
         {...props}
@@ -135,6 +137,7 @@ export interface TableRowProps extends HTMLAttributes<HTMLTableRowElement> {
 
 /**
  * Table row (tr) with optional hover state.
+ * Includes transition for smooth hover effect.
  */
 export function TableRow({
   children,
@@ -145,7 +148,7 @@ export function TableRow({
   return (
     <tr
       className={`
-        ${hoverable ? 'hover:bg-gray-50 transition-colors' : ''}
+        ${hoverable ? 'hover:bg-gray-50 transition-colors duration-150' : ''}
         ${className}
       `.trim()}
       {...props}
@@ -165,6 +168,7 @@ export interface TableHeadProps extends ThHTMLAttributes<HTMLTableCellElement> {
 
 /**
  * Table header cell (th) with proper styling.
+ * Responsive padding for mobile screens.
  */
 export function TableHead({
   children,
@@ -174,11 +178,12 @@ export function TableHead({
   return (
     <th
       className={`
-        px-4 py-3
+        px-3 sm:px-4 py-2 sm:py-3
         text-left
-        text-xs font-semibold
+        text-[10px] sm:text-xs font-semibold
         text-gray-600
         uppercase tracking-wider
+        whitespace-nowrap
         ${className}
       `.trim()}
       {...props}
@@ -198,6 +203,7 @@ export interface TableCellProps extends TdHTMLAttributes<HTMLTableCellElement> {
 
 /**
  * Table data cell (td) with consistent padding.
+ * Responsive padding for mobile screens.
  */
 export function TableCell({
   children,
@@ -207,7 +213,7 @@ export function TableCell({
   return (
     <td
       className={`
-        px-4 py-3
+        px-3 sm:px-4 py-2 sm:py-3
         text-gray-900
         ${className}
       `.trim()}

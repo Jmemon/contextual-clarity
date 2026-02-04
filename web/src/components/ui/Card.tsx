@@ -45,6 +45,7 @@ export interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {
 /**
  * Main Card container component.
  * Provides a white background, shadow, and rounded corners.
+ * Includes transition for smooth hover/state changes.
  */
 export function Card({ children, className = '', ...props }: CardProps) {
   return (
@@ -55,6 +56,7 @@ export function Card({ children, className = '', ...props }: CardProps) {
         shadow-md
         border border-gray-200
         overflow-hidden
+        transition-shadow duration-200
         ${className}
       `.trim()}
       {...props}
@@ -67,6 +69,7 @@ export function Card({ children, className = '', ...props }: CardProps) {
 /**
  * Card header section.
  * Typically contains a title or heading with a bottom border.
+ * Responsive padding for mobile screens.
  */
 export function CardHeader({
   children,
@@ -76,7 +79,7 @@ export function CardHeader({
   return (
     <div
       className={`
-        px-6 py-4
+        px-4 sm:px-6 py-3 sm:py-4
         border-b border-gray-200
         bg-gray-50
         font-semibold text-gray-900
@@ -92,12 +95,13 @@ export function CardHeader({
 /**
  * Card body section.
  * Main content area with consistent padding.
+ * Responsive padding for mobile screens.
  */
 export function CardBody({ children, className = '', ...props }: CardBodyProps) {
   return (
     <div
       className={`
-        px-6 py-4
+        px-4 sm:px-6 py-3 sm:py-4
         ${className}
       `.trim()}
       {...props}
@@ -110,6 +114,7 @@ export function CardBody({ children, className = '', ...props }: CardBodyProps) 
 /**
  * Card footer section.
  * Typically contains action buttons with a top border.
+ * Responsive padding for mobile screens.
  */
 export function CardFooter({
   children,
@@ -119,7 +124,7 @@ export function CardFooter({
   return (
     <div
       className={`
-        px-6 py-4
+        px-4 sm:px-6 py-3 sm:py-4
         border-t border-gray-200
         bg-gray-50
         ${className}

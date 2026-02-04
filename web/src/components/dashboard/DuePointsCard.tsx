@@ -93,39 +93,40 @@ export function DuePointsCard({
         </div>
       </CardHeader>
       <CardBody>
-        {/* Main due points display - large and prominent */}
-        <div className="text-center py-4">
-          <p className={`text-5xl font-bold ${hasDuePoints ? 'text-amber-600' : 'text-green-600'}`}>
+        {/* Main due points display - large and prominent, responsive text sizing */}
+        <div className="text-center py-3 sm:py-4">
+          <p className={`text-4xl sm:text-5xl font-bold ${hasDuePoints ? 'text-amber-600' : 'text-green-600'}`}>
             {duePoints}
           </p>
-          <p className="text-gray-500 mt-1">
+          <p className="text-sm sm:text-base text-gray-500 mt-1">
             {hasDuePoints
               ? `point${duePoints === 1 ? '' : 's'} due for review`
               : 'All caught up!'}
           </p>
         </div>
 
-        {/* Today's activity summary */}
-        <div className="flex justify-around border-t border-gray-200 pt-4 mt-4">
+        {/* Today's activity summary - responsive text */}
+        <div className="flex justify-around border-t border-gray-200 pt-3 sm:pt-4 mt-3 sm:mt-4">
           <div className="text-center">
-            <p className="text-2xl font-semibold text-gray-700">{todaysSessions}</p>
-            <p className="text-sm text-gray-500">
+            <p className="text-xl sm:text-2xl font-semibold text-gray-700">{todaysSessions}</p>
+            <p className="text-xs sm:text-sm text-gray-500">
               session{todaysSessions === 1 ? '' : 's'} today
             </p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-semibold text-gray-700">
+            <p className="text-xl sm:text-2xl font-semibold text-gray-700">
               {formatDuration(todaysStudyTimeMs)}
             </p>
-            <p className="text-sm text-gray-500">studied today</p>
+            <p className="text-xs sm:text-sm text-gray-500">studied today</p>
           </div>
         </div>
 
         {/* Call-to-action button - links to recall sets to start a session */}
+        {/* Full width on mobile for larger touch target */}
         {hasDuePoints && (
-          <div className="mt-6 text-center">
-            <Link to="/recall-sets">
-              <Button variant="primary">
+          <div className="mt-4 sm:mt-6 text-center">
+            <Link to="/recall-sets" className="block sm:inline-block">
+              <Button variant="primary" className="w-full sm:w-auto min-h-[44px]">
                 Start Studying
               </Button>
             </Link>
@@ -134,8 +135,8 @@ export function DuePointsCard({
 
         {/* Encouraging message when all caught up */}
         {!hasDuePoints && (
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500">
+          <div className="mt-4 sm:mt-6 text-center">
+            <p className="text-xs sm:text-sm text-gray-500">
               Great job staying on top of your reviews!
             </p>
           </div>

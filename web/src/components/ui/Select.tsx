@@ -63,6 +63,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
 
         {/* Select wrapper for custom arrow styling */}
         <div className="relative">
+          {/* Minimum height ensures 44px touch target on mobile */}
           <select
             ref={ref}
             id={selectId}
@@ -75,14 +76,16 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                 : undefined
             }
             className={`
-              w-full px-3 py-2 pr-10
+              w-full px-3 py-2.5 sm:py-2 pr-10
+              min-h-[44px] sm:min-h-[40px]
               border rounded-lg
-              text-gray-900
+              text-base sm:text-sm text-gray-900
               bg-white
               appearance-none
               transition-colors duration-150
               focus:outline-none focus:ring-2 focus:ring-offset-0
               disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed
+              cursor-pointer
               ${
                 hasError
                   ? 'border-red-500 focus:border-red-500 focus:ring-red-200'

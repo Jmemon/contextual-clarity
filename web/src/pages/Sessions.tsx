@@ -171,13 +171,13 @@ export function Sessions() {
   // ============================================================================
 
   return (
-    <div className="p-8">
-      {/* Page Header */}
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+    <div className="p-4 sm:p-6 lg:p-8">
+      {/* Page Header - responsive typography */}
+      <header className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1 sm:mb-2">
           Session History
         </h1>
-        <p className="text-gray-600">
+        <p className="text-sm sm:text-base text-gray-600">
           Review your past study sessions and track your learning progress.
         </p>
       </header>
@@ -205,11 +205,11 @@ export function Sessions() {
             recallSets={recallSets}
           />
 
-          {/* Pagination Controls */}
+          {/* Pagination Controls - stacks on mobile */}
           {sessionsData && sessionsData.pagination.total > 0 && (
-            <div className="mt-6 flex items-center justify-between">
+            <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               {/* Results Summary */}
-              <p className="text-sm text-gray-600">
+              <p className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">
                 Showing{' '}
                 <span className="font-medium">
                   {(filters.offset ?? 0) + 1}
@@ -228,20 +228,21 @@ export function Sessions() {
                 sessions
               </p>
 
-              {/* Page Navigation Buttons */}
-              <div className="flex items-center gap-4">
+              {/* Page Navigation Buttons - full width on mobile */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
                 {/* Page Indicator */}
-                <span className="text-sm text-gray-600">
+                <span className="text-xs sm:text-sm text-gray-600">
                   Page {currentPage} of {totalPages}
                 </span>
 
-                {/* Navigation Buttons */}
-                <div className="flex gap-2">
+                {/* Navigation Buttons - full width on mobile */}
+                <div className="flex gap-2 w-full sm:w-auto">
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={handlePreviousPage}
                     disabled={!hasPreviousPage || isFetchingSessions}
+                    className="flex-1 sm:flex-none min-h-[44px]"
                   >
                     Previous
                   </Button>
@@ -250,6 +251,7 @@ export function Sessions() {
                     size="sm"
                     onClick={handleNextPage}
                     disabled={!hasNextPage || isFetchingSessions}
+                    className="flex-1 sm:flex-none min-h-[44px]"
                   >
                     Next
                   </Button>

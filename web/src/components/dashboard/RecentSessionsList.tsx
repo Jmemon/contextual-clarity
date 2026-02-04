@@ -142,34 +142,36 @@ function SessionItem({ session }: { session: SessionSummary }) {
   return (
     <Link
       to={`/sessions/${session.id}/replay`}
-      className="block p-4 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
+      className="block p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-150 border-b border-gray-100 last:border-b-0 min-h-[60px] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-clarity-500"
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2 sm:gap-4">
         {/* Session info - left side */}
         <div className="flex-1 min-w-0">
           {/* Recall set name with link */}
-          <p className="font-medium text-gray-900 truncate">
+          <p className="text-sm sm:text-base font-medium text-gray-900 truncate">
             {session.recallSetName}
           </p>
           {/* Date and duration */}
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
             {formatDate(session.startedAt)} - {formatDuration(session.durationMs)}
           </p>
         </div>
 
-        {/* Metrics - right side */}
-        <div className="flex items-center gap-4 ml-4">
+        {/* Metrics - right side - stacks vertically on very small screens */}
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           {/* Recall rate percentage */}
           <div className="text-right">
-            <p className={`text-lg font-semibold ${getRecallRateColor(session.recallRate)}`}>
+            <p className={`text-base sm:text-lg font-semibold ${getRecallRateColor(session.recallRate)}`}>
               {recallPercentage}%
             </p>
-            <p className="text-xs text-gray-500">recall</p>
+            <p className="text-[10px] sm:text-xs text-gray-500">recall</p>
           </div>
-          {/* Status badge */}
-          <Badge status={statusBadge.status}>
-            {statusBadge.label}
-          </Badge>
+          {/* Status badge - hidden on very small screens */}
+          <div className="hidden xs:block">
+            <Badge status={statusBadge.status}>
+              {statusBadge.label}
+            </Badge>
+          </div>
         </div>
       </div>
     </Link>
@@ -216,11 +218,11 @@ export function RecentSessionsList({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <span>Recent Sessions</span>
-          {/* Link to view all sessions */}
+          <span className="text-sm sm:text-base">Recent Sessions</span>
+          {/* Link to view all sessions - 44px touch target */}
           <Link
             to="/sessions"
-            className="text-sm text-clarity-600 hover:text-clarity-700 font-medium"
+            className="text-xs sm:text-sm text-clarity-600 hover:text-clarity-700 font-medium py-2 -my-2 px-2 -mr-2 min-h-[44px] flex items-center transition-colors duration-150"
           >
             View All
           </Link>

@@ -123,9 +123,10 @@ export function SessionFilters({
     internalEndDate !== '';
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
       {/* Filter controls grid - responsive layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stacks fully on mobile, 2 cols on tablet, 4 cols on desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Recall Set Filter Dropdown */}
         <Select
           label="Recall Set"
@@ -164,12 +165,13 @@ export function SessionFilters({
         />
 
         {/* Action Buttons - Apply and Clear */}
-        <div className="flex items-end gap-2">
+        {/* Full width on mobile, aligns to bottom on larger screens */}
+        <div className="flex items-end gap-2 mt-2 sm:mt-0">
           <Button
             variant="primary"
             onClick={handleApply}
             isLoading={isLoading}
-            className="flex-1"
+            className="flex-1 min-h-[44px]"
           >
             Apply
           </Button>
@@ -177,7 +179,7 @@ export function SessionFilters({
             variant="secondary"
             onClick={handleClear}
             disabled={!hasFilters || isLoading}
-            className="flex-1"
+            className="flex-1 min-h-[44px]"
           >
             Clear
           </Button>
