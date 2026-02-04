@@ -53,9 +53,11 @@ import type {
 
 /**
  * Base URL for the API.
- * Defaults to localhost:3001 for development; can be overridden via environment variable.
+ * In development, this defaults to empty string so requests use relative URLs
+ * (e.g., /api/...) which Vite's proxy forwards to the backend.
+ * In production, set VITE_API_BASE_URL if the API is on a different origin.
  */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // ============================================================================
 // Custom Error Class

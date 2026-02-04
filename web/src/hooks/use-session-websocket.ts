@@ -402,15 +402,20 @@ export function useSessionWebSocket(
     setConnectionState('connecting');
     setLastError(null);
 
-    // Construct WebSocket URL from current location
+    // Construct WebSocket URL
+    // If VITE_API_BASE_URL is set, use it; otherwise use current host (works with Vite proxy)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Use the API base URL if available, otherwise use localhost
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-    const wsBaseUrl = apiBaseUrl.replace(/^http/, 'ws');
-    const wsUrl = `${wsBaseUrl}/api/session/ws?sessionId=${encodeURIComponent(sessionId)}`;
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
-    // Handle development mode where we might connect directly
-    const finalUrl = wsUrl.startsWith('ws') ? wsUrl : `${protocol}//${window.location.host}/api/session/ws?sessionId=${encodeURIComponent(sessionId)}`;
+    let finalUrl: string;
+    if (apiBaseUrl) {
+      // Explicit API URL provided - convert http(s) to ws(s)
+      const wsBaseUrl = apiBaseUrl.replace(/^http/, 'ws');
+      finalUrl = `${wsBaseUrl}/api/session/ws?sessionId=${encodeURIComponent(sessionId)}`;
+    } else {
+      // No explicit URL - use current host (Vite proxy will forward to backend)
+      finalUrl = `${protocol}//${window.location.host}/api/session/ws?sessionId=${encodeURIComponent(sessionId)}`;
+    }
 
     try {
       const ws = new WebSocket(finalUrl);
@@ -455,6 +460,7 @@ export function useSessionWebSocket(
 
   /**
    * Disconnect from the WebSocket server.
+   * Handles cleanup gracefully to avoid errors when connection is still establishing.
    */
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
@@ -462,8 +468,28 @@ export function useSessionWebSocket(
     clearPingInterval();
 
     if (wsRef.current) {
-      wsRef.current.close(1000, 'Client disconnect');
+      // Only attempt to close if the connection is open or connecting
+      // Avoids "WebSocket is closed before connection is established" errors
+      const ws = wsRef.current;
       wsRef.current = null;
+
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, 'Client disconnect');
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        // For connections still establishing, just nullify the handlers
+        // to prevent callbacks from firing, then close
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        // Close will trigger CLOSE_GOING_AWAY if still connecting
+        try {
+          ws.close();
+        } catch {
+          // Ignore errors when closing a connecting WebSocket
+        }
+      }
+      // If CLOSING or CLOSED, no action needed
     }
 
     setConnectionState('disconnected');
