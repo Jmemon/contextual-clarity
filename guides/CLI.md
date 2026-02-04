@@ -32,6 +32,8 @@ View all available recall sets:
 bun run cli list
 ```
 
+**Aliases:** `ls`, `l`
+
 **Output:**
 ```
 Available Recall Sets:
@@ -53,10 +55,12 @@ Begin an interactive recall session for a specific set:
 bun run cli session <recall-set-name>
 ```
 
+**Aliases:** `start`, `s`
+
 **Examples:**
 ```bash
 bun run cli session motivation
-bun run cli session atp
+bun run cli s atp
 bun run cli session "My Custom Set"    # Use quotes for names with spaces
 ```
 
@@ -66,6 +70,152 @@ bun run cli session "My Custom Set"    # Use quotes for names with spaces
 3. You respond naturally, demonstrating your understanding
 4. The system evaluates your recall and updates scheduling
 
+### View Statistics
+
+Display detailed recall statistics for a recall set:
+
+```bash
+bun run cli stats <recall-set-name>
+```
+
+**Alias:** `stat`
+
+**Examples:**
+```bash
+bun run cli stats motivation
+bun run cli stats "ATP Synthesis"
+```
+
+**Output includes:**
+- **Overview**: Total sessions, time spent, API cost
+- **Recall Performance**: Overall recall rate, engagement scores
+- **Point Breakdown**: Per-point success rates with struggling indicators
+- **Top Rabbithole Topics**: Common tangent topics explored
+- **Recent Trend**: 7-day ASCII visualization of recall rate
+
+### List Recent Sessions
+
+View recent sessions for a recall set:
+
+```bash
+bun run cli sessions <recall-set-name> [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--limit <n>`, `-n <n>` | Number of sessions to display (default: 10) |
+
+**Examples:**
+```bash
+bun run cli sessions motivation
+bun run cli sessions "ATP Synthesis" --limit 5
+bun run cli sessions atp -n 20
+```
+
+**Output includes:**
+- Session ID (for use with `replay` command)
+- Date and time
+- Duration
+- Recall rate percentage
+- Status (completed, abandoned, in_progress)
+
+### Replay a Session
+
+Display a full session transcript with annotations:
+
+```bash
+bun run cli replay <session-id>
+```
+
+**Example:**
+```bash
+bun run cli replay sess_abc123def456
+```
+
+Find session IDs using: `bun run cli sessions "<recall-set-name>"`
+
+**Output includes:**
+- Session metadata (start time, duration, recall rate)
+- Full conversation transcript with timestamps
+- Rabbithole entry/exit markers with topic names
+- Recall evaluation results with success/failure indicators
+- Session summary with aggregate statistics
+
+### Export Data
+
+Export session data, recall sets, or analytics to JSON or CSV files.
+
+#### Export a Session
+
+```bash
+bun run cli export session <session-id> [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-f, --format <format>` | Output format: `json` (default) or `csv` |
+| `-o, --output <file>` | Output file path (default: `session-{id}.{format}`) |
+| `--include-messages` | Include message transcript (default: true) |
+| `--no-include-messages` | Exclude message transcript |
+| `--include-rabbitholes` | Include rabbithole events (default: true) |
+| `--no-include-rabbitholes` | Exclude rabbithole events |
+
+**Examples:**
+```bash
+bun run cli export session sess_abc123
+bun run cli export session sess_abc123 --format csv
+bun run cli export session sess_abc123 -o my-session.json
+bun run cli export session sess_abc123 --no-include-messages
+```
+
+#### Export a Recall Set
+
+Export all sessions for a recall set with optional date filtering:
+
+```bash
+bun run cli export set <set-name> [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-f, --format <format>` | Output format: `json` (default) or `csv` |
+| `-o, --output <file>` | Output file path (default: `recall-set-{name}.{format}`) |
+| `--from <date>` | Start date filter (YYYY-MM-DD) |
+| `--to <date>` | End date filter (YYYY-MM-DD) |
+
+**Note:** When using date filters, both `--from` and `--to` must be provided.
+
+**Examples:**
+```bash
+bun run cli export set "ATP Synthesis"
+bun run cli export set motivation --format csv
+bun run cli export set "My Set" --from 2024-01-01 --to 2024-01-31
+bun run cli export set atp -o backup.json
+```
+
+#### Export Analytics
+
+Export analytics summary for a recall set:
+
+```bash
+bun run cli export analytics <set-name> [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-f, --format <format>` | Output format: `json` (default) or `csv` |
+| `-o, --output <file>` | Output file path (default: `analytics-{name}.{format}`) |
+
+**Examples:**
+```bash
+bun run cli export analytics motivation
+bun run cli export analytics "ATP Synthesis" --format csv
+```
+
 ### Help
 
 Display available commands:
@@ -73,6 +223,8 @@ Display available commands:
 ```bash
 bun run cli
 bun run cli help
+bun run cli --help
+bun run cli -h
 ```
 
 ## Session Commands
@@ -116,11 +268,11 @@ Tutor: Excellent insight! Let's move on to the next topic.
 
 You: /status
 
-Current Session Progress
-────────────────────────
+Session Status:
   Recall Set: motivation
-  Points: 2/4 completed
-  Current Point: 3
+  Progress: 2/4
+  Current Point: The relationship between action and motiv...
+  Messages: 8
 
 You: /quit
 
@@ -160,9 +312,17 @@ After each evaluation, the system updates the recall point's schedule using the 
 | Struggled but got it | Hard | Shorter interval |
 | Didn't recall | Forgot | Review soon |
 
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes (for sessions) | Your Anthropic API key |
+| `DATABASE_URL` | No | Path to SQLite database (default: `contextual-clarity.db`) |
+| `DEBUG` | No | Set to any value to enable debug mode (shows stack traces) |
+
 ## Troubleshooting
 
-### "ANTHROPIC_API_KEY environment variable is required"
+### "ANTHROPIC_API_KEY environment variable is not set"
 
 Set your API key:
 ```bash
@@ -186,10 +346,37 @@ All points in this set have future due dates. Either:
 
 Check the exact name with `bun run cli list`. Names are case-insensitive but must match.
 
-## Database Location
+### "Session not found"
 
-By default, the database is stored at `./contextual-clarity.db`. Override with:
+When using `replay`, ensure you have the correct session ID. Find valid IDs with:
+```bash
+bun run cli sessions "<recall-set-name>"
+```
+
+## Quick Reference
 
 ```bash
-DATABASE_PATH=/path/to/db.sqlite bun run cli list
+# List all recall sets
+bun run cli list
+
+# Start a session
+bun run cli session "Set Name"
+
+# View statistics
+bun run cli stats "Set Name"
+
+# List recent sessions
+bun run cli sessions "Set Name" --limit 5
+
+# Replay a session
+bun run cli replay <session-id>
+
+# Export session to JSON
+bun run cli export session <session-id>
+
+# Export recall set to CSV
+bun run cli export set "Set Name" --format csv
+
+# Export analytics
+bun run cli export analytics "Set Name"
 ```
