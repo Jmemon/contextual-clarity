@@ -63,8 +63,9 @@ import {
  * @param limit - Maximum number of sessions to display (default: 10)
  */
 export async function listSessions(setName: string, limit: number): Promise<void> {
-  // Initialize database connection and create repository instances
-  const db = createDatabase();
+  // Initialize database connection using DATABASE_PATH env var
+  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  const db = createDatabase(dbPath);
   const recallSetRepo = new RecallSetRepository(db);
   const metricsRepo = new SessionMetricsRepository(db);
 
@@ -73,7 +74,7 @@ export async function listSessions(setName: string, limit: number): Promise<void
   if (!recallSet) {
     console.log(red(`Error: Recall set "${setName}" not found.`));
     console.log(dim('Use "bun run cli list" to see available recall sets.'));
-    return;
+    process.exit(1);
   }
 
   // Query sessions for this recall set, ordered by most recent first
@@ -170,8 +171,9 @@ export async function listSessions(setName: string, limit: number): Promise<void
  * @param sessionId - The unique identifier of the session to replay
  */
 export async function replaySession(sessionId: string): Promise<void> {
-  // Initialize database connection and create all required repository instances
-  const db = createDatabase();
+  // Initialize database connection using DATABASE_PATH env var
+  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  const db = createDatabase(dbPath);
   const sessionRepo = new SessionRepository(db);
   const messageRepo = new SessionMessageRepository(db);
   const metricsRepo = new SessionMetricsRepository(db);
@@ -183,7 +185,7 @@ export async function replaySession(sessionId: string): Promise<void> {
   if (!session) {
     console.log(red(`Error: Session "${sessionId}" not found.`));
     console.log(dim('Use "bun run cli sessions <set-name>" to find valid session IDs.'));
-    return;
+    process.exit(1);
   }
 
   // Fetch all related data for the session replay

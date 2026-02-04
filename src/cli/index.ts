@@ -95,7 +95,8 @@ async function main(): Promise<void> {
 
   // Initialize the database connection
   // Uses DATABASE_PATH env var or defaults to 'contextual-clarity.db'
-  const db = createDatabase();
+  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  const db = createDatabase(dbPath);
 
   // Create repository instances for data access
   // These provide type-safe access to all database tables

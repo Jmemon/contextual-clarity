@@ -153,8 +153,9 @@ function initializeExportService(): {
   exportService: ExportService;
   recallSetRepo: RecallSetRepository;
 } {
-  // Initialize database connection
-  const db = createDatabase();
+  // Initialize database connection using DATABASE_PATH env var
+  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  const db = createDatabase(dbPath);
 
   // Create repository instances for all required data access
   const sessionRepo = new SessionRepository(db);
