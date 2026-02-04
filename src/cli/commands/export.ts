@@ -33,6 +33,7 @@
 import { Command } from 'commander';
 import { writeFile, stat } from 'fs/promises';
 import { createDatabase } from '../../storage/db';
+import { getDatabaseURL } from '../../config';
 import {
   SessionRepository,
   RecallSetRepository,
@@ -153,9 +154,8 @@ function initializeExportService(): {
   exportService: ExportService;
   recallSetRepo: RecallSetRepository;
 } {
-  // Initialize database connection using DATABASE_PATH env var
-  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
-  const db = createDatabase(dbPath);
+  // Initialize database connection using DATABASE_URL env var
+  const db = createDatabase(getDatabaseURL());
 
   // Create repository instances for all required data access
   const sessionRepo = new SessionRepository(db);

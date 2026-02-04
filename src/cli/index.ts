@@ -54,6 +54,7 @@
  */
 
 import { createDatabase } from '../storage/db';
+import { getDatabaseURL, isDebugMode } from '../config';
 import {
   RecallSetRepository,
   RecallPointRepository,
@@ -94,8 +95,8 @@ async function main(): Promise<void> {
   }
 
   // Initialize the database connection
-  // Uses DATABASE_PATH env var or defaults to 'contextual-clarity.db'
-  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  // Uses DATABASE_URL env var or defaults to 'contextual-clarity.db'
+  const dbPath = getDatabaseURL();
   const db = createDatabase(dbPath);
 
   // Create repository instances for data access
@@ -352,7 +353,7 @@ function printHelp(): void {
   printBlankLine();
   console.log(bold('Environment Variables:'));
   console.log(`  ${green('ANTHROPIC_API_KEY')}  Required for session commands`);
-  console.log(`  ${green('DATABASE_PATH')}      Path to SQLite database (optional)`);
+  console.log(`  ${green('DATABASE_URL')}       Path to SQLite database (optional)`);
   printBlankLine();
 }
 
@@ -361,8 +362,8 @@ main().catch((error: Error) => {
   console.error(red('\nFatal error:'));
   console.error(dim(error.message));
 
-  // Show stack trace in development mode
-  if (process.env.DEBUG) {
+  // Show stack trace in debug mode
+  if (isDebugMode()) {
     console.error(dim(error.stack || ''));
   }
 

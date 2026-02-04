@@ -25,6 +25,7 @@
 
 import { cors } from 'hono/cors';
 import type { MiddlewareHandler } from 'hono';
+import config from '../../config';
 
 /**
  * Configuration options for CORS middleware
@@ -116,10 +117,10 @@ export function corsMiddleware(
  * ```
  */
 export function getProductionCorsConfig(): Partial<CorsConfig> {
-  // Parse allowed origins from environment variable
-  const originsEnv = process.env.ALLOWED_ORIGINS;
+  // Get allowed origins from centralized config
+  const allowedOrigins = config.cors.allowedOrigins;
 
-  if (!originsEnv) {
+  if (allowedOrigins.length === 0) {
     // Fall back to defaults in development
     console.warn(
       '[CORS] No ALLOWED_ORIGINS env var set, using development defaults'
@@ -128,7 +129,7 @@ export function getProductionCorsConfig(): Partial<CorsConfig> {
   }
 
   return {
-    allowedOrigins: originsEnv.split(',').map((origin) => origin.trim()),
+    allowedOrigins,
   };
 }
 

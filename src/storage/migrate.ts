@@ -6,7 +6,7 @@
  *
  * Usage:
  *   bun run db:migrate                    # Uses default database path
- *   DATABASE_PATH=/path/to/db bun run db:migrate  # Custom database path
+ *   DATABASE_URL=/path/to/db bun run db:migrate  # Custom database path
  *
  * The script will:
  * 1. Connect to the database (creating it if it doesn't exist)
@@ -20,9 +20,10 @@
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { Database } from 'bun:sqlite';
 import { resolve } from 'path';
+import { getDatabaseURL } from '../config';
 
 // Determine database path from environment or use default
-const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+const dbPath = getDatabaseURL();
 
 console.log(`[migrate] Database path: ${dbPath}`);
 console.log('[migrate] Connecting to database...');

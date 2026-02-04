@@ -37,6 +37,7 @@
 
 import type { MiddlewareHandler, Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { isProduction } from '../../config';
 
 /**
  * Standard error codes used throughout the API.
@@ -148,7 +149,7 @@ function formatErrorResponse(error: unknown): {
   // Handle standard Error instances (unexpected errors)
   if (error instanceof Error) {
     // In development, include error details for debugging
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = !isProduction();
 
     return {
       response: {
@@ -172,7 +173,7 @@ function formatErrorResponse(error: unknown): {
       error: {
         code: ErrorCodes.INTERNAL_ERROR,
         message: 'An unexpected error occurred',
-        ...(process.env.NODE_ENV !== 'production' && {
+        ...(!isProduction() && {
           details: { rawError: String(error) },
         }),
       },

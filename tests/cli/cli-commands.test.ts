@@ -104,7 +104,7 @@ async function runCli(args: string[], env?: Record<string, string>): Promise<{
     cwd: resolve(import.meta.dir, '../..'),
     env: {
       ...process.env,
-      DATABASE_PATH: TEST_DB_PATH,
+      DATABASE_URL: TEST_DB_PATH,
       NO_COLOR: '1',
       FORCE_COLOR: '0',
       ...env,

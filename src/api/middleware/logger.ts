@@ -27,6 +27,7 @@
  */
 
 import type { MiddlewareHandler, Context } from 'hono';
+import { isProduction } from '../../config';
 
 /**
  * Configuration options for the logger middleware
@@ -49,7 +50,7 @@ const DEFAULT_LOGGER_CONFIG: LoggerConfig = {
   prefix: '[API]',
   includeTimestamp: false,
   skipPaths: ['/health', '/healthz', '/ready'],
-  colorize: process.env.NODE_ENV !== 'production',
+  colorize: !isProduction(),
 };
 
 /**

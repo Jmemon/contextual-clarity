@@ -18,6 +18,7 @@
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { Database } from 'bun:sqlite';
 import * as schema from './schema';
+import { getDatabaseURL } from '../config';
 
 /**
  * Creates a new Drizzle ORM database instance connected to the specified SQLite file.
@@ -64,15 +65,13 @@ export function createDatabase(dbPath: string = 'contextual-clarity.db') {
 /**
  * Default database instance for convenience.
  *
- * Uses DATABASE_PATH environment variable if set, otherwise defaults to
+ * Uses DATABASE_URL environment variable if set, otherwise defaults to
  * 'contextual-clarity.db' in the current working directory.
  *
  * This instance is created lazily on first import and reused throughout
  * the application lifecycle.
  */
-export const db = createDatabase(
-  process.env.DATABASE_PATH || 'contextual-clarity.db'
-);
+export const db = createDatabase(getDatabaseURL());
 
 /**
  * Type alias for the Drizzle database instance.

@@ -319,5 +319,107 @@ export function isTest(): boolean {
   return config.server.nodeEnv === 'test';
 }
 
+/**
+ * Helper function to check if debug mode is enabled.
+ * Reads from DEBUG environment variable.
+ */
+export function isDebugMode(): boolean {
+  return !!process.env.DEBUG;
+}
+
+// =============================================================================
+// Environment Variable Helpers
+// =============================================================================
+// These functions provide centralized access to environment variables with
+// proper defaults and fallback logic. Use these instead of reading process.env
+// directly throughout the codebase.
+
+/**
+ * Default SQLite database filename used when no DATABASE_URL is specified.
+ * This constant is exported for use in documentation and error messages.
+ */
+export const DEFAULT_DATABASE_URL = 'contextual-clarity.db';
+
+/**
+ * Returns the database URL/path from configuration.
+ *
+ * Resolution order:
+ * 1. DATABASE_URL env var (if set)
+ * 2. Default: 'contextual-clarity.db'
+ *
+ * For SQLite, this returns the file path. For PostgreSQL, this returns
+ * the full connection string.
+ *
+ * @returns The database URL (file path for SQLite, connection string for PostgreSQL)
+ *
+ * @example
+ * // In storage/db.ts
+ * import { getDatabaseURL } from '@/config';
+ * const db = createDatabase(getDatabaseURL());
+ *
+ * @example
+ * // In CLI commands
+ * import { getDatabaseURL } from '@/config';
+ * const dbUrl = getDatabaseURL();
+ */
+export function getDatabaseURL(): string {
+  return config.database.url || DEFAULT_DATABASE_URL;
+}
+
+/**
+ * Returns the Anthropic API key from configuration.
+ * Useful for code that needs just the API key without the full config object.
+ *
+ * @returns The Anthropic API key or undefined if not configured
+ */
+export function getAnthropicApiKey(): string | undefined {
+  return config.anthropic.apiKey;
+}
+
+/**
+ * Returns the Anthropic model to use for LLM requests.
+ *
+ * @returns The model name (defaults to 'claude-sonnet-4-5-20250929')
+ */
+export function getAnthropicModel(): string {
+  return config.anthropic.model;
+}
+
+/**
+ * Returns the maximum tokens for Anthropic API responses.
+ *
+ * @returns The max tokens value (defaults to 32768)
+ */
+export function getAnthropicMaxTokens(): number {
+  return config.anthropic.maxTokens;
+}
+
+/**
+ * Returns the server port.
+ *
+ * @returns The port number (defaults to 3000)
+ */
+export function getServerPort(): number {
+  return config.server.port;
+}
+
+/**
+ * Returns the server host binding.
+ *
+ * @returns The host address (defaults to '0.0.0.0')
+ */
+export function getServerHost(): string {
+  return config.server.host;
+}
+
+/**
+ * Returns the sources directory path for uploaded materials.
+ *
+ * @returns The sources directory path (defaults to './data/sources')
+ */
+export function getSourcesDir(): string {
+  return config.storage.sourcesDir;
+}
+
 // Export default for convenience
 export default config;

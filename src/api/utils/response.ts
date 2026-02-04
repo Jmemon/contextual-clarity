@@ -34,6 +34,7 @@
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ApiResponse, ApiErrorResponse } from '../types';
+import { isProduction } from '../../config';
 
 // ============================================================================
 // Success Response Helper
@@ -304,6 +305,6 @@ export function internalError(
   details?: unknown
 ): Response {
   // Only include details in non-production environments
-  const safeDetails = process.env.NODE_ENV !== 'production' ? details : undefined;
+  const safeDetails = !isProduction() ? details : undefined;
   return error(c, 'INTERNAL_ERROR', message, 500, safeDetails);
 }

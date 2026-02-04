@@ -27,6 +27,7 @@
  */
 
 import { createDatabase } from '../../storage/db';
+import { getDatabaseURL } from '../../config';
 import {
   RecallSetRepository,
   SessionRepository,
@@ -63,8 +64,8 @@ import {
  * @param limit - Maximum number of sessions to display (default: 10)
  */
 export async function listSessions(setName: string, limit: number): Promise<void> {
-  // Initialize database connection using DATABASE_PATH env var
-  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  // Initialize database connection using DATABASE_URL env var
+  const dbPath = getDatabaseURL();
   const db = createDatabase(dbPath);
   const recallSetRepo = new RecallSetRepository(db);
   const metricsRepo = new SessionMetricsRepository(db);
@@ -171,8 +172,8 @@ export async function listSessions(setName: string, limit: number): Promise<void
  * @param sessionId - The unique identifier of the session to replay
  */
 export async function replaySession(sessionId: string): Promise<void> {
-  // Initialize database connection using DATABASE_PATH env var
-  const dbPath = process.env.DATABASE_PATH || 'contextual-clarity.db';
+  // Initialize database connection using DATABASE_URL env var
+  const dbPath = getDatabaseURL();
   const db = createDatabase(dbPath);
   const sessionRepo = new SessionRepository(db);
   const messageRepo = new SessionMessageRepository(db);

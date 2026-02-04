@@ -32,6 +32,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { success } from '../utils/response';
+import config from '../../config';
 
 // ============================================================================
 // Type Definitions
@@ -114,7 +115,7 @@ export function healthRoutes(): Hono {
     const healthData: HealthCheckData = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
+      environment: config.server.nodeEnv,
       version: APP_VERSION,
     };
 
@@ -141,7 +142,7 @@ export function healthCheckHandler(c: Context): Response {
   const healthData: HealthCheckData = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    environment: config.server.nodeEnv,
     version: APP_VERSION,
   };
 

@@ -28,6 +28,7 @@ import Anthropic, {
 } from '@anthropic-ai/sdk';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { LLMMessage, LLMConfig, StreamCallbacks, LLMResponse } from './types';
+import { getAnthropicApiKey } from '../config';
 import { LLMError, type LLMErrorType } from './types';
 
 // Default model to use for all requests (Claude Sonnet 4.5)
@@ -75,7 +76,7 @@ export class AnthropicClient {
    */
   constructor(config: LLMConfig = {}) {
     // Validate API key is present before proceeding
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = getAnthropicApiKey();
     if (!apiKey) {
       throw new LLMError(
         'ANTHROPIC_API_KEY environment variable is required.\n' +

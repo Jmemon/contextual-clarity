@@ -16,6 +16,7 @@
 // Verify core dependencies are importable
 import { z } from 'zod';
 import { Hono } from 'hono';
+import appConfig from './config';
 
 // Create a minimal Hono app to verify the framework is working
 // This will be expanded in Phase 3 to serve the full API
@@ -29,14 +30,14 @@ const StartupSchema = z.object({
   environment: z.enum(['development', 'production', 'test']).default('development'),
 });
 
-const config = StartupSchema.parse({
+const startupConfig = StartupSchema.parse({
   name: 'contextual-clarity',
   version: '0.1.0',
-  environment: process.env.NODE_ENV || 'development',
+  environment: appConfig.server.nodeEnv,
 });
 
-console.log(`[Contextual Clarity] v${config.version}`);
-console.log(`[Environment] ${config.environment}`);
+console.log(`[Contextual Clarity] v${startupConfig.version}`);
+console.log(`[Environment] ${startupConfig.environment}`);
 console.log('[Status] Project scaffolding complete!');
 console.log('');
 console.log('Next steps:');
