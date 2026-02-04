@@ -12,6 +12,7 @@
  * - Rate limiting (100 req/min general, 10 req/min for LLM endpoints)
  * - Consistent JSON error responses
  * - Health check endpoint
+ * - Static file serving in production (SPA with client-side routing)
  *
  * Usage:
  *   bun run server
@@ -32,6 +33,7 @@
  */
 
 import { Hono } from 'hono';
+import { serveStatic } from 'hono/bun';
 import type { Server } from 'bun';
 import {
   corsMiddleware,
@@ -51,23 +53,30 @@ import {
   type WebSocketSessionData,
   type WebSocketHandlerDependencies,
 } from './ws';
+import {
+  config as appConfig,
+  validateConfig,
+  isProduction,
+  ConfigValidationError,
+} from '../config';
 
 // ============================================================================
 // Server Configuration
 // ============================================================================
 
 /**
- * Server configuration loaded from environment variables with defaults.
+ * Server configuration loaded from centralized config module.
+ * Uses the app-wide configuration for consistency.
  */
 const config = {
   /** Preferred port for the server (will find alternative if unavailable) */
-  preferredPort: parseInt(process.env.PORT || '3001', 10),
+  preferredPort: appConfig.server.port,
   /** Maximum port to try before giving up */
-  maxPort: 3100,
+  maxPort: appConfig.server.port + 100,
   /** Environment mode */
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: appConfig.server.nodeEnv,
   /** Whether we're in production mode */
-  isProduction: process.env.NODE_ENV === 'production',
+  isProduction: isProduction(),
 };
 
 // ============================================================================
@@ -276,21 +285,107 @@ function createApp(): Hono {
   });
 
   // ---------------------------------------------------------------------------
-  // 404 Handler for unmatched routes
+  // Static File Serving (Production Only)
   // ---------------------------------------------------------------------------
 
-  app.notFound((c) => {
-    return c.json(
-      {
-        success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: `Route ${c.req.method} ${c.req.path} not found`,
-        },
-      },
-      404
+  /**
+   * In production, the backend serves the built React frontend.
+   * Static files are served from web/dist/ directory.
+   *
+   * The SPA routing is handled by:
+   * 1. First trying to serve static files (js, css, images, etc.)
+   * 2. For any unmatched routes that don't start with /api or /health,
+   *    serve index.html to allow client-side routing
+   */
+  if (config.isProduction) {
+    // Serve static assets from web/dist (JS, CSS, images, fonts, etc.)
+    app.use(
+      '/assets/*',
+      serveStatic({
+        root: './web/dist',
+        // Cache static assets for 1 year (they have content hashes)
+        // Vite generates hashed filenames like assets/index-abc123.js
+      })
     );
-  });
+
+    // Serve other static files (favicon, manifest, etc.) from web/dist root
+    app.use(
+      '/favicon.ico',
+      serveStatic({ root: './web/dist', path: '/favicon.ico' })
+    );
+    app.use(
+      '/manifest.json',
+      serveStatic({ root: './web/dist', path: '/manifest.json' })
+    );
+
+    // SPA fallback: serve index.html for all non-API routes
+    // This enables client-side routing (React Router)
+    app.get('*', async (c) => {
+      const path = c.req.path;
+
+      // Don't serve index.html for API routes or health checks
+      // These should have already been handled above
+      if (path.startsWith('/api') || path.startsWith('/health')) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'NOT_FOUND',
+              message: `Route ${c.req.method} ${c.req.path} not found`,
+            },
+          },
+          404
+        );
+      }
+
+      // Serve index.html for SPA client-side routing
+      try {
+        const indexPath = './web/dist/index.html';
+        const file = Bun.file(indexPath);
+
+        if (await file.exists()) {
+          return new Response(file, {
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              // Don't cache the index.html (it references hashed assets)
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+            },
+          });
+        }
+      } catch {
+        // Fall through to 404
+      }
+
+      // If index.html doesn't exist, return 404
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Frontend not built. Run: bun run build',
+          },
+        },
+        404
+      );
+    });
+  } else {
+    // ---------------------------------------------------------------------------
+    // 404 Handler for unmatched routes (Development)
+    // ---------------------------------------------------------------------------
+    // In development, the frontend is served by Vite dev server
+    app.notFound((c) => {
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: `Route ${c.req.method} ${c.req.path} not found`,
+          },
+        },
+        404
+      );
+    });
+  }
 
   return app;
 }
@@ -347,14 +442,27 @@ function createMockWsDependencies(): WebSocketHandlerDependencies {
  * Starts the HTTP server on an available port with WebSocket support.
  *
  * This function:
- * 1. Finds an available port (starting from preferred)
- * 2. Creates the Hono application with middleware
- * 3. Creates WebSocket handlers for real-time sessions
- * 4. Starts the Bun server with both HTTP and WebSocket support
- * 5. Logs startup information
+ * 1. Validates configuration (fails fast in production if missing required vars)
+ * 2. Finds an available port (starting from preferred)
+ * 3. Creates the Hono application with middleware
+ * 4. Creates WebSocket handlers for real-time sessions
+ * 5. Starts the Bun server with both HTTP and WebSocket support
+ * 6. Logs startup information
  */
 async function startServer(): Promise<void> {
   try {
+    // Validate configuration first (fail fast in production)
+    // This ensures required environment variables are set before starting
+    try {
+      validateConfig();
+    } catch (error) {
+      if (error instanceof ConfigValidationError) {
+        console.error(error.message);
+        process.exit(1);
+      }
+      throw error;
+    }
+
     // Find an available port
     const port = await findAvailablePort(config.preferredPort);
 
@@ -442,10 +550,17 @@ async function startServer(): Promise<void> {
     console.log(`║    Health:    http://localhost:${port}/health               ║`);
     console.log(`║    API:       http://localhost:${port}/api                  ║`);
     console.log(`║    WebSocket: ws://localhost:${port}/api/session/ws         ║`);
+    if (config.isProduction) {
+      console.log(`║    Frontend:  http://localhost:${port}/                     ║`);
+    }
     console.log('║                                                           ║');
     console.log('║  Rate Limits:                                             ║');
     console.log('║    General:   100 requests/minute                         ║');
     console.log('║    LLM:       10 requests/minute                          ║');
+    if (config.isProduction) {
+      console.log('║                                                           ║');
+      console.log('║  Static Files: Serving from web/dist/                     ║');
+    }
     console.log('╚═══════════════════════════════════════════════════════════╝');
     console.log('');
 
