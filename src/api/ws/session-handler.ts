@@ -58,6 +58,12 @@ import type { ServerWebSocket } from 'bun';
 import type { Session, RecallSet } from '@/core/models';
 import type { SessionRepository } from '@/storage/repositories/session.repository';
 import type { RecallSetRepository } from '@/storage/repositories/recall-set.repository';
+import type { RecallPointRepository } from '@/storage/repositories/recall-point.repository';
+import type { SessionMessageRepository } from '@/storage/repositories/session-message.repository';
+import type { FSRSScheduler } from '@/core/fsrs/scheduler';
+import type { RecallEvaluator } from '@/core/scoring/recall-evaluator';
+import type { AnthropicClient } from '@/llm/client';
+import { SessionEngine } from '@/core/session/session-engine';
 import {
   type ClientMessage,
   type ServerMessage,
@@ -113,6 +119,8 @@ export interface WebSocketSessionData {
   session: Session | null;
   /** The RecallSet being studied */
   recallSet: RecallSet | null;
+  /** The SessionEngine instance for this connection (manages LLM interactions) */
+  engine: SessionEngine | null;
   /** Whether the session has been initialized (opening message sent) */
   initialized: boolean;
   /** Timestamp of the last message received */
@@ -140,6 +148,7 @@ export function createInitialSessionData(
     sessionId,
     session: null,
     recallSet: null,
+    engine: null,
     initialized: false,
     lastMessageTime: Date.now(),
     consecutiveErrors: 0,
@@ -156,14 +165,23 @@ export function createInitialSessionData(
 /**
  * Dependencies required by the WebSocket session handler.
  * These are injected when creating the handler for testability.
+ * Includes all dependencies needed to create SessionEngine instances.
  */
 export interface WebSocketHandlerDependencies {
   /** Repository for loading session data */
   sessionRepo: SessionRepository;
   /** Repository for loading recall set data */
   recallSetRepo: RecallSetRepository;
-  // Note: SessionEngine will be added when T06 is complete
-  // sessionEngine?: SessionEngine;
+  /** Repository for recall point data access */
+  recallPointRepo: RecallPointRepository;
+  /** Repository for session message data access */
+  messageRepo: SessionMessageRepository;
+  /** FSRS scheduler for spaced repetition calculations */
+  scheduler: FSRSScheduler;
+  /** LLM-powered evaluator for assessing recall */
+  evaluator: RecallEvaluator;
+  /** Anthropic client for generating tutor responses */
+  llmClient: AnthropicClient;
 }
 
 // ============================================================================
@@ -204,7 +222,8 @@ export class WebSocketSessionHandler {
    * 1. Loads the session from the database
    * 2. Validates the session is in-progress
    * 3. Loads the associated RecallSet
-   * 4. Sends the session_started message with opening message
+   * 4. Creates a SessionEngine instance for real LLM interactions
+   * 5. Sends the session_started message with LLM-generated opening message
    *
    * @param ws - The WebSocket connection
    */
@@ -242,17 +261,35 @@ export class WebSocketSessionHandler {
       data.session = session;
       data.recallSet = recallSet;
 
-      // TODO: Initialize SessionEngine when T06 is complete
-      // For now, send a placeholder opening message
-      const openingMessage = this.generatePlaceholderOpeningMessage(recallSet);
+      // Create a SessionEngine instance for this connection
+      // This provides real LLM-powered tutoring instead of placeholders
+      const engine = new SessionEngine({
+        scheduler: this.deps.scheduler,
+        evaluator: this.deps.evaluator,
+        llmClient: this.deps.llmClient,
+        recallSetRepo: this.deps.recallSetRepo,
+        recallPointRepo: this.deps.recallPointRepo,
+        sessionRepo: this.deps.sessionRepo,
+        messageRepo: this.deps.messageRepo,
+      });
 
-      // Send session_started message
+      // Start/resume the session in the engine
+      await engine.startSession(recallSet);
+      data.engine = engine;
+
+      // Get the real opening message from the LLM
+      const openingMessage = await engine.getOpeningMessage();
+
+      // Get session state for progress info
+      const sessionState = engine.getSessionState();
+
+      // Send session_started message with real LLM-generated opening
       this.send(ws, {
         type: 'session_started',
         sessionId: session.id,
         openingMessage,
-        currentPointIndex: 0,
-        totalPoints: session.targetRecallPointIds.length,
+        currentPointIndex: sessionState?.currentPointIndex ?? 0,
+        totalPoints: sessionState?.totalPoints ?? session.targetRecallPointIds.length,
       });
 
       data.initialized = true;
@@ -343,31 +380,65 @@ export class WebSocketSessionHandler {
     const data = ws.data;
     console.log(`[WS] User message for session ${data.sessionId}: "${content.substring(0, 50)}..."`);
 
-    // Validate session is initialized
-    if (!data.initialized || !data.session) {
+    // Validate session is initialized and engine is available
+    if (!data.initialized || !data.session || !data.engine) {
       this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
       return;
     }
-
-    // TODO: Integrate with SessionEngine when T06 is complete
-    // For now, simulate a streaming response
 
     // Mark as streaming
     data.isStreaming = true;
     data.currentResponseChunks = [];
     data.currentChunkIndex = 0;
 
-    // Simulate streaming response (placeholder until SessionEngine integration)
-    const simulatedResponse = this.generatePlaceholderResponse(content);
-    await this.streamResponse(ws, simulatedResponse);
+    try {
+      // Process the user message through the real SessionEngine
+      // This generates an actual LLM response based on the conversation context
+      const result = await data.engine.processUserMessage(content);
 
-    // Mark streaming complete
-    data.isStreaming = false;
+      // Stream the real response back to the client
+      await this.streamResponse(ws, result.response);
+
+      // If point was advanced, send point transition message
+      if (result.pointAdvanced && !result.completed) {
+        this.send(ws, {
+          type: 'point_transition',
+          fromPointId: data.session.targetRecallPointIds[result.currentPointIndex - 1] || '',
+          toPointId: data.session.targetRecallPointIds[result.currentPointIndex] || '',
+          pointsRemaining: result.totalPoints - result.currentPointIndex,
+          currentPointIndex: result.currentPointIndex,
+        });
+      }
+
+      // If session completed, send completion summary
+      if (result.completed) {
+        const summary: SessionSummary = {
+          sessionId: data.sessionId,
+          totalPointsReviewed: result.totalPoints,
+          successfulRecalls: result.totalPoints, // Will be refined when we track individual outcomes
+          recallRate: 1.0, // Will be refined with actual metrics
+          durationMs: Date.now() - data.lastMessageTime,
+          engagementScore: 80, // Will be calculated from actual session data
+          estimatedCostUsd: 0.05, // Will be calculated from token usage
+        };
+
+        this.send(ws, {
+          type: 'session_complete',
+          summary,
+        });
+      }
+    } catch (error) {
+      console.error(`[WS] Error processing user message:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      // Mark streaming complete
+      data.isStreaming = false;
+    }
   }
 
   /**
    * Handles a manual evaluation trigger request.
-   * Forces evaluation of the current recall point.
+   * Forces evaluation of the current recall point using the SessionEngine.
    *
    * @param ws - The WebSocket connection
    */
@@ -377,39 +448,56 @@ export class WebSocketSessionHandler {
     const data = ws.data;
     console.log(`[WS] Manual evaluation triggered for session ${data.sessionId}`);
 
-    // Validate session is initialized
-    if (!data.initialized || !data.session) {
+    // Validate session is initialized and engine is available
+    if (!data.initialized || !data.session || !data.engine) {
       this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
       return;
     }
 
-    // TODO: Integrate with SessionEngine.triggerEvaluation() when T06 is complete
-    // For now, send a placeholder evaluation result
+    try {
+      // Trigger real evaluation through the SessionEngine
+      const result = await data.engine.triggerEvaluation();
 
-    // Simulate evaluation result
-    this.send(ws, {
-      type: 'evaluation_result',
-      pointId: data.session.targetRecallPointIds[0] || 'rp_placeholder',
-      success: true,
-      feedback: 'Good recall! You demonstrated understanding of the key concepts.',
-      confidence: 0.85,
-    });
+      // Stream the evaluation response (feedback from the tutor)
+      await this.streamResponse(ws, result.response);
 
-    // Simulate point transition if there are more points
-    if (data.session.targetRecallPointIds.length > 1) {
-      this.send(ws, {
-        type: 'point_transition',
-        fromPointId: data.session.targetRecallPointIds[0],
-        toPointId: data.session.targetRecallPointIds[1],
-        pointsRemaining: data.session.targetRecallPointIds.length - 1,
-        currentPointIndex: 1,
-      });
+      // If point was advanced, send point transition message
+      if (result.pointAdvanced && !result.completed) {
+        this.send(ws, {
+          type: 'point_transition',
+          fromPointId: data.session.targetRecallPointIds[result.currentPointIndex - 1] || '',
+          toPointId: data.session.targetRecallPointIds[result.currentPointIndex] || '',
+          pointsRemaining: result.totalPoints - result.currentPointIndex,
+          currentPointIndex: result.currentPointIndex,
+        });
+      }
+
+      // If session completed, send completion summary
+      if (result.completed) {
+        const summary: SessionSummary = {
+          sessionId: data.sessionId,
+          totalPointsReviewed: result.totalPoints,
+          successfulRecalls: result.totalPoints,
+          recallRate: 1.0,
+          durationMs: Date.now() - data.lastMessageTime,
+          engagementScore: 80,
+          estimatedCostUsd: 0.05,
+        };
+
+        this.send(ws, {
+          type: 'session_complete',
+          summary,
+        });
+      }
+    } catch (error) {
+      console.error(`[WS] Error during manual evaluation:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
   /**
    * Handles a request to end the session early.
-   * Gracefully closes the session and sends completion summary.
+   * Abandons the session via the SessionEngine and sends completion summary.
    *
    * @param ws - The WebSocket connection
    */
@@ -426,23 +514,46 @@ export class WebSocketSessionHandler {
       return;
     }
 
-    // TODO: Integrate with SessionEngine.abandonSession() when T06 is complete
-    // For now, send a placeholder completion summary
+    try {
+      // Abandon the session via the SessionEngine
+      // This marks the session as abandoned in the database
+      if (data.engine) {
+        await data.engine.abandonSession();
+      }
 
-    const summary: SessionSummary = {
-      sessionId: data.sessionId,
-      totalPointsReviewed: 1, // Placeholder
-      successfulRecalls: 1,
-      recallRate: 1.0,
-      durationMs: Date.now() - data.lastMessageTime,
-      engagementScore: 75,
-      estimatedCostUsd: 0.01,
-    };
+      // Get session state for summary (may be null after abandonment)
+      const sessionState = data.engine?.getSessionState();
 
-    this.send(ws, {
-      type: 'session_complete',
-      summary,
-    });
+      const summary: SessionSummary = {
+        sessionId: data.sessionId,
+        totalPointsReviewed: sessionState?.currentPointIndex ?? 0,
+        successfulRecalls: 0, // Abandoned sessions don't count as successful
+        recallRate: 0,
+        durationMs: Date.now() - data.lastMessageTime,
+        engagementScore: 50, // Lower score for abandoned sessions
+        estimatedCostUsd: 0.01,
+      };
+
+      this.send(ws, {
+        type: 'session_complete',
+        summary,
+      });
+    } catch (error) {
+      console.error(`[WS] Error ending session:`, error);
+      // Still send a completion message even if abandonment fails
+      this.send(ws, {
+        type: 'session_complete',
+        summary: {
+          sessionId: data.sessionId,
+          totalPointsReviewed: 0,
+          successfulRecalls: 0,
+          recallRate: 0,
+          durationMs: Date.now() - data.lastMessageTime,
+          engagementScore: 0,
+          estimatedCostUsd: 0,
+        },
+      });
+    }
 
     // Close the connection
     ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session ended by user');
@@ -582,31 +693,6 @@ export class WebSocketSessionHandler {
     });
   }
 
-  /**
-   * Generates a placeholder opening message for the session.
-   * This will be replaced with SessionEngine.getOpeningMessage() when T06 is complete.
-   *
-   * @param recallSet - The RecallSet being studied
-   * @returns Opening message string
-   */
-  private generatePlaceholderOpeningMessage(recallSet: RecallSet): string {
-    return `Welcome to your recall session for "${recallSet.name}"! ` +
-      `Let's begin by exploring what you remember about the first topic. ` +
-      `Can you tell me what you recall about the key concepts?`;
-  }
-
-  /**
-   * Generates a placeholder response to a user message.
-   * This will be replaced with SessionEngine.processUserMessage() when T06 is complete.
-   *
-   * @param _userMessage - The user's message (unused in placeholder, will be used in real impl)
-   * @returns Response string
-   */
-  private generatePlaceholderResponse(_userMessage: string): string {
-    return `Thank you for that response! Let me follow up with another question. ` +
-      `You mentioned some interesting points. ` +
-      `Can you elaborate on how these concepts connect to what we discussed earlier?`;
-  }
 }
 
 // ============================================================================

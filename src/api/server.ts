@@ -53,6 +53,16 @@ import {
   type WebSocketSessionData,
   type WebSocketHandlerDependencies,
 } from './ws';
+import { db } from '@/storage/db';
+import {
+  SessionRepository,
+  RecallSetRepository,
+  RecallPointRepository,
+  SessionMessageRepository,
+} from '@/storage/repositories';
+import { FSRSScheduler } from '@/core/fsrs/scheduler';
+import { RecallEvaluator } from '@/core/scoring/recall-evaluator';
+import { AnthropicClient } from '@/llm/client';
 import {
   config as appConfig,
   validateConfig,
@@ -196,9 +206,10 @@ function createApp(): Hono {
   // General API rate limit (100 req/min) for most endpoints
   app.use('/api/*', generalRateLimiter());
 
-  // Stricter rate limit (10 req/min) for LLM/session endpoints
-  // These are expensive operations that call the LLM API
-  app.use('/api/sessions/*', llmRateLimiter());
+  // Stricter rate limit (10 req/min) ONLY for endpoints that actually call the LLM.
+  // Read operations (GET /sessions, GET /sessions/:id) use the general rate limit above.
+  // Only POST operations that trigger LLM calls need the strict limit.
+  app.use('/api/sessions/start', llmRateLimiter());
   app.use('/api/evaluate/*', llmRateLimiter());
 
   // ---------------------------------------------------------------------------
@@ -395,46 +406,36 @@ function createApp(): Hono {
 // ============================================================================
 
 /**
- * Creates a mock WebSocket handler dependencies object.
+ * Creates WebSocket handler dependencies with real repository instances
+ * and LLM services for real-time session handling.
  *
- * This is a temporary implementation until T06 (Sessions API) is complete.
- * In production, these would be real repository instances connected to the database.
+ * These include:
+ * - Repositories for database access (sessions, recall sets, recall points, messages)
+ * - FSRS scheduler for spaced repetition calculations
+ * - LLM client for AI tutor responses
+ * - Recall evaluator for assessing user recall
  *
- * @returns Mock dependencies for WebSocket handler
+ * @returns Real dependencies for WebSocket handler
  */
-function createMockWsDependencies(): WebSocketHandlerDependencies {
-  // Import repositories when T06 is complete
-  // For now, create mock implementations that return placeholder data
+function createWsDependencies(): WebSocketHandlerDependencies {
+  // Create the LLM client for AI-powered tutoring
+  const llmClient = new AnthropicClient();
+
+  // Create the FSRS scheduler for spaced repetition
+  const scheduler = new FSRSScheduler();
+
+  // Create the recall evaluator for assessing recall success
+  const evaluator = new RecallEvaluator(llmClient);
+
+  // Return all dependencies needed for real SessionEngine-powered WebSocket handling
   return {
-    sessionRepo: {
-      findById: async (id: string) => {
-        // Mock: Return a placeholder session for testing
-        console.log(`[WS Mock] Looking up session: ${id}`);
-        return {
-          id,
-          recallSetId: 'rs_mock_001',
-          status: 'in_progress' as const,
-          targetRecallPointIds: ['rp_mock_001', 'rp_mock_002'],
-          startedAt: new Date(),
-          endedAt: null,
-        };
-      },
-    } as unknown as WebSocketHandlerDependencies['sessionRepo'],
-    recallSetRepo: {
-      findById: async (id: string) => {
-        // Mock: Return a placeholder recall set for testing
-        console.log(`[WS Mock] Looking up recall set: ${id}`);
-        return {
-          id,
-          name: 'Mock Recall Set',
-          description: 'A mock recall set for WebSocket testing',
-          systemPrompt: 'You are a helpful tutor.',
-          status: 'active' as const,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-      },
-    } as unknown as WebSocketHandlerDependencies['recallSetRepo'],
+    sessionRepo: new SessionRepository(db),
+    recallSetRepo: new RecallSetRepository(db),
+    recallPointRepo: new RecallPointRepository(db),
+    messageRepo: new SessionMessageRepository(db),
+    scheduler,
+    evaluator,
+    llmClient,
   };
 }
 
@@ -469,8 +470,8 @@ async function startServer(): Promise<void> {
     // Create the configured application
     const app = createApp();
 
-    // Create WebSocket dependencies (mock for now, real after T06)
-    const wsDeps = createMockWsDependencies();
+    // Create WebSocket dependencies with real repository instances
+    const wsDeps = createWsDependencies();
 
     // Create WebSocket handlers
     const wsHandlers = createWebSocketHandlers(wsDeps);
