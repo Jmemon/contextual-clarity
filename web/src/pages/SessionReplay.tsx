@@ -2,18 +2,70 @@
  * Session Replay Page Component
  *
  * Displays a detailed replay of a past study session including:
- * - Complete conversation history with the AI
- * - Timeline of items reviewed
- * - Performance breakdown per item
- * - FSRS state changes from the session
+ * - Session summary with key statistics
+ * - Complete conversation transcript with AI
+ * - Evaluation markers showing recall results
+ * - Rabbithole markers for tangent conversations
+ * - Auto-scroll option for navigating the transcript
  *
- * Allows users to review their learning interactions and understand
- * how well they performed on each item.
+ * Uses React Query hooks to fetch session data and transcript.
  *
  * @route /sessions/:id
  */
 
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useSession, useSessionTranscript } from '@/hooks/api/use-sessions';
+import { Spinner } from '@/components/ui/Spinner';
+import { Card, CardBody } from '@/components/ui/Card';
+import {
+  SessionSummary,
+  TranscriptMessage,
+  RabbitholeMarker,
+} from '@/components/session-replay';
+import type { TranscriptMessage as TranscriptMessageType } from '@/types/api';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Map of recall point IDs to their content for display in evaluation markers.
+ * Built from transcript data when available.
+ */
+type RecallPointContentMap = Record<string, string>;
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Builds a map of recall point IDs to their content from evaluation markers.
+ * This allows us to display which recall point was being tested.
+ *
+ * Note: In a real implementation, we might fetch this from a separate endpoint
+ * or have it included in the transcript response.
+ *
+ * @param messages - Transcript messages that may contain evaluation markers
+ * @returns Map of recall point ID to content
+ */
+function buildRecallPointContentMap(messages: TranscriptMessageType[]): RecallPointContentMap {
+  const map: RecallPointContentMap = {};
+
+  // For now, we don't have recall point content in the markers
+  // This would be populated from additional API data or included in markers
+  messages.forEach((message) => {
+    if (message.evaluationMarker?.recallPointId) {
+      // Placeholder - in real implementation, this would come from API
+      // For now we leave the content empty
+      if (!map[message.evaluationMarker.recallPointId]) {
+        map[message.evaluationMarker.recallPointId] = '';
+      }
+    }
+  });
+
+  return map;
+}
 
 // ============================================================================
 // Session Replay Page Component
@@ -22,23 +74,171 @@ import { useParams, Link } from 'react-router-dom';
 /**
  * Session replay page for reviewing a past study session.
  *
- * Reads the session ID from URL parameters and will fetch
- * the full session data including conversation history.
- *
- * Future enhancements:
- * - Fetch session data using React Query
- * - Display full conversation transcript
- * - Show item-by-item performance
- * - Timeline navigation
- * - Performance analytics graphs
- * - Export session transcript
+ * Features:
+ * - Fetches session data and transcript using React Query hooks
+ * - Displays session summary with key statistics
+ * - Renders full conversation transcript with role-based styling
+ * - Shows evaluation and rabbithole markers at correct positions
+ * - Supports auto-scroll to bottom of transcript
+ * - Handles loading and error states gracefully
  */
 export function SessionReplay() {
-  // Extract the session ID from the URL
+  // Extract the session ID from the URL parameters
   const { id } = useParams<{ id: string }>();
 
+  // State for auto-scroll feature
+  const [autoScroll, setAutoScroll] = useState(false);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch session details and transcript data
+  const {
+    data: sessionData,
+    isLoading: isLoadingSession,
+    error: sessionError,
+  } = useSession(id ?? '');
+
+  const {
+    data: transcriptData,
+    isLoading: isLoadingTranscript,
+    error: transcriptError,
+  } = useSessionTranscript(id ?? '');
+
+  // Build recall point content map for evaluation markers
+  const recallPointContentMap = useMemo(() => {
+    if (!transcriptData?.messages) return {};
+    return buildRecallPointContentMap(transcriptData.messages);
+  }, [transcriptData?.messages]);
+
+  // Auto-scroll effect - scrolls to bottom when enabled and transcript changes
+  useEffect(() => {
+    if (autoScroll && transcriptEndRef.current) {
+      transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [autoScroll, transcriptData?.messages]);
+
+  // Combined loading state
+  const isLoading = isLoadingSession || isLoadingTranscript;
+
+  // Combined error state
+  const error = sessionError || transcriptError;
+
+  // ============================================================================
+  // Render Loading State
+  // ============================================================================
+
+  if (isLoading) {
+    return (
+      <div className="p-8">
+        {/* Breadcrumb navigation */}
+        <nav className="mb-4">
+          <Link
+            to="/sessions"
+            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+          >
+            &larr; Back to Sessions
+          </Link>
+        </nav>
+
+        {/* Loading spinner */}
+        <div className="flex flex-col items-center justify-center py-20">
+          <Spinner size="lg" label="Loading session..." />
+          <p className="mt-4 text-gray-500">Loading session data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // Render Error State
+  // ============================================================================
+
+  if (error) {
+    return (
+      <div className="p-8">
+        {/* Breadcrumb navigation */}
+        <nav className="mb-4">
+          <Link
+            to="/sessions"
+            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+          >
+            &larr; Back to Sessions
+          </Link>
+        </nav>
+
+        {/* Error message */}
+        <Card className="border-red-200 bg-red-50">
+          <CardBody>
+            <h2 className="text-lg font-semibold text-red-800 mb-2">
+              Failed to Load Session
+            </h2>
+            <p className="text-red-600">
+              {error.message || 'An error occurred while loading the session.'}
+            </p>
+            <Link
+              to="/sessions"
+              className="inline-block mt-4 text-red-700 hover:text-red-900 underline"
+            >
+              Return to sessions list
+            </Link>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // Render Session Not Found
+  // ============================================================================
+
+  if (!sessionData?.session) {
+    return (
+      <div className="p-8">
+        {/* Breadcrumb navigation */}
+        <nav className="mb-4">
+          <Link
+            to="/sessions"
+            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+          >
+            &larr; Back to Sessions
+          </Link>
+        </nav>
+
+        {/* Not found message */}
+        <Card>
+          <CardBody className="text-center py-12">
+            <h2 className="text-lg font-semibold text-gray-700 mb-2">
+              Session Not Found
+            </h2>
+            <p className="text-gray-500">
+              The session with ID <code className="bg-gray-100 px-2 py-1 rounded">{id}</code> could not be found.
+            </p>
+            <Link
+              to="/sessions"
+              className="inline-block mt-4 text-clarity-600 hover:text-clarity-800 underline"
+            >
+              Return to sessions list
+            </Link>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
+  // Extract session data for rendering
+  const { session, metrics } = sessionData;
+  const messages = transcriptData?.messages ?? [];
+
+  // Find any active rabbithole at the end (for display purposes)
+  const activeRabbithole = messages
+    .filter((m) => m.rabbitholeMarker?.isTrigger && !m.rabbitholeMarker?.isReturn)
+    .pop()?.rabbitholeMarker;
+
+  // ============================================================================
+  // Render Main Content
+  // ============================================================================
+
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-5xl mx-auto">
       {/* Breadcrumb navigation */}
       <nav className="mb-4">
         <Link
@@ -50,110 +250,125 @@ export function SessionReplay() {
       </nav>
 
       {/* Page header */}
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-clarity-800 mb-2">
-          Session Replay
-        </h1>
+      <header className="mb-6">
+        <h1 className="text-3xl font-bold text-clarity-800 mb-2">Session Replay</h1>
         <p className="text-clarity-600">
-          Reviewing session with ID: <code className="bg-clarity-100 px-2 py-1 rounded text-sm font-mono">{id}</code>
+          Review your study session from {new Date(session.startedAt).toLocaleDateString()}
         </p>
       </header>
 
-      {/* Session summary card */}
-      <div className="bg-white rounded-lg border border-clarity-200 p-6 mb-6">
-        <h2 className="text-xl font-semibold text-clarity-700 mb-4">
-          Session Summary
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <p className="text-sm text-clarity-500">Date</p>
-            <p className="text-lg font-medium text-clarity-700">--</p>
-          </div>
-          <div>
-            <p className="text-sm text-clarity-500">Duration</p>
-            <p className="text-lg font-medium text-clarity-700">--</p>
-          </div>
-          <div>
-            <p className="text-sm text-clarity-500">Items Reviewed</p>
-            <p className="text-lg font-medium text-clarity-700">--</p>
-          </div>
-          <div>
-            <p className="text-sm text-clarity-500">Accuracy</p>
-            <p className="text-lg font-medium text-clarity-700">--</p>
-          </div>
-        </div>
-      </div>
+      {/* Session Summary Card */}
+      <SessionSummary
+        sessionId={session.id}
+        recallSetId={session.recallSetId}
+        recallSetName={session.recallSetName}
+        startedAt={session.startedAt}
+        endedAt={session.endedAt}
+        status={session.status}
+        metrics={
+          metrics
+            ? {
+                durationMs: metrics.durationMs,
+                activeTimeMs: metrics.activeTimeMs,
+                recallRate: metrics.recallRate,
+                engagementScore: metrics.engagementScore,
+                recallPointsAttempted: metrics.recallPointsAttempted,
+                recallPointsSuccessful: metrics.recallPointsSuccessful,
+                recallPointsFailed: metrics.recallPointsFailed,
+                avgConfidence: metrics.avgConfidence,
+                totalMessages: metrics.totalMessages,
+                rabbitholeCount: metrics.rabbitholeCount,
+              }
+            : null
+        }
+      />
 
-      {/* Timeline placeholder */}
+      {/* Transcript Section */}
       <section className="mb-6">
-        <h2 className="text-xl font-semibold text-clarity-700 mb-4">
-          Session Timeline
-        </h2>
-        <div className="bg-white rounded-lg border border-clarity-200 p-4">
-          <div className="h-16 bg-clarity-50 rounded flex items-center justify-center">
-            <span className="text-clarity-400 text-sm">
-              Interactive timeline will be displayed here
-            </span>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-clarity-700">
+            Conversation Transcript
+          </h2>
+
+          {/* Auto-scroll toggle */}
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoScroll}
+              onChange={(e) => setAutoScroll(e.target.checked)}
+              className="rounded border-gray-300 text-clarity-600 focus:ring-clarity-500"
+            />
+            Auto-scroll to bottom
+          </label>
+        </div>
+
+        {/* Active rabbithole indicator (if currently in a tangent) */}
+        {activeRabbithole && (
+          <div className="mb-4 flex justify-center">
+            <RabbitholeMarker
+              topic={activeRabbithole.topic}
+              depth={activeRabbithole.depth}
+              isReturn={false}
+            />
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* Conversation transcript placeholder */}
-      <section className="mb-6">
-        <h2 className="text-xl font-semibold text-clarity-700 mb-4">
-          Conversation Transcript
-        </h2>
-        <div className="bg-white rounded-lg border border-clarity-200 p-6">
-          <p className="text-clarity-500 mb-4">
-            This section will display the full conversation history:
+        {/* Transcript container with scrollable area */}
+        <Card>
+          <CardBody className="max-h-[600px] overflow-y-auto">
+            {messages.length === 0 ? (
+              // Empty transcript state
+              <div className="text-center py-12 text-gray-500">
+                <p>No messages in this session transcript.</p>
+              </div>
+            ) : (
+              // Render all transcript messages
+              <div className="space-y-2">
+                {messages.map((message) => (
+                  <TranscriptMessage
+                    key={message.id}
+                    message={message}
+                    recallPointContent={
+                      message.evaluationMarker?.recallPointId
+                        ? recallPointContentMap[message.evaluationMarker.recallPointId]
+                        : undefined
+                    }
+                  />
+                ))}
+
+                {/* Invisible element to scroll to */}
+                <div ref={transcriptEndRef} />
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
+        {/* Message count indicator */}
+        {messages.length > 0 && (
+          <p className="mt-2 text-sm text-gray-500 text-right">
+            {messages.length} message{messages.length !== 1 ? 's' : ''} in transcript
           </p>
-          <ul className="list-disc list-inside text-clarity-600 space-y-2">
-            <li>AI questions and prompts</li>
-            <li>Your responses</li>
-            <li>AI feedback and explanations</li>
-            <li>Item-by-item breakdown</li>
-            <li>FSRS state changes after each review</li>
-          </ul>
-
-          {/* Sample conversation placeholder */}
-          <div className="mt-6 space-y-4">
-            <div className="p-4 bg-clarity-50 rounded-lg">
-              <p className="text-xs text-clarity-500 mb-1">AI</p>
-              <p className="text-clarity-700">Sample AI question will appear here...</p>
-            </div>
-            <div className="p-4 bg-blue-50 rounded-lg ml-8">
-              <p className="text-xs text-blue-500 mb-1">You</p>
-              <p className="text-blue-700">Your response will appear here...</p>
-            </div>
-            <div className="p-4 bg-clarity-50 rounded-lg">
-              <p className="text-xs text-clarity-500 mb-1">AI</p>
-              <p className="text-clarity-700">AI feedback will appear here...</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Performance breakdown placeholder */}
-      <section>
-        <h2 className="text-xl font-semibold text-clarity-700 mb-4">
-          Performance Breakdown
-        </h2>
-        <div className="bg-white rounded-lg border border-clarity-200 p-8 text-center">
-          <p className="text-clarity-500">
-            Item-by-item performance metrics will be displayed here once API integration is complete.
-          </p>
-        </div>
+        )}
       </section>
 
       {/* Action buttons */}
-      <div className="mt-8 flex gap-4">
+      <div className="flex gap-4">
+        {/* Scroll to top button */}
         <button
           type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="px-4 py-2 border border-clarity-300 text-clarity-700 rounded-lg hover:bg-clarity-50 transition-colors font-medium"
-          onClick={() => alert('Export functionality coming soon!')}
         >
-          Export Transcript
+          Scroll to Top
         </button>
+
+        {/* Link to start a new session with the same recall set */}
+        <Link
+          to={`/recall-sets/${session.recallSetId}`}
+          className="px-4 py-2 bg-clarity-600 text-white rounded-lg hover:bg-clarity-700 transition-colors font-medium"
+        >
+          View Recall Set
+        </Link>
       </div>
     </div>
   );
