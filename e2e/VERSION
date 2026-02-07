@@ -1,0 +1,7 @@
+# E2E Test Suite Version
+# This file tracks the codebase version these tests are built for.
+# If tests fail after significant changes, compare this to current HEAD.
+
+branch: main
+commit: e751bb814ee556737e27808f15fa0add3204ec64
+date: 2026-02-07
