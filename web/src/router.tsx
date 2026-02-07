@@ -7,6 +7,7 @@
  * - Routes using MainLayout (with sidebar navigation):
  *   - / (Dashboard)
  *   - /recall-sets (Recall Sets list)
+ *   - /recall-sets/new (Create new Recall Set)
  *   - /recall-sets/:id (Recall Set detail)
  *   - /sessions (Session history)
  *   - /sessions/:id (Session replay)
@@ -38,6 +39,7 @@ import { Sessions } from './pages/Sessions';
 import { SessionReplay } from './pages/SessionReplay';
 import { LiveSession } from './pages/LiveSession';
 import { NotFound } from './pages/NotFound';
+import { CreateRecallSet } from './pages/CreateRecallSet';
 
 // ============================================================================
 // Router Configuration
@@ -72,6 +74,11 @@ const router = createBrowserRouter([
         // Recall Sets list - all available sets
         path: '/recall-sets',
         element: <RecallSets />,
+      },
+      {
+        // Create new Recall Set - must come before :id to take precedence
+        path: '/recall-sets/new',
+        element: <CreateRecallSet />,
       },
       {
         // Recall Set detail - single set with its items
