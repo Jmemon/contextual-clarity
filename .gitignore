@@ -59,6 +59,8 @@ yarn-error.log*
 # -----------------------------------------------------------------------------
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
 
 # -----------------------------------------------------------------------------
 # Data directories (user-generated content)
