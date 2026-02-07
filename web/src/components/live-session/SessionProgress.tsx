@@ -55,7 +55,7 @@ export function SessionProgress({
   const isComplete = currentPoint >= totalPoints && totalPoints > 0;
 
   return (
-    <div className={`${className}`} {...props}>
+    <div data-testid="session-progress" className={`${className}`} {...props}>
       {/* Progress counter */}
       <div className="flex items-center gap-2">
         <span className="text-clarity-300 text-sm font-medium">

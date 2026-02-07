@@ -43,6 +43,7 @@ export function Spinner({
 }: SpinnerProps) {
   return (
     <div
+      data-testid="spinner"
       role="status"
       aria-label={label}
       className={`

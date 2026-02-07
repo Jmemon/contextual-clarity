@@ -119,6 +119,7 @@ export function MessageList({
 
   return (
     <div
+      data-testid="message-list"
       ref={containerRef}
       className={`
         overflow-auto

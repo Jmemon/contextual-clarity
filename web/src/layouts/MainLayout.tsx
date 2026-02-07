@@ -303,6 +303,7 @@ export function MainLayout() {
       {/* Desktop: Always visible, fixed position */}
       {/* Mobile: Slides in from left as overlay when open */}
       <aside
+        data-testid="sidebar"
         className={`
           fixed lg:sticky top-0 left-0 z-50
           w-64 h-screen bg-white border-r border-clarity-200

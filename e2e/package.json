@@ -1,0 +1,33 @@
+{
+  "name": "contextual-clarity-e2e",
+  "version": "0.1.0",
+  "description": "End-to-end tests for Contextual Clarity web application",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:smoke": "playwright test tests/01-smoke.spec.ts",
+    "test:navigation": "playwright test tests/02-navigation.spec.ts",
+    "test:dashboard": "playwright test tests/03-dashboard.spec.ts",
+    "test:recall-sets": "playwright test tests/04-recall-sets.spec.ts",
+    "test:recall-points": "playwright test tests/05-recall-points.spec.ts",
+    "test:sessions": "playwright test tests/06-sessions.spec.ts",
+    "test:live-session": "playwright test tests/07-live-session.spec.ts",
+    "test:forms": "playwright test tests/08-forms.spec.ts",
+    "test:errors": "playwright test tests/09-error-states.spec.ts",
+    "test:responsive": "playwright test tests/10-responsive.spec.ts",
+    "test:database": "playwright test tests/11-database-integrity.spec.ts",
+    "test:chromium": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:mobile": "playwright test --project=mobile-chrome --project=mobile-safari",
+    "test:report": "playwright show-report",
+    "install-browsers": "playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^20.17.0"
+  }
+}

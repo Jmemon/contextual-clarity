@@ -88,7 +88,7 @@ function SessionCompleteScreen({ summary, sessionId }: { summary: SessionComplet
   const recallPercentage = Math.round(summary.recallRate * 100);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+    <div data-testid="session-summary" className="flex-1 flex flex-col items-center justify-center text-center px-6">
       {/* Success icon */}
       <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-6">
         <svg

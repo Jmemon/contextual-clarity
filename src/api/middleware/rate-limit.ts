@@ -75,16 +75,17 @@ interface RateLimitEntry {
  */
 export const RATE_LIMITS = {
   /**
-   * General API endpoints: 100 requests per minute.
+   * General API endpoints: 1000 requests per minute.
    * Suitable for most CRUD operations and read-heavy endpoints.
+   * Set high to support parallel e2e testing across multiple browsers.
    */
   GENERAL: {
     windowMs: 60_000, // 1 minute
-    maxRequests: 100,
+    maxRequests: 1000,
   },
 
   /**
-   * LLM/Session endpoints: 10 requests per minute.
+   * LLM/Session endpoints: 100 requests per minute.
    * More restrictive due to:
    * - High computational cost of LLM calls
    * - API rate limits from LLM providers
@@ -92,16 +93,16 @@ export const RATE_LIMITS = {
    */
   LLM: {
     windowMs: 60_000, // 1 minute
-    maxRequests: 10,
+    maxRequests: 100,
   },
 
   /**
-   * Authentication endpoints: 5 requests per minute.
-   * Very restrictive to prevent brute force attacks.
+   * Authentication endpoints: 50 requests per minute.
+   * Restrictive to prevent brute force attacks.
    */
   AUTH: {
     windowMs: 60_000, // 1 minute
-    maxRequests: 5,
+    maxRequests: 50,
   },
 } as const;
 

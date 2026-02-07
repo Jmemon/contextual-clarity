@@ -142,6 +142,7 @@ function SessionItem({ session }: { session: SessionSummary }) {
   return (
     <Link
       to={`/sessions/${session.id}/replay`}
+      data-testid="session-card"
       className="block p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-150 border-b border-gray-100 last:border-b-0 min-h-[60px] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-clarity-500"
     >
       <div className="flex items-start justify-between gap-2 sm:gap-4">
@@ -266,7 +267,7 @@ export function RecentSessionsList({
 
         {/* Sessions list */}
         {!isLoading && !error && sessions.length > 0 && (
-          <div>
+          <div data-testid="recent-sessions">
             {sessions.map((session) => (
               <SessionItem key={session.id} session={session} />
             ))}

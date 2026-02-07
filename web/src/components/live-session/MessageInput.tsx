@@ -90,6 +90,7 @@ export function MessageInput({
     >
       {/* Text input area */}
       <textarea
+        data-testid="message-input"
         ref={textareaRef}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}

@@ -1,0 +1,62 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - complementary "Main navigation sidebar" [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: CC
+        - generic [ref=e7]:
+          - heading "Contextual" [level=1] [ref=e8]
+          - paragraph [ref=e9]: Clarity
+      - navigation "Main navigation" [ref=e10]:
+        - link "Dashboard" [ref=e11] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e12]: 📊
+          - generic [ref=e13]: Dashboard
+        - link "Recall Sets" [ref=e14] [cursor=pointer]:
+          - /url: /recall-sets
+          - generic [ref=e15]: 📚
+          - generic [ref=e16]: Recall Sets
+        - link "Sessions" [ref=e17] [cursor=pointer]:
+          - /url: /sessions
+          - generic [ref=e18]: 🕐
+          - generic [ref=e19]: Sessions
+      - paragraph [ref=e21]: Contextual Clarity v0.1.0
+    - main [ref=e22]:
+      - generic [ref=e23]:
+        - navigation [ref=e24]:
+          - link "Back to Recall Sets" [ref=e25] [cursor=pointer]:
+            - /url: /recall-sets
+            - img [ref=e26]
+            - text: Back to Recall Sets
+        - generic [ref=e28]:
+          - heading "Create New Recall Set" [level=1] [ref=e29]
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - generic [ref=e32]: Name
+              - textbox "Name" [ref=e33]:
+                - /placeholder: Enter recall set name
+                - text: Test Name
+            - generic [ref=e34]:
+              - generic [ref=e35]: Description
+              - textbox "Description" [ref=e36]:
+                - /placeholder: Describe the purpose and content of this recall set
+                - text: Test description for error test
+              - paragraph [ref=e37]: 31/1000 characters
+            - generic [ref=e38]:
+              - generic [ref=e39]: Discussion System Prompt
+              - textbox "Discussion System Prompt" [ref=e40]:
+                - /placeholder: Enter the system prompt for AI-generated discussions about this recall set
+                - text: Test prompt for error testing scenario
+              - paragraph [ref=e41]: This prompt guides how AI generates discussion questions for recall points
+            - generic [ref=e42]:
+              - button "Cancel" [ref=e43] [cursor=pointer]
+              - button "Create Recall Set" [ref=e44] [cursor=pointer]
+  - generic "Notifications":
+    - alert [ref=e46]:
+      - img [ref=e48]
+      - paragraph [ref=e51]: Operation failed
+      - button "Dismiss notification" [ref=e52] [cursor=pointer]:
+        - img [ref=e53]
+```

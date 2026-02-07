@@ -1,0 +1,135 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary "Main navigation sidebar" [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: CC
+        - generic [ref=e7]:
+          - heading "Contextual" [level=1] [ref=e8]
+          - paragraph [ref=e9]: Clarity
+      - navigation "Main navigation" [ref=e10]:
+        - link "Dashboard" [ref=e11] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e12]: 📊
+          - generic [ref=e13]: Dashboard
+        - link "Recall Sets" [ref=e14] [cursor=pointer]:
+          - /url: /recall-sets
+          - generic [ref=e15]: 📚
+          - generic [ref=e16]: Recall Sets
+        - link "Sessions" [ref=e17] [cursor=pointer]:
+          - /url: /sessions
+          - generic [ref=e18]: 🕐
+          - generic [ref=e19]: Sessions
+      - paragraph [ref=e21]: Contextual Clarity v0.1.0
+    - main [ref=e22]:
+      - generic [ref=e23]:
+        - navigation [ref=e24]:
+          - link "Back to Recall Sets" [ref=e25] [cursor=pointer]:
+            - /url: /recall-sets
+            - img [ref=e26]
+            - text: Back to Recall Sets
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - heading "Delete Test 1770388890903" [level=1] [ref=e32]
+              - generic [ref=e33]: Active
+            - paragraph [ref=e34]: A recall set created for e2e testing purposes
+          - generic [ref=e35]:
+            - button "Edit" [ref=e36] [cursor=pointer]:
+              - img [ref=e37]
+              - text: Edit
+            - button "Delete" [ref=e39] [cursor=pointer]:
+              - img [ref=e40]
+              - text: Delete
+        - generic [ref=e43]:
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - paragraph [ref=e47]: Total Points
+              - paragraph [ref=e48]: "0"
+            - img [ref=e50]
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - paragraph [ref=e55]: Due Now
+              - paragraph [ref=e56]: "0"
+              - generic [ref=e57]:
+                - img [ref=e58]
+                - generic [ref=e59]: All caught up
+            - img [ref=e61]
+          - generic [ref=e64]:
+            - generic [ref=e65]:
+              - paragraph [ref=e66]: New Points
+              - paragraph [ref=e67]: "0"
+            - img [ref=e69]
+          - generic [ref=e72]:
+            - generic [ref=e73]:
+              - paragraph [ref=e74]: Sessions
+              - paragraph [ref=e75]: "0"
+            - img [ref=e77]
+        - generic [ref=e79]:
+          - generic [ref=e80]:
+            - generic [ref=e81]: Point Status Breakdown
+            - generic [ref=e83]:
+              - img [ref=e84]
+              - paragraph [ref=e87]: No recall points yet
+              - paragraph [ref=e88]: Add points to see the status breakdown
+          - generic [ref=e89]:
+            - generic [ref=e91]:
+              - generic [ref=e92]: Recall Rate Over Time
+              - generic [ref=e93]: Sample data
+            - generic [ref=e94]:
+              - img [ref=e98]:
+                - generic [ref=e103]:
+                  - generic [ref=e105]: Jan 25
+                  - generic [ref=e107]: Jan 27
+                  - generic [ref=e109]: Jan 29
+                  - generic [ref=e111]: Jan 31
+                  - generic [ref=e113]: Feb 2
+                  - generic [ref=e115]: Feb 4
+                  - generic [ref=e117]: Feb 6
+                - generic [ref=e119]:
+                  - generic [ref=e121]: 0%
+                  - generic [ref=e123]: 25%
+                  - generic [ref=e125]: 50%
+                  - generic [ref=e127]: 75%
+                  - generic [ref=e129]: 100%
+              - paragraph [ref=e147]: Chart shows sample data. Complete more study sessions to see your actual progress.
+        - generic [ref=e149]:
+          - generic [ref=e151]:
+            - generic [ref=e152]: Recall Points (0)
+            - button "Add Point" [ref=e153] [cursor=pointer]:
+              - img [ref=e154]
+              - text: Add Point
+          - generic [ref=e158]:
+            - heading "No recall points yet" [level=3] [ref=e159]
+            - paragraph [ref=e160]: Add your first recall point to start learning with spaced repetition.
+            - button "Add First Point" [ref=e162] [cursor=pointer]:
+              - img [ref=e163]
+              - text: Add First Point
+        - generic [ref=e166]:
+          - generic [ref=e168]:
+            - generic [ref=e169]: Session History
+            - generic [ref=e170]: 0 sessions
+          - generic [ref=e173]:
+            - heading "No sessions yet" [level=3] [ref=e174]
+            - paragraph [ref=e175]: Start a study session to begin tracking your progress.
+        - dialog [active] [ref=e177]:
+          - generic [ref=e178]:
+            - heading [level=2] [ref=e179]: Delete Recall Set
+            - button [ref=e180] [cursor=pointer]:
+              - img [ref=e181]
+          - generic [ref=e183]:
+            - generic [ref=e185]:
+              - img [ref=e188]
+              - generic [ref=e190]:
+                - paragraph [ref=e191]:
+                  - text: Are you sure you want to delete
+                  - generic [ref=e192]: "\"Delete Test 1770388890903\""
+                  - text: "?"
+                - paragraph [ref=e193]: This will permanently delete this recall set and all its recall points. This action cannot be undone.
+            - generic [ref=e194]:
+              - button [ref=e195] [cursor=pointer]: Cancel
+              - button [ref=e196] [cursor=pointer]: Delete
+  - generic [ref=e197]: 0%
+```

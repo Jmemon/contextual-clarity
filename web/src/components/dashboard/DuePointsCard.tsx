@@ -82,7 +82,7 @@ export function DuePointsCard({
   const hasDuePoints = duePoints > 0;
 
   return (
-    <Card>
+    <Card data-testid="due-points-card">
       <CardHeader>
         <div className="flex items-center justify-between">
           <span>Today&apos;s Reviews</span>

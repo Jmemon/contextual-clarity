@@ -109,6 +109,7 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
   return (
     <Link
       to={`/recall-sets/${id}`}
+      data-testid="recall-set-card"
       className="block group focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-2 rounded-lg"
       aria-label={`View ${name} recall set`}
     >

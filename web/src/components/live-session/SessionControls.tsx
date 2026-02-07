@@ -98,6 +98,7 @@ export function SessionControls({
     <div className={`flex flex-wrap items-center gap-3 ${className}`} {...props}>
       {/* "I've got it" button - main action */}
       <Button
+        data-testid="trigger-evaluation-btn"
         variant="primary"
         size="md"
         onClick={handleTriggerEvaluation}

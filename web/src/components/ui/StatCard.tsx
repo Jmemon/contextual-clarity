@@ -121,8 +121,12 @@ export function StatCard({
   className = '',
   ...props
 }: StatCardProps) {
+  // Generate a stable test ID from the label (kebab-case)
+  const testId = `stat-${label.toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
     <div
+      data-testid={testId}
       className={`
         bg-white
         rounded-lg

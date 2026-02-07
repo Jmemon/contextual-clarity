@@ -1,0 +1,205 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary "Main navigation sidebar" [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: CC
+        - generic [ref=e7]:
+          - heading "Contextual" [level=1] [ref=e8]
+          - paragraph [ref=e9]: Clarity
+      - navigation "Main navigation" [ref=e10]:
+        - link "Dashboard" [ref=e11] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e12]: 📊
+          - generic [ref=e13]: Dashboard
+        - link "Recall Sets" [ref=e14] [cursor=pointer]:
+          - /url: /recall-sets
+          - generic [ref=e15]: 📚
+          - generic [ref=e16]: Recall Sets
+        - link "Sessions" [ref=e17] [cursor=pointer]:
+          - /url: /sessions
+          - generic [ref=e18]: 🕐
+          - generic [ref=e19]: Sessions
+      - paragraph [ref=e21]: Contextual Clarity v0.1.0
+    - main [ref=e22]:
+      - generic [ref=e23]:
+        - navigation [ref=e24]:
+          - link "Back to Recall Sets" [ref=e25] [cursor=pointer]:
+            - /url: /recall-sets
+            - img [ref=e26]
+            - text: Back to Recall Sets
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - heading "E2E - updated recall set persists changes - 1770388906549" [level=1] [ref=e32]
+              - generic [ref=e33]: Active
+            - paragraph [ref=e34]: A recall set created for e2e testing purposes
+          - generic [ref=e35]:
+            - button "Edit" [ref=e36] [cursor=pointer]:
+              - img [ref=e37]
+              - text: Edit
+            - button "Delete" [ref=e39] [cursor=pointer]:
+              - img [ref=e40]
+              - text: Delete
+        - generic [ref=e43]:
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - paragraph [ref=e47]: Total Points
+              - paragraph [ref=e48]: "2"
+            - img [ref=e50]
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - paragraph [ref=e55]: Due Now
+              - paragraph [ref=e56]: "2"
+              - generic [ref=e57]:
+                - img [ref=e58]
+                - generic [ref=e60]: Ready to review
+            - img [ref=e62]
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - paragraph [ref=e67]: New Points
+              - paragraph [ref=e68]: "2"
+            - img [ref=e70]
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - paragraph [ref=e75]: Sessions
+              - paragraph [ref=e76]: "0"
+            - img [ref=e78]
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]: Point Status Breakdown
+            - generic [ref=e83]:
+              - generic [ref=e86]:
+                - img [ref=e87]:
+                  - generic [ref=e88]:
+                    - img [ref=e90]
+                    - generic [ref=e93]: 100%
+                - list [ref=e95]:
+                  - listitem [ref=e96]:
+                    - img [ref=e97]
+                    - generic [ref=e99]: New
+                  - listitem [ref=e100]:
+                    - img [ref=e101]
+                    - generic [ref=e103]: Learning
+                  - listitem [ref=e104]:
+                    - img [ref=e105]
+                    - generic [ref=e107]: Review
+                  - listitem [ref=e108]:
+                    - img [ref=e109]
+                    - generic [ref=e111]: Relearning
+              - generic [ref=e112]:
+                - generic [ref=e113]:
+                  - paragraph [ref=e115]: New
+                  - paragraph [ref=e116]: "2"
+                - generic [ref=e117]:
+                  - paragraph [ref=e119]: Learning
+                  - paragraph [ref=e120]: "0"
+                - generic [ref=e121]:
+                  - paragraph [ref=e123]: Review
+                  - paragraph [ref=e124]: "0"
+                - generic [ref=e125]:
+                  - paragraph [ref=e127]: Relearning
+                  - paragraph [ref=e128]: "0"
+          - generic [ref=e129]:
+            - generic [ref=e131]:
+              - generic [ref=e132]: Recall Rate Over Time
+              - generic [ref=e133]: Sample data
+            - generic [ref=e134]:
+              - img [ref=e138]:
+                - generic [ref=e143]:
+                  - generic [ref=e145]: Jan 25
+                  - generic [ref=e147]: Jan 27
+                  - generic [ref=e149]: Jan 29
+                  - generic [ref=e151]: Jan 31
+                  - generic [ref=e153]: Feb 2
+                  - generic [ref=e155]: Feb 4
+                  - generic [ref=e157]: Feb 6
+                - generic [ref=e159]:
+                  - generic [ref=e161]: 0%
+                  - generic [ref=e163]: 25%
+                  - generic [ref=e165]: 50%
+                  - generic [ref=e167]: 75%
+                  - generic [ref=e169]: 100%
+              - paragraph [ref=e187]: Chart shows sample data. Complete more study sessions to see your actual progress.
+        - generic [ref=e189]:
+          - generic [ref=e191]:
+            - generic [ref=e192]: Recall Points (2)
+            - button "Add Point" [ref=e193] [cursor=pointer]:
+              - img [ref=e194]
+              - text: Add Point
+          - table [ref=e198]:
+            - rowgroup [ref=e199]:
+              - row "Content Status Due Reps Actions" [ref=e200]:
+                - columnheader "Content" [ref=e201]
+                - columnheader "Status" [ref=e202]
+                - columnheader "Due" [ref=e203]
+                - columnheader "Reps" [ref=e204]
+                - columnheader "Actions" [ref=e205]
+            - rowgroup [ref=e206]:
+              - row "The mitochondria is the powerhouse of the cell, producing AT... Basic cell biology - energy production in eukaryotic cells. New 1 day overdue 0 Edit The mitochondria is... Delete The mitochondria is..." [ref=e207]:
+                - cell "The mitochondria is the powerhouse of the cell, producing AT... Basic cell biology - energy production in eukaryotic cells." [ref=e208]:
+                  - generic [ref=e209]:
+                    - paragraph [ref=e210]: The mitochondria is the powerhouse of the cell, producing AT...
+                    - paragraph [ref=e211]: Basic cell biology - energy production in eukaryotic cells.
+                - cell "New" [ref=e212]:
+                  - generic [ref=e213]: New
+                - cell "1 day overdue" [ref=e214]
+                - cell "0" [ref=e215]
+                - cell "Edit The mitochondria is... Delete The mitochondria is..." [ref=e216]:
+                  - generic [ref=e217]:
+                    - button "Edit The mitochondria is..." [ref=e218] [cursor=pointer]:
+                      - img [ref=e219]
+                    - button "Delete The mitochondria is..." [ref=e221] [cursor=pointer]:
+                      - img [ref=e222]
+              - row "Water freezes at 0 degrees Celsius (32 degrees Fahrenheit) u... Basic physics - phase transitions of water. New 1 day overdue 0 Edit Water freezes at 0 d... Delete Water freezes at 0 d..." [ref=e224]:
+                - cell "Water freezes at 0 degrees Celsius (32 degrees Fahrenheit) u... Basic physics - phase transitions of water." [ref=e225]:
+                  - generic [ref=e226]:
+                    - paragraph [ref=e227]: Water freezes at 0 degrees Celsius (32 degrees Fahrenheit) u...
+                    - paragraph [ref=e228]: Basic physics - phase transitions of water.
+                - cell "New" [ref=e229]:
+                  - generic [ref=e230]: New
+                - cell "1 day overdue" [ref=e231]
+                - cell "0" [ref=e232]
+                - cell "Edit Water freezes at 0 d... Delete Water freezes at 0 d..." [ref=e233]:
+                  - generic [ref=e234]:
+                    - button "Edit Water freezes at 0 d..." [ref=e235] [cursor=pointer]:
+                      - img [ref=e236]
+                    - button "Delete Water freezes at 0 d..." [ref=e238] [cursor=pointer]:
+                      - img [ref=e239]
+        - generic [ref=e242]:
+          - generic [ref=e244]:
+            - generic [ref=e245]: Session History
+            - generic [ref=e246]: 0 sessions
+          - generic [ref=e249]:
+            - heading "No sessions yet" [level=3] [ref=e250]
+            - paragraph [ref=e251]: Start a study session to begin tracking your progress.
+        - dialog [ref=e253]:
+          - generic [ref=e254]:
+            - heading [level=2] [ref=e255]: Edit Recall Set
+            - button [ref=e256] [cursor=pointer]:
+              - img [ref=e257]
+          - generic [ref=e260]:
+            - generic [ref=e261]:
+              - generic [ref=e262]: Name
+              - textbox [active] [ref=e263]:
+                - /placeholder: Enter recall set name
+                - text: Updated Name 1770388906592
+            - generic [ref=e264]:
+              - generic [ref=e265]: Description
+              - textbox [ref=e266]:
+                - /placeholder: Describe the purpose and content of this recall set
+                - text: A recall set created for e2e testing purposes
+              - paragraph [ref=e267]: 45/1000 characters
+            - generic [ref=e268]:
+              - generic [ref=e269]: Discussion System Prompt
+              - textbox [ref=e270]:
+                - /placeholder: Enter the system prompt for AI-generated discussions about this recall set
+                - text: You are a helpful tutor for the "E2E - updated recall set persists changes - 1770388906549" recall set. Keep responses brief and focused.
+              - paragraph [ref=e271]: This prompt guides how AI generates discussion questions for recall points
+            - generic [ref=e272]:
+              - button [ref=e273] [cursor=pointer]: Cancel
+              - button [ref=e274] [cursor=pointer]: Save Changes
+  - generic [ref=e275]: 0%
+```
