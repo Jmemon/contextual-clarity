@@ -1,0 +1,3 @@
+# Phase 4: Discussion Refine
+
+Iterating on discussions keeping in mind the intended UX – near daily engagement as a means to maintain/deepen internal representations of domains (represented by recall sets). So they shouldn't go on for too long since they will be slotted into the user's day, AI responses should be concise but information-dense, still enabling rabbit-holes if the user goes down them. And maybe more in-discussion stats (like how many points have been hit, and maybe they can see them once they hit them), which should be hide-able by default. But the essence of how they work now is good for now: prodding the user to recall each point.

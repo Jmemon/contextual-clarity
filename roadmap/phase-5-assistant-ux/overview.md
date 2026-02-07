@@ -1,0 +1,5 @@
+# Phase 5: Assistant UX
+
+A new UX meant to better integrate with potential future AI-assistant-oriented UX paradigm. App on the phone (or computer, but we'll orient towards phone), that maybe texts user with like "x,y,z sessions are ready today!" and a magic link. The magic link would take them into an app on their phone to do the sessions. This app though, when no sessions were due would basically contain nothing, just something like "No sessions to do!", no menu, no nothing. When there are sessions it will engage the user in the sessions and that's it. The app should feel like purely a place to have these interactions. And maybe the session could have a generated image/gif or something that starts them off for a richer look. Then they go through the session, through the points, etc.
+
+This also means behind-the-scenes this app would have to be able to receive session information likely from a backend that it queries or something. And the text I think would be sent by a backend process, that also creates the magic link and behind-the-scenes, sends the necessary information for the user app to run each session.
