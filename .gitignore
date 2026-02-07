@@ -61,6 +61,9 @@ coverage/
 .nyc_output/
 playwright-report/
 test-results/
+e2e/test-results/
+e2e/test-results.json
+e2e/.test-env.json
 
 # -----------------------------------------------------------------------------
 # Data directories (user-generated content)

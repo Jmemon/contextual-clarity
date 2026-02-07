@@ -70,8 +70,9 @@ export interface TestFixtures {
 // ============================================================================
 
 const PROJECT_ROOT = resolve(__dirname, '../..');
-const API_PORT = parseInt(process.env.API_PORT || '3011');
-const WEB_PORT = parseInt(process.env.WEB_PORT || '5173');
+// IMPORTANT: Must match ports in playwright.config.ts to ensure test isolation
+const API_PORT = parseInt(process.env.E2E_API_PORT || '3099');
+const WEB_PORT = parseInt(process.env.E2E_WEB_PORT || '5199');
 
 // ============================================================================
 // API Seeding Functions
@@ -200,7 +201,8 @@ export const test = base.extend<TestFixtures>({
   // Test environment fixture
   testEnv: async ({}, use, testInfo) => {
     // Database is managed by global-setup.ts / global-teardown.ts
-    const dbPath = join(PROJECT_ROOT, 'e2e-test.db');
+    // Must match path in global-setup.ts
+    const dbPath = '/tmp/contextual-clarity-e2e-test.db';
 
     // Calculate URLs
     const apiUrl = `http://localhost:${API_PORT}`;

@@ -16,12 +16,15 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import * as dotenv from 'dotenv';
 
-// Load the root .env file to get the backend PORT
+// Load the root .env file to get the backend PORT (unless overridden by environment)
 // This ensures the proxy target stays in sync with the backend configuration
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// For e2e tests, E2E_API_PORT takes precedence to prevent test data leaking into production
+if (!process.env.E2E_API_PORT) {
+  dotenv.config({ path: path.resolve(__dirname, '../.env') });
+}
 
-// Get the backend port from environment, defaulting to 3000 if not set
-const BACKEND_PORT = process.env.PORT || '3000';
+// Get the backend port: E2E tests override with E2E_API_PORT, else use PORT from .env
+const BACKEND_PORT = process.env.E2E_API_PORT || process.env.PORT || '3000';
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 
 export default defineConfig({

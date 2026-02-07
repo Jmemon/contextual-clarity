@@ -4,6 +4,9 @@
   "description": "End-to-end tests for Contextual Clarity web application",
   "type": "module",
   "scripts": {
+    "start:server": "cd .. && DATABASE_URL=/tmp/contextual-clarity-e2e-test.db PORT=3099 LLM_MOCK_MODE=true bun run server",
+    "start:web": "cd ../web && E2E_API_PORT=3099 bun run dev --port 5199",
+    "setup:db": "cd .. && DATABASE_URL=/tmp/contextual-clarity-e2e-test.db bun run db:migrate",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",

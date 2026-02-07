@@ -14,6 +14,35 @@ This document specifies a rigorous, browser-based end-to-end test suite using Pl
 
 ---
 
+## Test Isolation (CRITICAL)
+
+Tests are completely isolated from development/production data using multiple safety layers:
+
+### Port Isolation
+| Environment | API Port | Web Port |
+|-------------|----------|----------|
+| Development | 3011     | 5173     |
+| **E2E Tests** | **3099** | **5199** |
+
+Tests use dedicated ports that differ from dev server ports. This ensures tests **never** accidentally connect to a running dev server using production data.
+
+### Database Isolation
+- Tests use `e2e-test.db` (separate from `contextual-clarity.db`)
+- Fresh database created before each test run
+- Automatically deleted after tests complete
+
+### Server Isolation
+- `reuseExistingServer: false` - tests always start fresh servers
+- Fail-fast checks in `global-setup.ts` verify port and database isolation
+
+### Safety Checks
+The following assertions run before any tests:
+1. Test database path ≠ production database path
+2. Test ports ≠ dev server ports (3011/5173 blocked)
+3. Migrations run against isolated test database only
+
+---
+
 ## Test Infrastructure
 
 ### 1. Test Database Setup

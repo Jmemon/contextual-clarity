@@ -8,9 +8,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // Read environment variables for configuration
-// API defaults to 3011 per .env, web defaults to 5173
-const API_PORT = process.env.API_PORT || '3011';
-const WEB_PORT = process.env.WEB_PORT || '5173';
+// IMPORTANT: Use different ports than dev server to prevent test data leaking into production DB
+// Dev server uses 3011/5173, tests use 3099/5199 to guarantee isolation
+const API_PORT = process.env.E2E_API_PORT || '3099';
+const WEB_PORT = process.env.E2E_WEB_PORT || '5199';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${WEB_PORT}`;
 
 export default defineConfig({
@@ -119,27 +120,41 @@ export default defineConfig({
   ],
 
   // Web server configuration
-  // Starts the API server and Vite dev server before running tests
+  // Due to a macOS/Bun/SQLite interaction issue (SQLITE_IOERR_VNODE),
+  // the API server must be started manually before running tests.
+  //
+  // Start the test server with:
+  //   cd /Users/johnmemon/Desktop/contextual-clarity
+  //   DATABASE_URL=/tmp/contextual-clarity-e2e-test.db PORT=3099 bun run server
+  //
+  // Or use the npm script (if added): bun run test:e2e:server
   webServer: [
     {
-      // API server
-      command: `cd .. && DATABASE_PATH=./e2e-test.db bun run server`,
+      // API server - expects to be pre-started manually due to macOS SQLite issue
+      // The global-setup will run migrations, then this reuses the manual server
+      command: `cd .. && DATABASE_URL=/tmp/contextual-clarity-e2e-test.db bun run server`,
       url: `http://localhost:${API_PORT}/health`,
-      reuseExistingServer: !process.env.CI,
+      // IMPORTANT: Must be true to work around SQLITE_IOERR_VNODE on macOS
+      // Start the test server manually before running tests
+      reuseExistingServer: true,
       timeout: 60000,
       env: {
         PORT: API_PORT,
-        DATABASE_PATH: './e2e-test.db',
-        // Use mock LLM for deterministic tests
+        DATABASE_URL: '/tmp/contextual-clarity-e2e-test.db',
         LLM_MOCK_MODE: 'true',
       },
     },
     {
-      // Vite dev server
+      // Vite dev server - runs on dedicated test port with proxy pointing to test API
       command: `cd ../web && bun run dev --port ${WEB_PORT}`,
       url: BASE_URL,
-      reuseExistingServer: !process.env.CI,
+      // Can start fresh since this doesn't have the SQLite issue
+      reuseExistingServer: true,
       timeout: 30000,
+      env: {
+        // Override the proxy target to point to test API server instead of dev server
+        E2E_API_PORT: API_PORT,
+      },
     },
   ],
 });
