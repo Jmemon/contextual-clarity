@@ -1,571 +1,623 @@
-# 50 Diverse Recall Sets
+# 51 Diverse Recall Sets
 
-Each set has 1-3 recall points. Sets span four categories: Conceptual Knowledge, Procedural/Algorithmic, Creative/Design, and Affirmation/Mantra. Recall items are specific and testable — no vague generalities.
+Each set has 1-3 recall points. Sets span many categories: psychology, biology, math, philosophy, literature, AI/ML, programming, fitness, yoga, art, music, ecology, history, and culinary. Recall items are specific and testable — no vague generalities.
+
+**Status: 51/50 accepted (one bonus set from a mid-session counting error — keeping all 51).**
 
 ---
 
-## Conceptual Knowledge (18 sets)
+## Conceptual Knowledge — Psychology & Behavior
 
-### 1. Cognitive Biases
+### 1. Atomic Habits: The Habit Loop
 
 **Point 1**
-- **Content:** Anchoring bias causes people to rely too heavily on the first piece of information they encounter when making decisions.
-- **Context:** Classic experiment: people shown a random number on a wheel then asked to estimate UN countries — their estimates correlated with the random number.
+- **Content:** Every habit follows a four-step loop: cue → craving → response → reward.
+- **Context:** James Clear's framework. To build a habit, make each step easier; to break one, invert each step.
 
 **Point 2**
-- **Content:** The availability heuristic makes people overestimate the likelihood of events they can easily recall, like plane crashes vs. car accidents.
-- **Context:** Tversky and Kahneman. Media coverage amplifies this — vivid events feel more probable than statistically common ones.
+- **Content:** Environment design beats willpower for habit change — modify surroundings to make good behaviors obvious and bad ones invisible.
+- **Context:** Putting your phone in another room eliminates the cue entirely. Willpower is finite; environments are persistent.
 
 ---
 
-### 2. Causes of the French Revolution
+### 2. Dunning-Kruger Effect
 
 **Point 1**
-- **Content:** France's participation in the American Revolution bankrupted the crown, creating a fiscal crisis that forced Louis XVI to convene the Estates-General in 1789.
-- **Context:** The irony: France helped birth a republic abroad while its own monarchy collapsed from the debt incurred doing so.
+- **Content:** People with low competence in a domain overestimate their ability because the skills needed to produce a correct answer are the same skills needed to recognize one.
+- **Context:** Kruger and Dunning, 1999. Beginners don't know what they don't know; experts underestimate theirs.
+
+---
+
+### 3. Sunk Cost Fallacy
+
+**Point 1**
+- **Content:** Continuing a course of action because of past investment (time, money, effort) rather than evaluating future value. Past costs are irrecoverable and irrelevant to optimal decisions.
+- **Context:** The rational question is always "given where I am now, is continuing the best use of my next hour/dollar?"
+
+---
+
+### 4. Dopamine & Motivation
+
+**Point 1**
+- **Content:** Dopamine drives anticipation and wanting, not pleasure itself. It spikes before a reward, not during consumption.
+- **Context:** Wolfram Schultz's experiments: dopamine fires at the cue predicting a reward. Better than expected → spike; worse → dip below baseline.
 
 **Point 2**
-- **Content:** The Third Estate (commoners, ~97% of the population) had the same voting power as the clergy and nobility combined, which directly triggered the formation of the National Assembly.
-- **Context:** Voting was by estate, not by head — so two privileged estates could always outvote the third.
+- **Content:** Variable reward schedules (unpredictable timing/magnitude) produce the highest dopamine and most compulsive behavior — the mechanism behind slot machines and social media.
+- **Context:** Skinner's operant conditioning. Fixed schedules produce moderate engagement; variable schedules produce intense, persistent engagement.
 
 ---
 
-### 3. Plate Tectonics
+### 5. The Lindy Effect
 
 **Point 1**
-- **Content:** Tectonic plates float on the asthenosphere and move due to convection currents in the mantle — hot rock rises, cools, and sinks in a cycle.
-- **Context:** Plates move 1-10 cm/year. The mechanism is similar to how a pot of boiling water circulates.
+- **Content:** For non-perishable things (ideas, technologies, books), the longer something has survived, the longer its expected remaining lifespan.
+- **Context:** Taleb. A book in print for 100 years is expected to last another 100. Things that survive long-term have demonstrated robustness.
+
+---
+
+## Conceptual Knowledge — Biology & Health
+
+### 6. Caffeine & Adenosine
+
+**Point 1**
+- **Content:** Caffeine blocks adenosine receptors without activating them, preventing the drowsiness signal. It masks sleep pressure rather than creating energy.
+- **Context:** Adenosine still accumulates behind the blockade — you crash when caffeine wears off.
 
 **Point 2**
-- **Content:** There are three types of plate boundaries: divergent (plates pull apart), convergent (plates collide), and transform (plates slide past each other).
-- **Context:** Mid-Atlantic Ridge = divergent. Himalayas = convergent. San Andreas Fault = transform.
+- **Content:** Regular use causes the brain to grow more adenosine receptors (tolerance). Withdrawal headaches occur from sudden unblocked adenosine causing vasodilation.
+- **Context:** Tolerance develops in ~7-12 days; full reset takes 2-9 days of abstinence.
 
 ---
 
-### 4. Supply and Demand Equilibrium
+### 7. How Muscle Growth Works
 
 **Point 1**
-- **Content:** At equilibrium price, quantity supplied equals quantity demanded. Above equilibrium creates surplus; below creates shortage.
-- **Context:** A surplus forces sellers to lower prices to clear inventory. A shortage lets sellers raise prices because buyers compete.
+- **Content:** Resistance training causes microtears in muscle fibers. Repair via protein synthesis rebuilds them thicker and stronger (hypertrophy).
+- **Context:** Progressive overload is necessary — the stimulus must exceed what the muscle is adapted to.
 
 **Point 2**
-- **Content:** Price elasticity of demand measures how much quantity demanded changes in response to a price change. Necessities are inelastic; luxuries are elastic.
-- **Context:** Insulin demand barely changes with price (inelastic). Vacation travel demand drops sharply with price increases (elastic).
+- **Content:** Muscle protein synthesis peaks ~24-48 hours post-training and returns to baseline by ~72 hours, making 2-3x/week per muscle group optimal.
+- **Context:** This is why full-body or upper/lower splits often outperform bro-splits for natural lifters.
 
 ---
 
-### 5. Stoic Philosophy Core Tenets
+### 8. Sleep & Memory Consolidation
 
 **Point 1**
-- **Content:** The dichotomy of control: focus only on what you can control (your judgments, actions, responses) and accept what you cannot (others' behavior, external events).
-- **Context:** Epictetus: "It's not what happens to you, but how you react to it that matters." This is the foundational Stoic move.
+- **Content:** During slow-wave sleep, the hippocampus replays the day's experiences at accelerated speed, transferring memories from short-term to long-term storage.
+- **Context:** Learning followed by sleep produces significantly better retention than the same period awake.
 
 **Point 2**
-- **Content:** Negative visualization (premeditatio malorum): regularly imagine losing what you value to reduce attachment and increase gratitude.
-- **Context:** Not pessimism — it's inoculation. Seneca practiced this daily. The goal is to enjoy things without being devastated by their loss.
+- **Content:** Sleep deprivation reduces the brain's capacity to form new memories by ~40%.
+- **Context:** Matthew Walker's research. Sleep is needed both before learning (to prepare) and after (to consolidate).
 
 ---
 
-### 6. How mRNA Vaccines Work
+### 9. Intermittent Fasting Mechanisms
 
 **Point 1**
-- **Content:** mRNA vaccines deliver instructions for cells to produce a harmless piece of the target pathogen's protein (like the spike protein), which trains the immune system to recognize the real threat.
-- **Context:** The mRNA never enters the cell nucleus or interacts with DNA. It's read by ribosomes in the cytoplasm and then degraded within days.
+- **Content:** During fasting, insulin drops, signaling fat cells to release stored fatty acids for energy (lipolysis). This shift enhances after ~12-16 hours.
+- **Context:** Insulin is the switch: high = storage mode, low = access stores. Constant snacking keeps you in permanent storage mode.
 
 **Point 2**
-- **Content:** After the immune system responds to the protein, it creates memory B cells and T cells that persist long-term, enabling faster response on real infection.
-- **Context:** This is why a second dose "boosts" — it amplifies the memory cell population.
+- **Content:** Autophagy — cellular self-cleaning where damaged proteins are broken down and recycled — is upregulated during extended fasting (24-48+ hours) via mTOR suppression and AMPK activation.
+- **Context:** Ohsumi won the 2016 Nobel Prize for autophagy mechanisms. Distinct from fat-burning benefits of shorter fasts.
 
 ---
 
-### 7. The Krebs Cycle's Role
+### 10. Sarcomere Contraction (Sliding Filament Theory)
 
 **Point 1**
-- **Content:** The Krebs cycle doesn't directly produce much ATP. Its main job is generating electron carriers (NADH and FADH2) that feed the electron transport chain, where the bulk of ATP is made.
-- **Context:** Per glucose molecule: Krebs produces 2 ATP directly, but 8 NADH and 2 FADH2 that yield ~24-28 ATP via oxidative phosphorylation.
-
----
-
-### 8. Key Constitutional Amendments
-
-**Point 1**
-- **Content:** The First Amendment protects five freedoms: religion, speech, press, assembly, and petition. It restricts *government* action, not private entities.
-- **Context:** A company removing your post isn't a First Amendment violation. The amendment begins "Congress shall make no law..."
+- **Content:** Actin and myosin filaments slide past each other within sarcomeres. Myosin heads bind to actin, pivot (power stroke), release, and repeat — powered by ATP hydrolysis.
+- **Context:** The filaments don't shorten — they overlap more. Without ATP, myosin stays bound to actin (rigor mortis).
 
 **Point 2**
-- **Content:** The Fourth Amendment protects against unreasonable searches and seizures and requires warrants to be supported by probable cause.
-- **Context:** The exclusionary rule (Mapp v. Ohio, 1961): evidence obtained in violation of the Fourth Amendment is inadmissible in court.
+- **Content:** Eccentric contractions (lengthening under load) cause more damage than concentric, producing greater hypertrophy stimulus and more DOMS.
+- **Context:** Fewer motor units are recruited eccentrically, so each active fiber bears more load. This is why you can lower more than you can lift.
+
+---
+
+### 11. Mind-Muscle Connection
+
+**Point 1**
+- **Content:** Consciously focusing on the target muscle during exercise increases EMG activation and, over time, greater hypertrophy versus just moving the weight.
+- **Context:** Schoenfeld et al. (2018). Effect diminishes at very heavy loads (>80% 1RM). Most useful for isolation exercises.
+
+---
+
+### 12. Proprioception & Balance
+
+**Point 1**
+- **Content:** Proprioception is the body's sense of its own position in space, mediated by muscle spindles, Golgi tendon organs, and joint receptors feeding the cerebellum.
+- **Context:** It's how you touch your nose with your eyes closed. Alcohol impairs proprioception — hence sobriety balance tests.
+
+**Point 2**
+- **Content:** Balance training improves proprioceptive acuity by strengthening neural pathways between peripheral sensors and the cerebellum, reducing injury risk.
+- **Context:** Proprioception degrades with age (fall risk) and after injury (re-injury risk without balance rehab).
+
+---
+
+## Conceptual Knowledge — Math & Information Theory
+
+### 13. Central Limit Theorem
+
+**Point 1**
+- **Content:** The distribution of sample means approaches a normal distribution as sample size increases, regardless of the population's distribution. Rule of thumb: n ≥ 30.
+- **Context:** Foundation of statistical inference — why confidence intervals and hypothesis tests work even when raw data isn't normal.
+
+---
+
+### 14. Shannon Entropy
+
+**Point 1**
+- **Content:** Shannon entropy H = -Σ p(x) log₂ p(x) measures average uncertainty. A fair coin has H = 1 bit; a 99% biased coin has H ≈ 0.08 bits.
+- **Context:** Shannon, 1948. Higher entropy = harder to predict = more information per symbol.
+
+**Point 2**
+- **Content:** Data compression cannot beat the entropy rate — it's the theoretical floor on compactness. Random noise has maximum entropy and is incompressible.
+- **Context:** Huffman/arithmetic coding approach this limit by assigning shorter codes to more probable symbols.
+
+---
+
+### 15. Definition of a Group (Abstract Algebra)
+
+**Point 1**
+- **Content:** A group is a set G with operation · satisfying: closure, associativity, identity element e, and inverses for every element.
+- **Context:** The group axioms capture "reversible composition" — abstracting patterns from number systems, symmetries, and permutations.
+
+**Point 2**
+- **Content:** (ℤ, +) is a group (identity 0, inverse -n). (ℤ, ×) is not — most integers lack a multiplicative inverse in ℤ.
+- **Context:** The same set can form a group under one operation and fail under another.
 
 **Point 3**
-- **Content:** The Fourteenth Amendment's Equal Protection Clause has been the basis for most civil rights rulings, from Brown v. Board of Education to Obergefell v. Hodges.
-- **Context:** Originally passed to protect formerly enslaved people after the Civil War, its scope expanded dramatically through judicial interpretation.
+- **Content:** If the operation is also commutative (a·b = b·a), it's abelian. Matrix multiplication GL(n) is non-abelian — AB ≠ BA in general.
+- **Context:** Named after Niels Henrik Abel. Most symmetry groups in physics are non-abelian.
 
 ---
 
-### 9. Attachment Theory
+### 16. Fractal Dimension
 
 **Point 1**
-- **Content:** Bowlby's attachment theory identifies four styles: secure, anxious-preoccupied, dismissive-avoidant, and fearful-avoidant — formed in early childhood based on caregiver responsiveness.
-- **Context:** Ainsworth's Strange Situation experiment observed toddlers' reactions to caregiver separation and return to classify attachment.
+- **Content:** Fractal dimension quantifies how detail changes with scale. The Koch snowflake has dimension log(4)/log(3) ≈ 1.26 — more than a line but less than a plane.
+- **Context:** Formula: d = log(N)/log(S) where N = self-similar pieces and S = scaling factor.
 
 **Point 2**
-- **Content:** Attachment style is not destiny. "Earned secure attachment" means adults with insecure childhood attachment can develop secure patterns through consistent, trustworthy relationships.
-- **Context:** Therapy, long-term stable partnerships, and self-awareness are common pathways to earned security.
+- **Content:** Britain's coastline has fractal dimension ~1.25 — measured length increases without bound as the ruler shrinks (the "coastline paradox").
+- **Context:** Mandelbrot, 1967. A straight border has dimension 1.0; a coastline's fractional dimension captures its roughness.
 
 ---
 
-### 10. Laws of Thermodynamics
+### 17. Persistent Homology
 
 **Point 1**
-- **Content:** The second law of thermodynamics states that entropy in an isolated system always increases — energy transformations are never 100% efficient; some energy always disperses as heat.
-- **Context:** This is why perpetual motion machines are impossible, and why your coffee always cools to room temperature, never the reverse.
+- **Content:** Persistent homology tracks topological features (components, loops, voids) as a distance threshold increases. Features persisting across many scales are signal; short-lived ones are noise.
+- **Context:** Grow balls around points in a cloud; track births and deaths of features as balls overlap and simplices form.
 
 **Point 2**
-- **Content:** The first law (conservation of energy) states energy cannot be created or destroyed, only transformed. Total energy in a closed system remains constant.
-- **Context:** When you burn gasoline, chemical energy converts to kinetic and thermal energy — nothing is "used up," just changed in form.
+- **Content:** Persistence diagrams plot features as (birth, death) points. Far from diagonal = robust structure; near diagonal = noise.
+- **Context:** Finds the "shape" of data without assuming a model. Detects loops and voids, not just connected clusters.
 
 ---
 
-### 11. Cold War Proxy Conflicts
+## Conceptual Knowledge — Philosophy & Literature
+
+### 18. Existentialism: Radical Freedom
 
 **Point 1**
-- **Content:** The Korean War (1950-53) ended in a stalemate at the 38th parallel with no peace treaty — only an armistice. North and South Korea are technically still at war.
-- **Context:** The US backed South Korea; China and the USSR backed the North. It set the template for Cold War proxy conflicts.
+- **Content:** Sartre's "existence precedes essence" — humans have no predefined purpose. You exist first, then define yourself through choices and actions.
+- **Context:** Contrasts with essentialism (a knife is designed to cut). Both liberating and terrifying — no excuses.
 
 **Point 2**
-- **Content:** The Soviet-Afghan War (1979-89) is often called "the USSR's Vietnam" — it drained Soviet resources and morale, contributing to the Soviet Union's collapse.
-- **Context:** The US funded the mujahideen through Operation Cyclone, one of the CIA's longest and most expensive covert operations.
+- **Content:** "Bad faith" (mauvaise foi) is denying your own freedom by pretending you have no choice — hiding behind roles or determinism.
+- **Context:** Acknowledging freedom means acknowledging you could always choose otherwise, even if consequences are severe.
 
 ---
 
-### 12. Neuroplasticity
+### 19. Kafka's Metamorphosis as Alienation
 
 **Point 1**
-- **Content:** Neuroplasticity is the brain's ability to reorganize itself by forming new neural connections throughout life — it's how learning physically changes brain structure.
-- **Context:** London taxi drivers have measurably larger hippocampi from years of spatial navigation. The brain is not fixed after childhood; it adapts to demands placed on it.
+- **Content:** Gregor Samsa's transformation externalizes alienation he already felt as a dehumanized wage earner valued only for his income.
+- **Context:** The horror isn't the transformation — it's how little changes. The family already treated him as non-human; the insect body makes the metaphor literal.
 
 ---
 
-### 13. Game Theory Fundamentals
+## Conceptual Knowledge — Finance & Decision-Making
+
+### 20. Compound Interest
 
 **Point 1**
-- **Content:** In the Prisoner's Dilemma, two rational individuals acting in self-interest produce a worse outcome for both than if they cooperated — the Nash equilibrium is mutual defection, not mutual cooperation.
-- **Context:** This explains arms races, overfishing, climate inaction — situations where individual rationality leads to collective irrationality.
+- **Content:** Compound interest earns interest on interest, creating exponential growth: A = P(1 + r/n)^(nt). Most growth is back-loaded — the last decade dominates.
+- **Context:** $10K at 7% for 30 years ≈ $76K; for 40 years ≈ $150K. Time in the market dominates all other variables.
 
 **Point 2**
-- **Content:** In iterated (repeated) games, cooperation becomes rational because players can punish defection in future rounds. Tit-for-tat — cooperate first, then mirror the opponent — is a winning strategy.
-- **Context:** Robert Axelrod's tournaments in the 1980s demonstrated this. One-shot vs. repeated games have fundamentally different strategic dynamics.
+- **Content:** Rule of 72: divide 72 by the annual rate to estimate doubling time. 8% → ~9 years. 12% → ~6 years.
+- **Context:** Works because ln(2) ≈ 0.693. Accurate within ~1% for rates between 4-15%.
 
 ---
 
-### 14. The Ottoman Empire's Decline
+## Conceptual Knowledge — Physics & Engineering
+
+### 21. How SSDs Store Data
 
 **Point 1**
-- **Content:** The Ottoman Empire's "Sick Man of Europe" period was driven by military defeats, nationalist movements in the Balkans, and failure to industrialize at the pace of Western Europe.
-- **Context:** Greek independence (1821-29) was the first major nationalist break. By 1912, the Ottomans had lost almost all European territory.
+- **Content:** SSDs store bits by trapping electrons in floating-gate transistors. SLC = 1 bit/cell (fast, durable), TLC = 3 bits, QLC = 4 bits (cheap, less durable).
+- **Context:** More bits per cell = cheaper but slower. Charge levels get harder to distinguish as you pack more bits.
 
 **Point 2**
-- **Content:** The Tanzimat reforms (1839-1876) attempted to modernize the Ottoman state with secular law, equal citizenship regardless of religion, and Western-style institutions — but came too late and faced internal resistance.
-- **Context:** Conservative religious leaders and the Janissary-successor military class resisted. The reforms alienated traditionalists without fully satisfying modernizers.
+- **Content:** Flash cells wear out after finite write cycles. The controller uses wear leveling to distribute writes; TRIM lets the OS report unused blocks.
+- **Context:** SLC endures ~100K cycles, QLC ~1K. Without TRIM, unnecessary write amplification occurs.
 
 ---
 
-### 15. Macronutrient Metabolism
+### 22. How Vinyl Records Encode Stereo Sound
 
 **Point 1**
-- **Content:** Carbohydrates are broken down into glucose, which is either used immediately for energy or stored as glycogen in the liver and muscles. Excess beyond glycogen capacity converts to fat.
-- **Context:** Liver stores ~100g glycogen, muscles ~400g. A marathon runner "hitting the wall" has depleted glycogen stores.
+- **Content:** Stereo vinyl uses a 45/45 system: groove walls angled at 45° encode left and right channels separately. The stylus reads both simultaneously.
+- **Context:** Backwards-compatible with mono (stylus reads the lateral sum L+R). Invented by Blumlein, standardized 1958.
 
 **Point 2**
-- **Content:** Dietary fat is the most energy-dense macronutrient at 9 calories per gram (vs. 4 for carbs and protein) and is essential for hormone production, cell membrane structure, and fat-soluble vitamin absorption.
-- **Context:** Vitamins A, D, E, and K require dietary fat for absorption — extremely low-fat diets can cause deficiencies.
+- **Content:** Vinyl "warmth" comes from even-order harmonic distortion from the physical stylus, plus RIAA equalization that shapes frequency response.
+- **Context:** RIAA eq boosts bass and cuts treble during cutting, reverses during playback. Digital is more accurate; vinyl's color is preference.
 
 ---
 
-### 16. Logical Fallacies
+## Conceptual Knowledge — Learning Science
+
+### 23. Spaced Repetition: The Forgetting Curve
 
 **Point 1**
-- **Content:** Ad hominem attacks the person making the argument instead of the argument itself. "You can't trust his climate data — he's not even a real scientist."
-- **Context:** The source's character is irrelevant to whether the data is valid. Evaluate the evidence, not the messenger.
+- **Content:** Ebbinghaus's forgetting curve: memory decays exponentially — ~50% forgotten within an hour, ~70% within 24 hours without review.
+- **Context:** Discovered 1885. Meaningful information decays more slowly but follows the general pattern.
 
 **Point 2**
-- **Content:** The straw man fallacy misrepresents someone's argument to make it easier to attack. Person A says "we should regulate emissions." Person B responds "so you want to shut down all industry?"
-- **Context:** The distorted version is easier to defeat, but the original argument was never addressed.
+- **Content:** Each review at the point of near-forgetting resets the curve with a shallower decay rate. This is the basis of spaced repetition.
+- **Context:** Spacing increases after each success: 1 day → 3 → 7 → 21 days. This is what FSRS calculates.
+
+---
+
+## Procedural/Technical
+
+### 24. TypeScript Generics
+
+**Point 1**
+- **Content:** Generics let you write functions/types across multiple types while preserving type safety: `function identity<T>(arg: T): T` — unlike `any`, the type info is preserved.
+- **Context:** Without generics, you choose between safety (separate functions per type) and flexibility (`any`). Generics give both.
+
+**Point 2**
+- **Content:** `extends` constrains generics: `<T extends { length: number }>` restricts to types with a `length` property.
+- **Context:** Without constraints, `T` could be anything and you can't access properties. Common: `T extends string`, `K extends keyof T`.
+
+---
+
+### 25. Git Rebase vs Merge
+
+**Point 1**
+- **Content:** `git rebase main` replays your commits on top of latest main, creating linear history. It rewrites hashes — never rebase pushed/shared commits.
+- **Context:** Golden rule: rebase local work before sharing, never rebase shared work.
+
+**Point 2**
+- **Content:** Merge commits preserve branching history and are non-destructive. Use when you want to document parallel development.
+- **Context:** Merge = "railroad track" graph; rebase = straight line.
+
+---
+
+### 26. Git Reflog & Recovery
+
+**Point 1**
+- **Content:** `git reflog` records every HEAD movement — commits, checkouts, rebases, resets. References persist at least 30 days even after destructive operations.
+- **Context:** Local only (not pushed). It's an undo history for the entire repo.
+
+**Point 2**
+- **Content:** To recover "lost" commits: find the hash in reflog, then `git checkout <hash>` or `git reset --hard <hash>`.
+- **Context:** Commits are only truly deleted after garbage collection (~30 days unreachable).
+
+---
+
+### 27. React Re-rendering Mental Model
+
+**Point 1**
+- **Content:** A component re-renders when its state changes or when its parent re-renders. Props don't independently trigger re-renders — the parent's re-render passes new props.
+- **Context:** State should live as close as possible to where it's used to minimize cascading re-renders.
+
+**Point 2**
+- **Content:** Referential equality matters in dependency arrays: `{a:1} !== {a:1}` (different references). `useMemo`/`useCallback` stabilize references to prevent unnecessary effects.
+- **Context:** Objects/arrays/functions compare by reference, not value. This is a common source of infinite loops in useEffect.
+
+---
+
+### 28. Backpropagation & Computational Graphs
+
+**Point 1**
+- **Content:** The forward pass builds a DAG where each node is an operation and edges carry tensors, recording everything for reverse-mode gradient computation.
+- **Context:** PyTorch builds this dynamically; TensorFlow historically built it statically.
+
+**Point 2**
+- **Content:** Backprop applies the chain rule backwards: each node multiplies its local gradient by the downstream gradient, computing ∂Loss/∂weight for all weights in one pass.
+- **Context:** One backward pass computes all gradients simultaneously — this efficiency is why neural networks are trainable at scale.
 
 **Point 3**
-- **Content:** False dichotomy presents only two options when more exist. "You're either with us or against us" ignores neutral, partially aligned, or alternative positions.
-- **Context:** Politicians use this frequently. Most real-world choices have a spectrum of options, not just two extremes.
+- **Content:** Vanishing gradients: repeated multiplication of small derivatives through many layers shrinks gradients to near-zero. ReLU and skip connections mitigate this.
+- **Context:** Sigmoid/tanh saturate where derivative → 0. Skip connections reduce the chain length. This is why ResNets can be hundreds of layers deep.
 
 ---
 
-### 17. Quantum Mechanics Fundamentals
+### 29. How Espresso Extraction Works
 
 **Point 1**
-- **Content:** Wave-particle duality means quantum objects (like electrons and photons) exhibit both wave and particle behavior depending on how they are measured — the double-slit experiment demonstrates this.
-- **Context:** When unobserved, electrons pass through both slits and create an interference pattern (wave). When observed, they pass through one slit (particle). Measurement changes behavior.
+- **Content:** Standard espresso: ~18g coffee, ~9 bars pressure, ~36g liquid in 25-30 seconds (1:2 ratio). Time is the primary diagnostic for dialing in.
+- **Context:** Too fast = grind finer, too slow = grind coarser. Grind size, dose, and yield interact.
 
 **Point 2**
-- **Content:** Heisenberg's uncertainty principle states you cannot simultaneously know both the exact position and exact momentum of a particle — the more precisely you measure one, the less precisely you can know the other.
-- **Context:** This is not a measurement limitation — it's a fundamental property of nature. The particle genuinely does not have definite values for both at the same time.
+- **Content:** Under-extraction → sour (acids extract first); over-extraction → bitter (bitter compounds extract last). Target: ~18-22% extraction.
+- **Context:** Grind size is the primary lever — finer = more surface area = faster extraction.
 
 ---
 
-### 18. Sleep Architecture
+### 30. The Ralph Wiggum Loop
 
 **Point 1**
-- **Content:** A full sleep cycle is ~90 minutes and moves through light sleep (N1, N2), deep sleep (N3/slow-wave), and REM sleep. Humans cycle through 4-6 cycles per night.
-- **Context:** Early cycles are heavy on deep sleep (physical restoration). Later cycles are heavy on REM (memory consolidation, emotional processing).
+- **Content:** A bash loop that runs a fresh agent instance against a spec, checks for completion, and retries — piping full output (failures, stack traces) back as input.
+- **Context:** Geoffrey Huntley. Named for Ralph Wiggum's naive persistence. Unsanitized failure feedback creates a "contextual pressure cooker."
 
 **Point 2**
-- **Content:** Deep sleep (N3) is when the body releases growth hormone, repairs tissue, and strengthens the immune system. Alcohol and aging both suppress deep sleep disproportionately.
-- **Context:** You can sleep 8 hours after drinking and still feel unrested because deep sleep was suppressed — total duration isn't the full picture.
+- **Content:** Power comes from brute-force iteration with fresh context: each retry avoids context pollution but inherits the previous attempt's full output.
+- **Context:** LLMs are stochastic — same prompt, different outputs. Combined with failure feedback, the loop eventually converges on a solution.
 
 ---
 
-## Procedural/Algorithmic (12 sets)
+## Creative/Design
 
-### 19. Binary Search
+### 31. The Rule of Thirds in Composition
 
 **Point 1**
-- **Content:** Binary search works on a sorted array by comparing the target to the middle element — if the target is smaller, search the left half; if larger, search the right half. Time complexity is O(log n).
-- **Context:** Each step eliminates half the remaining elements. Searching 1 billion items takes at most ~30 comparisons.
+- **Content:** Divide the frame into a 3×3 grid. Placing subjects along lines or at intersections creates more dynamic compositions than centering.
+- **Context:** Breaking this rule works when symmetry is intentional.
 
 ---
 
-### 20. How to Deglaze a Pan
+### 32. Color Temperature in Lighting
 
 **Point 1**
-- **Content:** After searing meat, remove it, add liquid (wine, stock, vinegar) to the hot pan, and scrape up the browned bits (fond) with a wooden spoon. The fond dissolves into the liquid, forming the base of a sauce.
-- **Context:** The fond is concentrated flavor from the Maillard reaction. Use cold liquid to create steam that lifts the bits. Reduce by half for a pan sauce.
+- **Content:** Color temperature in Kelvin: warm (~2700K) is yellow-orange/intimate, cool (~5000-6500K) is blue-white/alert. Directly affects circadian rhythm and mood.
+- **Context:** Blue-rich cool light suppresses melatonin; warm light supports natural melatonin onset.
 
 ---
 
-### 21. TCP Three-Way Handshake
+## Conceptual Knowledge — Music Theory
+
+### 33. Why Minor Keys Sound Sad
 
 **Point 1**
-- **Content:** TCP establishes a connection in three steps: (1) Client sends SYN, (2) Server responds with SYN-ACK, (3) Client sends ACK. Only after all three does data transfer begin.
-- **Context:** SYN = "I want to talk." SYN-ACK = "I hear you and I want to talk too." ACK = "Great, let's go." This ensures both sides are ready.
+- **Content:** The minor scale's defining feature is a flattened third — 3 semitones (minor third) instead of 4 (major third). This smaller interval creates a "darker" quality.
+- **Context:** Major third (5:4 ratio) is more consonant than minor third (6:5). Whether the sad association is psychoacoustic or cultural is debated.
 
 **Point 2**
-- **Content:** TCP connection teardown uses a four-step process (FIN, ACK, FIN, ACK) because each direction must be closed independently — one side may still have data to send after the other is done.
-- **Context:** This is called a "half-close." It's why TIME_WAIT exists — to ensure the final ACK is received before fully closing.
+- **Content:** Minor keys also flatten the 6th and 7th degrees (natural minor). Harmonic minor raises the 7th, adding urgency; melodic minor raises both 6th and 7th ascending.
+- **Context:** Natural minor feels resigned, harmonic minor dramatic, melodic minor bittersweet.
 
 ---
 
-### 22. Long Division Algorithm
+## Conceptual Knowledge — Ecology
+
+### 34. How Mushroom Mycelium Networks Work
 
 **Point 1**
-- **Content:** Long division repeats four steps in order: Divide, Multiply, Subtract, Bring down. Each cycle produces one digit of the quotient.
-- **Context:** Divide: how many times does the divisor fit? Multiply: divisor × that digit. Subtract: from current number. Bring down: next digit of the dividend.
-
----
-
-### 23. CPR Sequence
-
-**Point 1**
-- **Content:** For adult CPR: call 911, then perform 30 chest compressions (2 inches deep, 100-120 per minute) followed by 2 rescue breaths. Repeat until help arrives.
-- **Context:** Push hard and fast — "Stayin' Alive" by the Bee Gees has the right tempo. Hands go on the center of the chest, lower half of the sternum.
+- **Content:** Mycelium is a network of thread-like hyphae that decomposes organic matter by secreting enzymes externally and absorbing nutrients. The mushroom is just the fruiting body.
+- **Context:** A single honey fungus in Oregon covers 2,385 acres — one of Earth's largest organisms.
 
 **Point 2**
-- **Content:** Hands-only CPR (compressions without breaths) is recommended for untrained bystanders and is nearly as effective for adult cardiac arrest in the first few minutes.
-- **Context:** The blood still has residual oxygen. Continuous compressions maintain circulation better than stopping for breaths when the rescuer is untrained.
+- **Content:** Mycorrhizal fungi form the "wood wide web" — symbiosis where fungus provides trees water/phosphorus and trees provide carbon/sugars. Trees can transfer nutrients to each other through the network.
+- **Context:** Suzanne Simard showed "mother trees" send carbon to struggling seedlings through these connections.
 
 ---
 
-### 24. Git Rebase Workflow
+## Conceptual Knowledge — Yoga & Breathwork
+
+### 35. Ujjayi Breath & Vagal Tone
 
 **Point 1**
-- **Content:** `git rebase main` replays your branch's commits on top of the latest main, creating a linear history. Unlike merge, it rewrites commit hashes — never rebase commits that have been pushed to a shared branch.
-- **Context:** Rebase = "pretend I started my work from the current tip of main." It's cleaner history but destructive to existing commit references.
+- **Content:** Ujjayi involves constricting the glottis, creating an "ocean" sound that slows breathing and extends the exhale — stimulating the vagus nerve toward parasympathetic dominance.
+- **Context:** Longer exhales increase vagal tone and lower heart rate. It's a physiological brake, not just a mental one.
 
 **Point 2**
-- **Content:** Interactive rebase (`git rebase -i HEAD~n`) lets you squash, reorder, edit, or drop commits before pushing — useful for cleaning up a messy commit history into logical units.
-- **Context:** Common flow: develop with many small WIP commits, then interactive rebase into 1-3 clean commits before opening a PR.
+- **Content:** Vagal tone (measured by HRV) indicates parasympathetic strength. Higher HRV = greater stress resilience. Regular breathwork increases resting HRV over time.
+- **Context:** Slow breathing at ~6 breaths/minute maximizes HRV by synchronizing with the baroreflex.
 
 ---
 
-### 25. Pulling a Good Espresso Shot
+## Conceptual Knowledge — AI & Machine Learning
+
+### 36. How LLM Tokenization Works
 
 **Point 1**
-- **Content:** A standard espresso shot uses ~18g of finely ground coffee, extracted at ~9 bars of pressure, yielding ~36g of liquid in 25-30 seconds. Ratio is roughly 1:2.
-- **Context:** If it runs too fast: grind finer or use more coffee. Too slow: grind coarser or use less coffee. Time is the primary diagnostic tool.
+- **Content:** LLMs split text into tokens via Byte Pair Encoding: start with characters, iteratively merge the most frequent pair until reaching target vocab size (~100K for GPT-4).
+- **Context:** Common words become single tokens; rare words split into subwords. This handles misspellings and neologisms.
 
 **Point 2**
-- **Content:** Channeling occurs when water finds paths of least resistance through the puck, over-extracting some areas and under-extracting others. Even distribution and a level tamp prevent this.
-- **Context:** Signs of channeling: uneven flow from the portafilter, sour and bitter notes in the same shot. WDT (Weiss Distribution Technique) with a needle helps.
+- **Content:** Token count ≠ word count (~1 token ≈ ¾ word in English). Context windows and pricing are measured in tokens. Non-English text tokenizes less efficiently.
+- **Context:** Less efficient tokenization means LLMs are effectively less capable in non-English — more context consumed per concept.
 
 ---
 
-### 26. SQL Join Types
+### 37. Superposition & Mechanistic Interpretability
 
 **Point 1**
-- **Content:** INNER JOIN returns only rows where there's a match in both tables. LEFT JOIN returns all rows from the left table plus matched rows from the right (NULLs where no match).
-- **Context:** If you have 100 customers and 80 have orders: INNER JOIN returns 80 rows. LEFT JOIN returns 100 rows (20 with NULL order fields).
+- **Content:** Superposition: networks represent more features than dimensions by encoding concepts in overlapping, near-orthogonal patterns. Individual neurons are polysemantic (multiple unrelated features).
+- **Context:** Works because most features are sparse (rarely active), so interference is tolerable.
 
 **Point 2**
-- **Content:** CROSS JOIN produces the Cartesian product — every row from table A paired with every row from table B. If A has 100 rows and B has 50, result has 5,000 rows.
-- **Context:** Rarely used intentionally but useful for generating combinations (e.g., all product-color pairs). Accidental cross joins are a common source of exploding query results.
+- **Content:** Sparse autoencoders decompose internal activations into interpretable features by training an overcomplete autoencoder with a sparsity penalty on the residual stream.
+- **Context:** Anthropic's research: SAE features can steer model behavior — amplify or suppress concepts at inference time.
+
+**Point 3**
+- **Content:** Mechanistic interpretability reverse-engineers networks into circuits — small subgraphs implementing specific behaviors. Goal: move from "what" (behavioral testing) to "how" (internal mechanism).
+- **Context:** Key finding: induction heads implement in-context learning. Matters for safety — detect deception or bias before deployment.
 
 ---
 
-### 27. Changing a Flat Tire
+## Procedural/Technical — Databases & Infrastructure
+
+### 38. How B-Tree Indexes Work
 
 **Point 1**
-- **Content:** Before jacking: park on flat ground, engage parking brake, loosen lug nuts ~1/4 turn while the tire is still on the ground (the weight holds it in place). Then jack up, remove nuts, swap tire.
-- **Context:** Loosening lug nuts with the car jacked up will spin the wheel instead of loosening the nut. Tighten in a star/cross pattern to ensure even pressure.
+- **Content:** B-tree: self-balancing tree with sorted keys per node. Lookups are O(log n) — 1 billion rows needs only 3-4 disk reads.
+- **Context:** Without an index, the database scans every row (O(n)). All leaf nodes at the same depth ensures consistent performance.
 
 **Point 2**
-- **Content:** The jack point is a reinforced spot on the vehicle frame — using the wrong spot can bend the body panel or cause the jack to slip. Check the owner's manual for the exact location.
-- **Context:** Usually a flat reinforced area behind the front wheel or in front of the rear wheel on the pinch weld.
+- **Content:** B+ trees (used by SQLite, Postgres, MySQL) store data pointers only in leaf nodes, linked in a chain — making range queries efficient via leaf-to-leaf traversal.
+- **Context:** Indexes speed reads but slow writes (every INSERT/UPDATE must also update the index).
 
 ---
 
-### 28. Bread Fermentation
+### 39. How Docker Containers Actually Isolate
 
 **Point 1**
-- **Content:** Yeast ferments sugars in flour, producing CO2 (which makes the dough rise) and ethanol (which bakes off). Gluten traps the CO2 in a network of tiny bubbles, giving bread its structure.
-- **Context:** Without gluten development (kneading or time), CO2 escapes and the bread stays flat. This is why gluten-free bread needs alternative binders like xanthan gum.
+- **Content:** Containers share the host kernel. Isolation comes from Linux namespaces (PID, network, mount, user) — each container gets its own view of processes, network, and filesystem.
+- **Context:** A container's PID 1 is only PID 1 inside its namespace; on the host it has a different PID.
 
 **Point 2**
-- **Content:** Cold fermentation (retarding dough in the fridge at 3-5°C for 12-72 hours) slows yeast activity but allows enzymatic breakdown of starches, producing more complex flavors and better browning.
-- **Context:** This is why good pizza dough and sourdough taste different from quick-rise bread — time develops flavor that yeast speed alone can't.
+- **Content:** Resource limits via cgroups (CPU, memory, I/O). Layered filesystem (overlay2) stacks read-only image layers with a thin writable layer — images are immutable, containers start instantly.
+- **Context:** Layers are shared between containers using the same base image. The writable layer is discarded on stop unless volumes are used.
 
 ---
 
-### 29. React Component Lifecycle
+## Conceptual Knowledge — Neuroscience
+
+### 40. The Gut-Brain Axis
 
 **Point 1**
-- **Content:** `useEffect` with an empty dependency array `[]` runs once after the initial render — equivalent to `componentDidMount`. Its cleanup function runs on unmount — equivalent to `componentWillUnmount`.
-- **Context:** Common use: fetching data on mount, setting up subscriptions, or initializing third-party libraries. Return a cleanup function to prevent memory leaks.
+- **Content:** The gut-brain axis: bidirectional communication between 100M+ gut neurons and the CNS via the vagus nerve. ~95% of the body's serotonin is produced in the gut.
+- **Context:** The enteric nervous system operates independently of the CNS. GI symptoms frequently accompany anxiety and depression.
 
 **Point 2**
-- **Content:** React re-renders a component when its state changes or when its parent re-renders (passing new props). `React.memo` wraps a component to skip re-renders when props haven't changed (shallow comparison).
-- **Context:** Unnecessary re-renders usually don't matter until they do — profile first with React DevTools before optimizing. Premature memo-ization adds complexity for no gain.
+- **Content:** Microbiome composition directly influences mood. Germ-free mice show exaggerated stress responses that normalize with specific Lactobacillus strains.
+- **Context:** Diet changes can shift microbiome composition within days. "Gut feelings" are more than metaphor — interoceptive signals genuinely inform emotional processing.
 
 ---
 
-### 30. Proof by Mathematical Induction
+## Creative/Design — Drawing & Visual Art
+
+### 41. Contour Drawing & Negative Space
 
 **Point 1**
-- **Content:** Induction has two steps: (1) Base case — prove the statement is true for n=1 (or the starting value). (2) Inductive step — assume it's true for n=k, then prove it's true for n=k+1.
-- **Context:** It's like dominoes: prove the first one falls (base case), then prove that any domino falling causes the next one to fall (inductive step). Together, they guarantee all dominoes fall.
+- **Content:** Blind contour drawing — drawing without looking at the paper — bypasses the brain's symbolic system and engages direct perceptual processing.
+- **Context:** Betty Edwards' framework. The symbolic brain draws what it "knows"; blind contour trains you to draw what you actually see.
 
 **Point 2**
-- **Content:** The inductive hypothesis (assuming P(k) is true) is not circular reasoning — you're proving a conditional: IF P(k) THEN P(k+1). Combined with the base case, it chains to cover all natural numbers.
-- **Context:** A common misconception. You never assume what you're trying to prove. You prove the chain reaction, and the base case ignites it.
+- **Content:** Drawing negative space (shapes around/between objects) produces accurate proportions because the brain has no symbolic template for empty space.
+- **Context:** Draw the air between a chair's legs and the chair emerges accurately. The brain can't interfere with shapes it has no schema for.
 
 ---
 
-## Creative/Design (12 sets)
-
-### 31. Color Theory Fundamentals
+### 42. How Chiaroscuro Creates Depth
 
 **Point 1**
-- **Content:** Complementary colors (opposite on the color wheel, like blue/orange) create maximum contrast and visual vibrance. Analogous colors (adjacent, like blue/green/teal) create harmony and calm.
-- **Context:** Movie posters overwhelmingly use teal and orange because skin tones are warm and teal is their complement — it makes faces pop.
+- **Content:** Chiaroscuro uses strong light-dark contrasts to model 3D form on a flat surface by simulating how light wraps around volume.
+- **Context:** Caravaggio's tenebrism: figures from near-total darkness. Value range (lightest to darkest) creates volume illusion more effectively than color or line.
+
+---
+
+## Conceptual Knowledge — Math (continued)
+
+### 43. Gödel's Incompleteness Theorems
+
+**Point 1**
+- **Content:** First theorem: any consistent formal system powerful enough for arithmetic contains true statements that cannot be proven within the system.
+- **Context:** Gödel constructs a self-referential statement: "this statement is not provable." If provable → inconsistent; if unprovable → true. Either way, incomplete.
 
 **Point 2**
-- **Content:** Color temperature affects mood: warm colors (red, orange, yellow) feel energetic and intimate; cool colors (blue, green, purple) feel calm and spacious.
-- **Context:** Restaurants use warm lighting to create intimacy and encourage lingering. Hospitals use cool tones to create a sense of cleanliness and calm.
+- **Content:** Second theorem: no such system can prove its own consistency. You always need a stronger system — which then can't prove its own consistency either.
+- **Context:** Killed Hilbert's program. Connects to the halting problem — computability and provability have the same limits.
 
 ---
 
-### 32. Show Don't Tell in Writing
+### 44. Eigenvectors Geometrically
 
 **Point 1**
-- **Content:** "Show don't tell" means conveying emotion, character, and situation through specific actions, sensory details, and dialogue rather than stating them directly. "She was nervous" (telling) vs. "She picked at the label on her water bottle, peeling it in thin strips" (showing).
-- **Context:** Telling has its place — for pacing, transitions, and low-stakes information. The rule is really "show the important moments." Not everything deserves a scene.
-
----
-
-### 33. Rule of Thirds in Photography
-
-**Point 1**
-- **Content:** The rule of thirds divides the frame into a 3×3 grid. Placing subjects along the lines or at their intersections creates more dynamic, visually interesting compositions than centering.
-- **Context:** Horizon on the bottom third = emphasis on sky. Subject at a right-third intersection = natural eye entry point (left-to-right reading cultures). Breaking this rule works when symmetry is the point.
-
----
-
-### 34. Jazz Improvisation Basics
-
-**Point 1**
-- **Content:** Jazz improvisation is built on knowing the chord changes (harmonic roadmap) and using scales/modes that fit over each chord — it's structured freedom, not random note choice.
-- **Context:** A Cmaj7 chord invites the C major or C Lydian scale. The improviser picks notes from compatible scales while targeting chord tones (root, 3rd, 5th, 7th) on strong beats.
+- **Content:** An eigenvector of matrix A only gets scaled, not rotated: Av = λv. Eigenvectors reveal the "natural axes" of a linear transformation.
+- **Context:** Most vectors change direction under a matrix. A 2D stretch doubling horizontally and halving vertically has eigenvectors along H and V axes (λ = 2, 0.5).
 
 **Point 2**
-- **Content:** Call and response is a core jazz improvisation technique: play a short melodic phrase (call), then "answer" it with a related but different phrase (response). It creates conversational structure.
-- **Context:** This mirrors how speech works — statement, reply. Miles Davis was a master of economical calls with maximum space between them.
+- **Content:** PCA finds eigenvectors of the covariance matrix. The largest eigenvalue's eigenvector points in the direction of greatest variance — the most informative axis.
+- **Context:** 1000 features → 50 principal components capturing 95% of variance. The eigenvalue tells you how much each component explains.
 
 ---
 
-### 35. Typography Hierarchy
+### 45. How the Fourier Transform Decomposes Signals
 
 **Point 1**
-- **Content:** Typographic hierarchy uses size, weight, and contrast to guide the reader's eye in order of importance: headline → subhead → body → caption. Without hierarchy, everything competes for attention.
-- **Context:** The ratio matters: headings should be noticeably larger, not just slightly. A common ratio is 1.5x-2x between levels.
+- **Content:** The Fourier transform decomposes any signal into sine waves at different frequencies, converting time-domain to frequency-domain.
+- **Context:** Fourier, 1807: any periodic function = infinite sum of sines and cosines. The transform generalizes to non-periodic signals.
 
 **Point 2**
-- **Content:** Limit a design to 2-3 typefaces maximum. Use contrast between them (e.g., serif headings + sans-serif body) rather than variation within similar families.
-- **Context:** Two fonts that are too similar create a "did they mean to do that?" effect. Either match or clearly contrast.
+- **Content:** FFT computes the discrete Fourier transform in O(n log n) instead of O(n²). It's behind MP3, JPEG, OFDM, MRI, and speech recognition.
+- **Context:** Cooley-Tukey, 1965. Without FFT, digital audio and image processing would be computationally infeasible.
 
 ---
 
-### 36. Three-Act Story Structure
+## Conceptual Knowledge — Philosophy & Literature (continued)
+
+### 46. Borges & The Library of Babel
 
 **Point 1**
-- **Content:** Act 1 (Setup, ~25%): establish the character's normal world, then disrupt it with an inciting incident that forces a choice. Act 2 (Confrontation, ~50%): escalating obstacles and a midpoint reversal. Act 3 (Resolution, ~25%): climax and new equilibrium.
-- **Context:** The midpoint reversal is often overlooked — it's what prevents Act 2 from sagging. It reframes the conflict (e.g., the hunter becomes the hunted).
+- **Content:** The Library of Babel contains every possible 410-page book using 25 symbols — every true statement, every false one, and every gibberish string. Total information = no information.
+- **Context:** If every possible book exists, finding a specific true one is impossible. A thought experiment about the difference between information and knowledge.
+
+---
+
+### 47. Negative Capability (Keats)
+
+**Point 1**
+- **Content:** Negative Capability (Keats, 1817): "being in uncertainties, mysteries, doubts, without any irritable reaching after fact and reason." The capacity to remain in ambiguity without forcing closure.
+- **Context:** Keats identified Shakespeare as the example — characters embody contradictory truths without resolution. Resonates with mindfulness and creative process.
+
+---
+
+### 48. Heidegger's Ready-to-Hand vs Present-at-Hand
+
+**Point 1**
+- **Content:** "Ready-to-hand": equipment in use withdraws from attention (a hammer used is an extension of the body). "Present-at-hand": equipment noticed as a detached object (the hammer examined when broken).
+- **Context:** Primary engagement with the world is absorbed activity, not detached observation. We encounter things first as tools-in-use, not objects-with-properties.
+
+---
+
+## Conceptual Knowledge — Psychology (continued)
+
+### 49. Transference in Psychoanalysis
+
+**Point 1**
+- **Content:** Transference: the patient unconsciously redirects relational patterns from early caregivers onto the therapist. The therapist becomes a screen for projected dynamics.
+- **Context:** Freud realized it wasn't an obstacle but the treatment — live reenactment provides material for insight.
 
 **Point 2**
-- **Content:** The inciting incident must create a problem the protagonist cannot ignore — it disrupts their status quo so completely that returning to normal requires active effort.
-- **Context:** In Jaws: the shark attack. In The Matrix: Neo takes the red pill. The key test: would the story happen if this event didn't occur? If not, it's the inciting incident.
+- **Content:** Countertransference: the therapist's unconscious emotional reaction to the patient. Modern practice treats it as diagnostic data — the therapist's feelings mirror what others in the patient's life feel.
+- **Context:** If a therapist consistently feels bored or controlled with a patient, that likely reflects the dynamic the patient creates everywhere.
 
 ---
 
-### 37. Gestalt Principles in Design
+## Conceptual Knowledge — History & Economics
+
+### 50. The Bretton Woods System & Its Collapse
 
 **Point 1**
-- **Content:** Proximity: elements placed near each other are perceived as a group. This is the most powerful organizing principle in UI design — spacing creates relationships without needing boxes or lines.
-- **Context:** A form label 4px from its input and 24px from the next field is instantly grouped. Equidistant spacing makes everything feel disconnected.
+- **Content:** Bretton Woods (1944): USD pegged to gold at $35/oz, all major currencies pegged to USD. Created the IMF and World Bank.
+- **Context:** 44 allied nations, near end of WWII. Goal: prevent competitive devaluations that worsened the Great Depression.
 
 **Point 2**
-- **Content:** Closure: the brain fills in missing parts of incomplete shapes to perceive a whole. Logos like the WWF panda and IBM's striped letters exploit this — less ink, more memorability.
-- **Context:** This is why you can use dashed lines for containers instead of solid borders, and icon designs can be suggestive rather than literal.
+- **Content:** Collapsed 1971 (Nixon Shock): US ended gold convertibility because reserves couldn't cover dollars held abroad. Triggered today's floating exchange rate system.
+- **Context:** Triffin's dilemma: US had to run deficits to supply dollars, but deficits eroded confidence in the gold backing.
 
 ---
 
-### 38. Rhyme and Meter in Poetry
+## Culinary
+
+### 51. How to Make a Phenomenal Beef Ragù
 
 **Point 1**
-- **Content:** Iambic pentameter is five pairs of unstressed-stressed syllables per line (da-DUM da-DUM da-DUM da-DUM da-DUM). It mirrors natural English speech rhythm, which is why Shakespeare used it.
-- **Context:** "Shall I com-PARE thee TO a SUM-mer's DAY?" — the natural stress pattern already fits. Forced meter feels sing-songy; good meter feels invisible.
+- **Content:** Collagen-rich cuts (chuck, short rib) are essential — collagen converts to gelatin during slow braising (3+ hours), creating body that lean cuts can't produce.
+- **Context:** Large chunks, hard-sear in batches for fond, deglaze with red wine. Soffritto base. Braise in wine + crushed tomato until fork-tender.
 
 **Point 2**
-- **Content:** Slant rhyme (near rhyme) pairs words that almost rhyme but don't perfectly: "moon/bone," "heart/hurt." It creates a feeling of dissonance or unresolved tension that exact rhyme doesn't.
-- **Context:** Emily Dickinson used slant rhyme extensively. It feels more modern and less predictable than perfect rhyme while still creating sonic connection.
-
----
-
-### 39. Film Shot Composition
-
-**Point 1**
-- **Content:** A low-angle shot (camera below the subject, looking up) makes characters appear powerful, dominant, or threatening. A high-angle shot (camera above, looking down) makes them appear small, vulnerable, or insignificant.
-- **Context:** Citizen Kane uses low angles to show Kane's growing power and high angles as he loses it. The camera angle tells you who has power before anyone speaks.
-
-**Point 2**
-- **Content:** Leading lines are visual elements (roads, hallways, fences) that guide the viewer's eye toward the subject or vanishing point, creating depth and directing attention.
-- **Context:** Kubrick's one-point perspective compositions (The Shining's hallways) use extreme leading lines to create unease — everything converges on a single focal point.
-
----
-
-### 40. Principles of Good API Design
-
-**Point 1**
-- **Content:** APIs should be hard to misuse: make the correct usage obvious and incorrect usage difficult. Default parameters should be the safe choice, not the performant one.
-- **Context:** Example: a delete endpoint should require explicit confirmation, not just an ID. `fetch(url)` defaults to GET, the safe method — you must explicitly opt into POST/DELETE.
-
-**Point 2**
-- **Content:** Use consistent naming conventions and resource hierarchies. If `GET /users/123/posts` returns a user's posts, then `GET /users/123/comments` should return their comments — don't mix patterns.
-- **Context:** Predictability reduces the need to read docs. If a developer can guess the endpoint and be right, you've designed well.
-
----
-
-### 41. Negative Space in Art
-
-**Point 1**
-- **Content:** Negative space is the empty area around and between subjects. It's not "wasted" — it defines the subject's shape, creates breathing room, and directs focus. The FedEx logo's arrow between E and x is a famous example.
-- **Context:** Beginners fill every inch; experienced designers use emptiness strategically. Crowded design = no hierarchy. White space = confidence.
-
----
-
-### 42. Dialogue Writing Techniques
-
-**Point 1**
-- **Content:** Good dialogue does at least two things at once: reveals character AND advances plot, or conveys information AND shows relationship dynamics. Dialogue that only does one thing should usually be cut.
-- **Context:** "Pass the salt" tells us nothing. "You always forget the salt" reveals relationship tension. Same information, but the second one works harder.
-
-**Point 2**
-- **Content:** People in real life rarely answer questions directly — they deflect, answer a different question, or respond with emotion rather than information. Dialogue that's too on-the-nose feels artificial.
-- **Context:** "Are you angry?" "Yes, I'm angry." = wooden. "Are you angry?" "I'm going for a walk." = real. Subtext is what makes dialogue feel alive.
-
----
-
-## Affirmation/Mantra (8 sets)
-
-### 43. Deep Work Principles
-
-**Point 1**
-- **Content:** Every time I context-switch, I pay a cognitive tax. It takes ~23 minutes to fully re-engage after an interruption. Protecting blocks of uninterrupted time is not optional — it's how meaningful work happens.
-- **Context:** From Cal Newport's Deep Work and Gloria Mark's research on attention fragmentation. The mantra: "Switching is not free."
-
-**Point 2**
-- **Content:** The shallow tasks (email, Slack, minor requests) will always expand to fill available time. I schedule deep work first, then fit shallow work around it — never the reverse.
-- **Context:** Parkinson's Law applied to attention. If I wait until "things calm down" to do deep work, it will never happen.
-
----
-
-### 44. Radical Acceptance
-
-**Point 1**
-- **Content:** Pain is inevitable; suffering is pain plus non-acceptance. When I resist reality ("this shouldn't be happening"), I add a second layer of anguish on top of the original pain.
-- **Context:** From DBT (Dialectical Behavior Therapy). Acceptance doesn't mean approval — it means acknowledging what is so I can respond effectively instead of fighting the unchangeable.
-
----
-
-### 45. Code for the Reader
-
-**Point 1**
-- **Content:** Code is read 10x more than it is written. Every naming choice, every abstraction, every comment is a gift (or burden) to the next person — who is often future me.
-- **Context:** The mantra: "Write code as if the person maintaining it is a slightly sleep-deprived version of yourself."
-
-**Point 2**
-- **Content:** Clever code is a liability. If a teammate can't understand it in 30 seconds, it's too clever. Boring, obvious code is a feature, not a compromise.
-- **Context:** The "bus factor" argument: if only the author understands it, the team is fragile. Simplicity is a form of respect for collaborators.
-
----
-
-### 46. Discomfort Is Not Danger
-
-**Point 1**
-- **Content:** Feeling uncomfortable does not mean something is wrong. Growth, difficult conversations, and new experiences all produce discomfort. I can feel anxious and still act.
-- **Context:** The distinction matters for anxiety: the body's alarm system fires for both real threats and perceived ones. Courage is not the absence of fear — it's acting despite it.
-
----
-
-### 47. Progress Over Perfection
-
-**Point 1**
-- **Content:** A finished imperfect thing is infinitely more valuable than a perfect thing that doesn't exist. Ship it, learn from it, iterate. Perfectionism is procrastination wearing a mask.
-- **Context:** First pancake principle: the first one is always ugly, but you can't get to the good ones without making it. Done is a feature.
-
----
-
-### 48. Own Your Calendar
-
-**Point 1**
-- **Content:** If I don't decide how to spend my time, other people will decide for me. Every "yes" to a meeting or request is an implicit "no" to something else.
-- **Context:** Greg McKeown's Essentialism: "If it isn't a clear yes, it's a clear no." Default to protecting time, not giving it away.
-
-**Point 2**
-- **Content:** Time-blocking turns intentions into commitments. A task without a calendar block is just a wish. I assign specific time to priorities, not just deadlines.
-- **Context:** Cal Newport's time-blocking method. The goal isn't rigidity — it's having a default plan so that deviations are deliberate choices, not drifting.
-
----
-
-### 49. Beginner's Mind
-
-**Point 1**
-- **Content:** In the beginner's mind there are many possibilities; in the expert's mind there are few. Expertise can become a cage if it prevents me from seeing new approaches.
-- **Context:** Shunryu Suzuki, Zen Mind Beginner's Mind. The practice: approach familiar situations as if encountering them for the first time. Ask "what if I'm wrong about this?"
-
----
-
-### 50. The Compound Effect
-
-**Point 1**
-- **Content:** Small, consistent actions compound over time into massive results. Reading 20 pages daily = ~30 books per year. 1% daily improvement = 37x improvement in a year (1.01^365).
-- **Context:** Darren Hardy's Compound Effect. The inverse is also true: small daily neglects compound into large deficits. The math is neutral — it amplifies whatever direction you're going.
-
-**Point 2**
-- **Content:** The compound effect is invisible in the short term, which is why most people quit. Results are back-loaded — the first 90% of effort produces only 10% of visible results.
-- **Context:** The "plateau of latent potential" from James Clear. Ice melting at 32°F doesn't mean the heating from 20° to 31° was wasted — it was all necessary.
+- **Content:** Toss pasta *in* the ragù (never sauce on top), using starchy pasta water to emulsify into a glossy glaze that clings to every strand.
+- **Context:** Wide textured pasta (pappardelle, tagliatelle). Reserve pasta water before draining. Finish with Parmigiano and olive oil off heat.

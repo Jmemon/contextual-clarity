@@ -32,6 +32,10 @@ import {
   motivationRecallPoints,
   atpRecallSet,
   atpRecallPoints,
+  diverseConceptualSets,
+  diverseProceduralSets,
+  diverseCreativeSets,
+  diverseRemainingSets,
 } from './seeds';
 
 /**
@@ -169,7 +173,7 @@ async function main() {
   const recallPointRepo = new RecallPointRepository(db);
   const scheduler = new FSRSScheduler();
 
-  // Define all seed data sets to process
+  // Define all seed data sets to process (2 original + 51 diverse = 53 total)
   const seedSets: Array<{
     recallSet: RecallSetSeed;
     recallPoints: RecallPointSeed[];
@@ -182,6 +186,10 @@ async function main() {
       recallSet: atpRecallSet,
       recallPoints: atpRecallPoints,
     },
+    ...diverseConceptualSets,
+    ...diverseProceduralSets,
+    ...diverseCreativeSets,
+    ...diverseRemainingSets,
   ];
 
   // Track seeding results
