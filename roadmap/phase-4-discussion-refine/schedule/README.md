@@ -4,6 +4,7 @@
 
 **Deep-dive:** 5 motivation + 5 ATP per round (100 each by end).
 **Diverse:** 10 sets per round, rotating through 5 groups. Each set gets 4 sessions total.
+**Session order:** Interleaved — (1 motivation, 1 ATP, 2 diverse) × 5 per round for variety.
 
 | Group | Sets | Rounds |
 |-------|------|--------|
