@@ -62,6 +62,14 @@ COPY --from=frontend-builder /app/web/dist ./web/dist
 COPY drizzle.config.ts ./
 COPY drizzle/ ./drizzle/
 
+# Copy entrypoint script
+COPY scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
+RUN chmod +x ./scripts/docker-entrypoint.sh
+
+# Create data directory for SQLite database and sources
+# Railway volumes mount at /app/data
+RUN mkdir -p /app/data /app/data/sources
+
 # Set production environment
 ENV NODE_ENV=production
 
@@ -77,6 +85,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
-# Start the Bun server
-# The server will serve both API endpoints and static frontend files
-CMD ["bun", "run", "src/api/server.ts"]
+# Use entrypoint script to run migrations, seed, then start server
+CMD ["./scripts/docker-entrypoint.sh"]

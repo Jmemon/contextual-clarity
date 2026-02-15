@@ -1,0 +1,12 @@
+[build]
+# Use Dockerfile for building
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Health check endpoint
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# Restart policy
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

@@ -200,12 +200,13 @@ export function validateConfig(): void {
       missingVars.push('ANTHROPIC_API_KEY');
     }
 
-    // In production, database type should be postgres
+    // In production, PostgreSQL is recommended but SQLite works for single-user deployments
+    // with a persistent volume (e.g., Railway volumes)
     if (config.database.type === 'sqlite') {
-      invalidVars.push({
-        name: 'DATABASE_TYPE',
-        reason: 'SQLite is not recommended for production. Use DATABASE_TYPE=postgres',
-      });
+      console.warn(
+        '[config] WARNING: Using SQLite in production. This is fine for single-user deployments ' +
+        'with a persistent volume, but not recommended for multi-user or high-availability setups.'
+      );
     }
 
     // Validate DATABASE_URL format for postgres
