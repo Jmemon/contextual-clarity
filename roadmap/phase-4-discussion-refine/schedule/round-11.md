@@ -3,24 +3,24 @@
 
 - [ ] Motivation #51
 - [ ] ATP #51
-- [ ] Cognitive Biases (3/4)
-- [ ] French Revolution (3/4)
+- [ ] Atomic Habits: The Habit Loop (3/4)
+- [ ] Caffeine & Adenosine (3/4)
 - [ ] Motivation #52
 - [ ] ATP #52
-- [ ] Plate Tectonics (3/4)
-- [ ] Supply & Demand (3/4)
+- [ ] Central Limit Theorem (3/4)
+- [ ] Existentialism: Radical Freedom (3/4)
 - [ ] Motivation #53
 - [ ] ATP #53
-- [ ] Stoic Philosophy (3/4)
-- [ ] mRNA Vaccines (3/4)
+- [ ] How SSDs Store Data (3/4)
+- [ ] Git Reflog & Recovery (3/4)
 - [ ] Motivation #54
 - [ ] ATP #54
-- [ ] Krebs Cycle (3/4)
-- [ ] Constitutional Amendments (3/4)
+- [ ] Spaced Repetition: The Forgetting Curve (3/4)
+- [ ] How Mushroom Mycelium Networks Work (3/4)
 - [ ] Motivation #55
 - [ ] ATP #55
-- [ ] Attachment Theory (3/4)
-- [ ] Thermodynamics (3/4)
+- [ ] Compound Interest (3/4)
+- [ ] The Rule of Thirds in Composition (3/4)
 
 **Notes:**
 

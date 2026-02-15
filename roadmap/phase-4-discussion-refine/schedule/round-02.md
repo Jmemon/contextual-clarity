@@ -3,24 +3,24 @@
 
 - [ ] Motivation #6
 - [ ] ATP #6
-- [ ] Cold War Proxies (1/4)
-- [ ] Neuroplasticity (1/4)
+- [ ] Dunning-Kruger Effect (1/4)
+- [ ] How Muscle Growth Works (1/4)
 - [ ] Motivation #7
 - [ ] ATP #7
-- [ ] Game Theory (1/4)
-- [ ] Ottoman Decline (1/4)
+- [ ] Shannon Entropy (1/4)
+- [ ] Kafka's Metamorphosis as Alienation (1/4)
 - [ ] Motivation #8
 - [ ] ATP #8
-- [ ] Macronutrient Metabolism (1/4)
-- [ ] Logical Fallacies (1/4)
+- [ ] How Vinyl Records Encode Stereo Sound (1/4)
+- [ ] TypeScript Generics (1/4)
 - [ ] Motivation #9
 - [ ] ATP #9
-- [ ] Quantum Mechanics (1/4)
-- [ ] Sleep Architecture (1/4)
+- [ ] Dopamine & Motivation (1/4)
+- [ ] Color Temperature in Lighting (1/4)
 - [ ] Motivation #10
 - [ ] ATP #10
-- [ ] Binary Search (1/4)
-- [ ] Deglazing a Pan (1/4)
+- [ ] The Bretton Woods System & Its Collapse (1/4)
+- [ ] Ujjayi Breath & Vagal Tone (1/4)
 
 **Notes:**
 

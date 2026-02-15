@@ -3,24 +3,24 @@
 
 - [ ] Motivation #36
 - [ ] ATP #36
-- [ ] TCP Handshake (2/4)
-- [ ] Long Division (2/4)
+- [ ] Sunk Cost Fallacy (2/4)
+- [ ] Sleep & Memory Consolidation (2/4)
 - [ ] Motivation #37
 - [ ] ATP #37
-- [ ] CPR Sequence (2/4)
-- [ ] Git Rebase (2/4)
+- [ ] Definition of a Group (Abstract Algebra) (2/4)
+- [ ] Borges & The Library of Babel (2/4)
 - [ ] Motivation #38
 - [ ] ATP #38
-- [ ] Espresso (2/4)
-- [ ] SQL Joins (2/4)
+- [ ] How Docker Containers Actually Isolate (2/4)
+- [ ] How Espresso Extraction Works (2/4)
 - [ ] Motivation #39
 - [ ] ATP #39
-- [ ] Changing a Tire (2/4)
-- [ ] Bread Fermentation (2/4)
+- [ ] React Re-rendering Mental Model (2/4)
+- [ ] Contour Drawing & Negative Space (2/4)
 - [ ] Motivation #40
 - [ ] ATP #40
-- [ ] React Lifecycle (2/4)
-- [ ] Math Induction (2/4)
+- [ ] The Gut-Brain Axis (2/4)
+- [ ] How LLM Tokenization Works (2/4)
 
 **Notes:**
 

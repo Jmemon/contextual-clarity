@@ -3,24 +3,24 @@
 
 - [ ] Motivation #21
 - [ ] ATP #21
-- [ ] Negative Space (1/4)
-- [ ] Dialogue Writing (1/4)
+- [ ] Transference in Psychoanalysis (1/4)
+- [ ] Sarcomere Contraction (Sliding Filament Theory) (1/4)
 - [ ] Motivation #22
 - [ ] ATP #22
-- [ ] Deep Work (1/4)
-- [ ] Radical Acceptance (1/4)
+- [ ] Eigenvectors Geometrically (1/4)
+- [ ] Negative Capability (Keats) (1/4)
 - [ ] Motivation #23
 - [ ] ATP #23
-- [ ] Code for the Reader (1/4)
-- [ ] Discomfort ≠ Danger (1/4)
+- [ ] Superposition & Mechanistic Interpretability (1/4)
+- [ ] Persistent Homology (1/4)
 - [ ] Motivation #24
 - [ ] ATP #24
-- [ ] Progress Over Perfection (1/4)
-- [ ] Own Your Calendar (1/4)
+- [ ] Mind-Muscle Connection (1/4)
+- [ ] Proprioception & Balance (1/4)
 - [ ] Motivation #25
 - [ ] ATP #25
-- [ ] Beginner's Mind (1/4)
-- [ ] Compound Effect (1/4)
+- [ ] Gödel's Incompleteness Theorems (1/4)
+- [ ] How the Fourier Transform Decomposes Signals (1/4)
 
 **Notes:**
 
