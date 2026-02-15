@@ -1,0 +1,49 @@
+# =============================================================================
+# Fly.io Deployment Configuration for Contextual Clarity
+# =============================================================================
+# Deploy with: fly deploy
+#
+# First-time setup:
+#   fly launch --no-deploy
+#   fly volumes create cc_data --size 1 --region <your-region>
+#   fly secrets set ANTHROPIC_API_KEY=sk-ant-...
+#   fly deploy
+#
+# The SQLite database lives on a persistent volume mounted at /data.
+# =============================================================================
+
+app = 'contextual-clarity'
+primary_region = 'ewr'
+
+[build]
+
+[env]
+  NODE_ENV = 'production'
+  DATABASE_TYPE = 'sqlite'
+  DATABASE_URL = '/data/discussion-refine.db'
+  PORT = '3000'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[mounts]
+  source = 'cc_data'
+  destination = '/data'
+
+[checks]
+  [checks.health]
+    type = 'http'
+    port = 3000
+    path = '/health'
+    interval = '30s'
+    timeout = '5s'

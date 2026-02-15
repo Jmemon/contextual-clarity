@@ -8,7 +8,10 @@
 #
 # Usage:
 #   docker build -t contextual-clarity .
-#   docker run -p 3000:3000 --env-file .env.production contextual-clarity
+#   docker run -p 3000:3000 -v cc-data:/data --env-file .env.production contextual-clarity
+#
+# The SQLite database is stored at /data/discussion-refine.db by default.
+# Mount a volume at /data for persistence.
 #
 # =============================================================================
 
@@ -62,8 +65,19 @@ COPY --from=frontend-builder /app/web/dist ./web/dist
 COPY drizzle.config.ts ./
 COPY drizzle/ ./drizzle/
 
-# Set production environment
+# Copy the entrypoint script
+COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
+# Create the data directory for SQLite persistence
+# Mount a volume here: -v cc-data:/data
+RUN mkdir -p /data
+
+# Set production environment defaults
 ENV NODE_ENV=production
+ENV DATABASE_TYPE=sqlite
+ENV DATABASE_URL=/data/discussion-refine.db
+ENV PORT=3000
 
 # Expose the server port
 EXPOSE 3000
@@ -77,6 +91,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
-# Start the Bun server
-# The server will serve both API endpoints and static frontend files
-CMD ["bun", "run", "src/api/server.ts"]
+# Use entrypoint script to run migrations + seed before starting server
+CMD ["./docker-entrypoint.sh"]

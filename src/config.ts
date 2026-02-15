@@ -200,12 +200,13 @@ export function validateConfig(): void {
       missingVars.push('ANTHROPIC_API_KEY');
     }
 
-    // In production, database type should be postgres
+    // In production, database type should ideally be postgres for multi-instance deployments.
+    // SQLite is acceptable for single-instance personal deployments (e.g., Fly.io with a volume).
     if (config.database.type === 'sqlite') {
-      invalidVars.push({
-        name: 'DATABASE_TYPE',
-        reason: 'SQLite is not recommended for production. Use DATABASE_TYPE=postgres',
-      });
+      console.warn(
+        '[config] Warning: SQLite in production is fine for single-instance personal use, ' +
+        'but not recommended for multi-instance deployments.'
+      );
     }
 
     // Validate DATABASE_URL format for postgres
