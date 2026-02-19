@@ -75,9 +75,20 @@ voiceRoutes.get('/deepgram-token', async (c) => {
     const deepgram = createClient(apiKey);
 
     // Create a temporary API key with limited scope and short TTL
+    // NOTE: createProjectKey() requires a valid project ID — an empty string will fail.
+    // The project ID can be obtained from the Deepgram dashboard or via the API:
+    //   const { result: projects } = await deepgram.manage.getProjects();
+    //   const projectId = projects.projects[0].project_id;
+    // Alternatively, use the newer Deepgram SDK's key management API that infers
+    // the project from the API key. Check the current @deepgram/sdk version docs.
+    const { result: projects } = await deepgram.manage.getProjects();
+    const projectId = projects.projects[0]?.project_id;
+    if (!projectId) {
+      return c.json({ error: 'No Deepgram project found' }, 500);
+    }
+
     const { result } = await deepgram.manage.createProjectKey(
-      // Project ID is inferred from the API key
-      '', // project ID — Deepgram SDK may handle this automatically
+      projectId,
       {
         comment: 'Temporary browser transcription key',
         scopes: ['usage:write'],  // Minimal scope: only allows transcription
@@ -100,13 +111,15 @@ export { voiceRoutes };
 
 **Alternative approach** (if Deepgram temporary key creation is not straightforward): Use the backend as a WebSocket proxy. The frontend sends audio chunks to the backend's WebSocket, and the backend forwards them to Deepgram. This is more complex but keeps the API key completely hidden. The task implementer should evaluate which approach is simpler with the current Deepgram SDK version and choose accordingly. The token endpoint approach is preferred if Deepgram supports it cleanly.
 
-**Register route** (MODIFY: `src/api/server.ts`):
+**Register route** (MODIFY: `src/api/routes/index.ts`):
+
+Routes are registered via `createApiRouter()` in `src/api/routes/index.ts`, NOT directly in `src/api/server.ts`. Add the voice routes there:
 
 ```typescript
-import { voiceRoutes } from './routes/voice';
+import { voiceRoutes } from './voice';
 
-// In the route registration section:
-app.route('/api/voice', voiceRoutes);
+// Inside createApiRouter():
+app.route('/voice', voiceRoutes);
 ```
 
 ### 2. Deepgram Client (CREATE: `src/core/voice/deepgram-client.ts`)
@@ -1059,7 +1072,7 @@ Run: `bun add @deepgram/sdk`
 | MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Replace `MessageInput` with `VoiceInput`; remove evaluation hint text |
 | MODIFY | `web/src/components/live-session/MessageInput.tsx` | No direct changes — kept as-is for potential reuse, but no longer imported by SessionContainer |
 | MODIFY | `src/config.ts` | Add `deepgram.apiKey` to config schema and environment loading |
-| MODIFY | `src/api/server.ts` | Register `/api/voice` route for Deepgram token endpoint |
+| MODIFY | `src/api/routes/index.ts` | Register `/voice` route in `createApiRouter()` for Deepgram token endpoint |
 | MODIFY | `package.json` (via `bun add @deepgram/sdk`) | Add `@deepgram/sdk` as a runtime dependency |
 
 ---
@@ -1105,3 +1118,19 @@ Run: `bun add @deepgram/sdk`
 19. **Deepgram model**: The Deepgram WebSocket URL uses `model=nova-2` for the best accuracy and speed. `smart_format=true` and `punctuate=true` are enabled for natural text output.
 
 20. **MessageInput preserved**: The original `MessageInput.tsx` file is not deleted. It is no longer imported by `SessionContainer` but remains in the codebase for potential reuse in session replay or other features.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: Deepgram `createProjectKey()` requires a valid project ID**
+> The original code passed `''` (empty string) as the project ID to `deepgram.manage.createProjectKey()`. This will fail. You must first retrieve the project ID via `deepgram.manage.getProjects()` or use a newer SDK method that infers the project from the API key. The code above has been corrected.
+
+> **WARNING: Stale closure bugs in `useVoiceInput` hook**
+> The `startRecording` callback closes over `state` and `transcription`. Inside `dgSocket.onclose`, it reads `state` and `transcription` — but these are stale by the time the socket closes (React state closures capture the value at callback creation time). Use refs (`stateRef`, `transcriptionRef`) for values read inside async callbacks, and only use state for rendering.
+
+> **WARNING: Correction mode disconnect**
+> In section 7's `handleMicTap`, when `voiceState === 'review'` and the user taps mic for correction mode, `startRecording()` is called again. But the new recording's `onFinalTranscription` callback (set in the hook options) is the same callback that sets `reviewText` — it will REPLACE the review text with the correction instruction instead of processing it. The correction flow needs a separate code path: detect that we're in correction mode, and when the second recording finishes, call `onProcessCorrection(reviewText, newTranscription)` instead of `onProcessTranscription()`.
+
+> **WARNING: Route registration is in `src/api/routes/index.ts`**
+> Routes are registered via `createApiRouter()` in `src/api/routes/index.ts`, not directly in `src/api/server.ts`. This has been corrected above and in the Relevant Files table.

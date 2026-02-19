@@ -602,6 +602,7 @@ if (session.status === 'paused') {
 | CREATE | Drizzle migration file (auto-generated path) | Schema migration for the new column and status value |
 | MODIFY | `src/storage/repositories/session.repository.ts` | Add `pause()`, `updateRecalledPointIds()`, `updateStatus()` methods. Update `findActiveSession()` to include `'paused'` status. |
 | MODIFY | `src/core/session/session-engine.ts` | Add `pauseSession()`, `onRabbitHoleExit()`, `completionPending` flag. Update `markPointRecalled()` to persist state. Update `resumeSession()` to reconstruct checklist from DB. Add auto-end check in `processUserMessage()`. Add `isInRabbitHole()` stub. |
+| MODIFY | `src/core/models/session.ts` | The `SessionStatus` type union (`'in_progress' \| 'completed' \| 'abandoned'`) lives here at line 31. Update it to include `'paused'`. |
 | MODIFY | `src/core/session/types.ts` | Add `session_complete_overlay` and `session_paused` event types with payload types |
 | MODIFY | `src/api/ws/types.ts` | Replace `end_session` client message with `leave_session`. Add `session_complete_overlay` and `session_paused` server message types. |
 | MODIFY | `src/api/ws/session-handler.ts` | Replace `handleEndSession()` with `handleLeaveSession()`. Forward `session_complete_overlay` events. Update message handler switch. |
@@ -635,3 +636,19 @@ if (session.status === 'paused') {
 15. **"I've got it!" button is gone**: Verified absent (removed in T06).
 16. **"End Session" button is gone**: Replaced entirely by "Leave Session".
 17. **Completion overlay does not auto-navigate**: The overlay is informational with two choices. It does not automatically end or navigate. The user decides.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: `SessionStatus` type lives in `src/core/models/session.ts`**
+> The `SessionStatus` type union (`'in_progress' | 'completed' | 'abandoned'`) is defined at line 31 of `src/core/models/session.ts`, NOT in `src/core/session/types.ts`. When adding `'paused'`, update it in the correct file. The Relevant Files table above has been updated to include this file.
+
+> **WARNING: `handleOpen()` in `session-handler.ts` rejects non-`in_progress` sessions**
+> The WebSocket `handleOpen()` method in `src/api/ws/session-handler.ts` checks `session.status !== 'in_progress'` and rejects the connection if so. When implementing session resume for `'paused'` sessions, you must also update this guard to accept `'paused'` status (and then transition the session to `'in_progress'` upon successful reconnection).
+
+> **WARNING: `findInProgress()` method**
+> The session repository method `findInProgress()` filters by `status = 'in_progress'` only. Section 2 proposes `findActiveSession()` to also find `'paused'` sessions. Verify the actual method name and signature in `src/storage/repositories/session.repository.ts` before implementing — it may be named differently (e.g., `findActive()`, `findByRecallSetId()`).
+
+> **WARNING: `completeSession()` accessibility**
+> Section 9 references `this.engine.completeSession()`. The existing method may be private or have a different name (e.g., `abandonSession()`). Check `SessionEngine`'s public API to see what session completion methods are available, or add a new public `completeSession()` method.

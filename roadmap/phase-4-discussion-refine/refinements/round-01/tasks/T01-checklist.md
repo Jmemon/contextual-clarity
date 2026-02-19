@@ -160,7 +160,8 @@ private async recordRecallOutcome(
   const point = this.targetPoints.find(p => p.id === pointId);
   if (!point) return;
 
-  const schedulingResult = this.scheduler.schedule(point, rating);
+  // NOTE: scheduler.schedule() takes FSRSState, not the full RecallPoint object
+  const schedulingResult = this.scheduler.schedule(point.fsrsState, rating);
   await this.recallPointRepo.updateFSRSState(pointId, schedulingResult);
 }
 ```
@@ -190,7 +191,7 @@ Replace the current return value to expose checklist state:
 getSessionState(): SessionState {
   return {
     session: this.currentSession,
-    recallSet: this.recallSet,
+    recallSet: this.currentRecallSet,
     // New checklist fields — replace currentPointIndex
     pointChecklist: Object.fromEntries(this.pointChecklist),
     currentProbeIndex: this.currentProbeIndex,
@@ -205,7 +206,7 @@ getSessionState(): SessionState {
 }
 ```
 
-Update the `SessionState` type in `types.ts` to match.
+**CREATE** a `SessionState` type in `types.ts` to match (this type does not currently exist as a named export — it is currently an anonymous inline return type on `getSessionState()` and must be created as a new named interface).
 
 ### 7. `updateLLMPrompt()` Change (line ~1028)
 
@@ -214,7 +215,7 @@ Currently calls `buildSocraticTutorPrompt({recallSet, targetPoints, currentPoint
 ```typescript
 private updateLLMPrompt(): void {
   const systemPrompt = buildSocraticTutorPrompt({
-    recallSet: this.recallSet!,
+    recallSet: this.currentRecallSet!,
     targetPoints: this.targetPoints,
     uncheckedPoints: this.getUncheckedPoints(),
     currentProbePoint: this.getNextProbePoint(),
@@ -338,6 +339,7 @@ Do NOT emit the old `point_started` / `point_completed` events in the linear sen
 | MODIFY | `src/api/ws/types.ts` | Add `point_recalled` to `ServerMessage` union type |
 | MODIFY | `src/api/ws/session-handler.ts` | Update session state reporting to use checklist data instead of index |
 | MODIFY | `web/src/hooks/use-session-websocket.ts` | Handle `point_recalled` messages, replace `currentPointIndex` tracking with `recalledCount`/`totalPoints` |
+| MODIFY | `src/cli/commands/session.ts` | Update 4 references to `currentPointIndex` (lines ~116, 215, 312, 336) to use new checklist-based state (`recalledCount`/`totalPoints`). **This file is critical — it will fail to compile if `currentPointIndex` is removed without updating these references.** |
 
 ---
 
@@ -359,3 +361,16 @@ Do NOT emit the old `point_started` / `point_completed` events in the linear sen
 14. **FSRS integration**: `recordRecallOutcome()` is a standalone method that can be called for any point at any time, not coupled to linear index advancement.
 15. **Frontend**: WebSocket hook tracks `recalledCount` and `totalPoints` instead of `currentPointIndex`. The `point_recalled` message type is handled.
 16. **No behavioral regression**: The session still functions end-to-end — user can start a session, chat, have points evaluated (via existing mechanism until T06 replaces it), and complete the session.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: `point_transition` payload mismatch (pre-existing bug)**
+> The server currently sends `{ currentPointIndex, pointsRemaining }` in `point_transition` messages, but the frontend expects `{ nextPointIndex, totalPoints }`. This is a pre-existing mismatch that this task should reconcile when replacing `currentPointIndex` with checklist-based data. Ensure the new `point_recalled` event payload matches what the frontend will consume.
+
+> **WARNING: `ProcessMessageResult` shape change cascades**
+> Removing `currentPointIndex` from `ProcessMessageResult` and adding `recalledCount`/`totalPoints`/`pointsRecalledThisTurn` will break `session-handler.ts` (lines ~403-411) which reads `result.pointAdvanced` and `result.currentPointIndex`. The handler code MUST be updated in this task to read the new fields. Downstream tasks T06, T08, and T09 also consume this type — coordinate field names.
+
+> **WARNING: `src/cli/commands/session.ts` must be updated**
+> This file reads `currentPointIndex` at 4 locations (lines ~116, 215, 312, 336). If `currentPointIndex` is removed from the engine without updating this file, the backend will fail to compile. Add this file to the MODIFY scope.

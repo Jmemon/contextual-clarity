@@ -82,10 +82,14 @@ export class RabbitholeAgent {
   async generateResponse(userMessage: string): Promise<string> {
     this.messages.push({ role: 'user', content: userMessage });
 
-    const response = await this.llmClient.complete(this.systemPrompt, {
-      messages: this.messages,
-      // Use the same model as the main session for quality
-    });
+    // NOTE: AnthropicClient.complete() signature is:
+    //   complete(messages: string | LLMMessage[], config?: LLMConfig): Promise<LLMResponse>
+    // It does NOT take (systemPrompt, { messages }) as two args.
+    // The system prompt should be set on the client instance's systemPrompt property,
+    // or prepended as a system message in the messages array.
+    // Set the system prompt on the client instance before calling complete():
+    this.llmClient.systemPrompt = this.systemPrompt;
+    const response = await this.llmClient.complete(this.messages);
 
     this.messages.push({ role: 'assistant', content: response.text });
     return response.text;
@@ -96,14 +100,14 @@ export class RabbitholeAgent {
    * Called immediately after the user opts in, before they send a message.
    */
   async generateOpeningMessage(): Promise<string> {
-    const opening = await this.llmClient.complete(this.systemPrompt, {
-      messages: [
-        {
-          role: 'user',
-          content: `I'm curious about ${this.topic}. Tell me more.`,
-        },
-      ],
-    });
+    // NOTE: Set systemPrompt on client instance, then call complete() with messages only
+    this.llmClient.systemPrompt = this.systemPrompt;
+    const opening = await this.llmClient.complete([
+      {
+        role: 'user',
+        content: `I'm curious about ${this.topic}. Tell me more.`,
+      },
+    ]);
 
     this.messages.push({
       role: 'user',
@@ -208,8 +212,9 @@ async enterRabbithole(topic: string, rabbitholeEventId: string): Promise<string>
 
   this.activeRabbitholeAgent = new RabbitholeAgent({
     topic,
-    recallSetName: this.recallSet!.name,
-    recallSetDescription: this.recallSet!.description,
+    // NOTE: The property is this.currentRecallSet, NOT this.recallSet
+    recallSetName: this.currentRecallSet!.name,
+    recallSetDescription: this.currentRecallSet!.description,
     llmClient: this.llmClient,
   });
 
@@ -233,7 +238,12 @@ async exitRabbithole(): Promise<{ completionPending: boolean }> {
   // Store the rabbit hole conversation in the database
   const conversation = this.activeRabbitholeAgent.getConversationHistory();
   if (this.activeRabbitholeEventId) {
-    await this.rabbitholeEventRepo.updateConversation(
+    // NOTE: The property is this.rabbitholeRepo, NOT this.rabbitholeEventRepo.
+    // Also, rabbitholeRepo.update() only accepts { returnMessageIndex, depth, status, relatedRecallPointIds }.
+    // There is no updateConversation() method — you must either:
+    // 1. Add a new method to RabbitholeEventRepository for storing conversation JSON, or
+    // 2. Add a conversation column to the schema (section 10) AND a new repository method.
+    await this.rabbitholeRepo.updateConversation(
       this.activeRabbitholeEventId,
       conversation
     );
@@ -263,7 +273,9 @@ async processRabbitholeMessage(content: string): Promise<string> {
 
   // Run evaluator silently in rabbithole mode — checks if user accidentally recalled any points
   // The evaluator returns tagged points but no steering feedback
-  const evalResult = await this.evaluator.evaluate(content, this.getUncheckedPoints(), 'rabbithole');
+  // NOTE: Use evaluateBatch() (from T06), not evaluate(). The evaluate() method is for single-point evaluation.
+  // Also, evaluateBatch() takes (uncheckedPoints, conversationMessages, mode) — not (content, points, mode).
+  const evalResult = await this.evaluator.evaluateBatch(this.getUncheckedPoints(), this.messages, 'rabbithole');
   if (evalResult.recalledPointIds.length > 0) {
     for (const pointId of evalResult.recalledPointIds) {
       this.markPointRecalled(pointId);
@@ -331,12 +343,14 @@ New private method:
  * @returns A short label suitable for UI display (e.g., "Adenosine Tolerance", "Free Will Debate")
  */
 private async generateLabel(topic: string): Promise<string> {
+  // NOTE: AnthropicClient.complete() takes (messages, config?) — not (prompt, config)
+  // The model ID must be a valid Anthropic model string, not just 'haiku'
   const response = await this.llmClient.complete(
     `Generate a 2-4 word label for this topic. Return ONLY the label, no quotes, no explanation.\n\nTopic: ${topic}`,
     {
       temperature: 0.3,
       maxTokens: 20,
-      model: 'haiku', // Use Haiku for speed and cost
+      model: 'claude-haiku-4-5-20251001',
     }
   );
   return response.text.trim();
@@ -641,3 +655,25 @@ Multiple rabbit holes can occur in a single session, but they are sequential, no
 17. **No rabbit hole during first 2 messages**: Rabbit hole detection should not trigger during the first 2 message exchanges of a session (the detector already has a minimum message check, but verify this behavior is preserved).
 
 18. **Opening message on entry**: When entering a rabbit hole, the agent generates an opening message that sets the exploratory tone. This message is streamed to the client using the same `assistant_chunk` / `assistant_complete` infrastructure as the main session.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: `this.currentRecallSet` NOT `this.recallSet`**
+> The `SessionEngine` property is named `this.currentRecallSet`, not `this.recallSet`. This has been corrected in the `enterRabbithole()` code above.
+
+> **WARNING: `this.rabbitholeRepo` NOT `this.rabbitholeEventRepo`**
+> The `SessionEngine` (and `session-handler.ts`) property is named `this.rabbitholeRepo`, not `this.rabbitholeEventRepo`. This has been corrected in the `exitRabbithole()` code above.
+
+> **WARNING: `RabbitholeEventRepository.update()` limited fields**
+> The existing `update()` method in `src/storage/repositories/rabbithole-event.repository.ts` only accepts `{ returnMessageIndex, depth, status, relatedRecallPointIds }`. There is no `updateConversation()` method. You must add a new method to the repository for storing the conversation JSON column (from section 10's schema change).
+
+> **WARNING: `AnthropicClient` is stateful**
+> The `RabbitholeAgent` sets `this.llmClient.systemPrompt` before each call. If this client instance is shared with the session engine, this will overwrite the tutor's system prompt. Either create a dedicated `AnthropicClient` instance for the rabbit hole agent, or save/restore the system prompt around calls. The code examples above have been corrected to use the `systemPrompt` property approach.
+
+> **WARNING: Haiku model ID**
+> The shorthand `'haiku'` is not a valid Anthropic model ID. Use `'claude-haiku-4-5-20251001'` (or the current equivalent). This has been corrected in the `generateLabel()` code above.
+
+> **WARNING: `EnterRabbitholePayload` needs `rabbitholeEventId` and `topic`**
+> In section 8, `EnterRabbitholePayload` includes `rabbitholeEventId` and `topic` fields. But in section 9's handler code (line `engine.enterRabbithole(message.topic, message.rabbitholeEventId)`), these fields are read from the client message. This is correct — the client needs to echo back the `rabbitholeEventId` from the `rabbithole_detected` server message. Ensure the frontend stores the detected event's ID and sends it back.

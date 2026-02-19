@@ -209,7 +209,9 @@ Extracts domain-specific terms from a recall set's points at session start. The 
 
 ```typescript
 import type { AnthropicClient } from '../../llm/client';
-import type { RecallSet, RecallPoint } from '../session/types'; // Adjust import path to actual types location
+import type { RecallSet } from '../models/recall-set';   // Actual location of RecallSet type
+import type { RecallPoint } from '../models/recall-point'; // Actual location of RecallPoint type
+// NOTE: RecallSet and RecallPoint live in src/core/models/, NOT in src/core/session/types.ts
 
 /**
  * Extracts domain-specific terminology from a recall set's recall points.
@@ -225,12 +227,16 @@ import type { RecallSet, RecallPoint } from '../session/types'; // Adjust import
  * @param llmClient - AnthropicClient instance configured for Haiku
  * @returns Array of domain-specific terms
  */
+// NOTE: RecallSet does NOT have an embedded `recallPoints` array. Points are stored
+// in a separate table with a `recallSetId` FK. The caller must fetch points separately
+// and pass them as the second argument.
 async function extractTerminology(
-  recallSet: { name: string; recallPoints: Array<{ content: string; context?: string }> },
+  recallSet: { name: string },
+  recallPoints: Array<{ content: string; context?: string }>,
   llmClient: AnthropicClient
 ): Promise<string[]> {
   // Combine all recall point content and context into a single text block
-  const pointTexts = recallSet.recallPoints
+  const pointTexts = recallPoints
     .map((p, i) => {
       const parts = [`${i + 1}. ${p.content}`];
       if (p.context) parts.push(`   Context: ${p.context}`);
@@ -718,3 +724,19 @@ For typed input before T10 exists: the pipeline can optionally run on typed text
 19. **Corrections tracked**: Every correction made by the pipeline is recorded in the `corrections` array with `{original, corrected}`. This allows optional display of "Did you mean X? Changed from Y." in the UI (not required for this task, but the data must be available).
 
 20. **No regression in text-only messages**: Messages that contain no LaTeX or code render identically to the current behavior — plain text with preserved whitespace. The `FormattedText` component does not alter the appearance of plain text messages.
+
+---
+
+## Implementation Warnings
+
+> **CRITICAL: Shared `AnthropicClient` is stateful**
+> `AnthropicClient` stores a `systemPrompt` field that is applied to all `complete()` calls made through that instance. If the transcription pipeline shares the session's `AnthropicClient` instance, Haiku calls will carry the recall tutor's system prompt, producing incorrect behavior. **Solution:** Create a separate `AnthropicClient` instance for the pipeline, configured with no system prompt (or a minimal transcription-specific prompt). Alternatively, if the client supports per-call system prompt override, use that.
+
+> **CRITICAL: Haiku model specification**
+> The pipeline says "use Haiku for speed and cost" but the `complete()` method uses whatever model the client is configured with. The `LLMConfig` type has a `model` field. Pipeline calls must pass `{ model: 'claude-haiku-4-5-20251001' }` (or the appropriate Haiku model ID constant) as the config parameter: `this.llmClient.complete(prompt, { model: HAIKU_MODEL_ID })`. The shorthand `'haiku'` is NOT a valid Anthropic model ID.
+
+> **WARNING: `recallSet.recallPoints` does not exist**
+> The `RecallSet` model type has no embedded `recallPoints` array. Recall points are stored in a separate table with a `recallSetId` FK. The `extractTerminology()` function must accept recall points as a separate parameter, fetched by the caller via `RecallPointRepository.findByRecallSetId()`.
+
+> **WARNING: Barrel export path**
+> The barrel export `src/core/transcription/index.ts` must update `extractTerminology` to reflect the corrected function signature (separate `recallPoints` parameter).

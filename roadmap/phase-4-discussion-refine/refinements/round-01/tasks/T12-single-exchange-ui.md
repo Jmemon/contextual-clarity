@@ -559,3 +559,16 @@ There is intentionally no way for the user to scroll up and see previous exchang
 19. **Empty state before first message**: Before the AI's first message arrives (during initial connection), the view shows "Starting session..." centered text. No chat bubbles, no "Connecting to your study session..." in a chat format.
 
 20. **Phase state machine is correct**: The `ExchangePhase` transitions follow this strict order: `showing_ai` -> `user_sent` (200-400ms) -> `loading` -> `ai_streaming` -> `showing_ai` (repeat). No phase can be skipped. No two phases render simultaneously. If props change unexpectedly (e.g., streaming starts before loading is shown), the component handles it gracefully by jumping to the appropriate phase.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: `FormattedText` component dependency on T03**
+> `SingleExchangeView` imports `FormattedText` from `'../shared/FormattedText'`. This component is created by T03 (Transcription Processing Pipeline) — it does not currently exist in the codebase. T12 has a hard dependency on T10 (Voice Input) but only a soft/implicit dependency on T03 for `FormattedText`. If T03 has not landed when T12 is implemented, either:
+> 1. Create a minimal `FormattedText` stub that just renders `<span>{content}</span>`, or
+> 2. Render the content directly without the `FormattedText` wrapper and add it later.
+> Document this dependency clearly.
+
+> **WARNING: `UseSessionWebSocketReturn` interface needs updating**
+> The hook's returned object type (`UseSessionWebSocketReturn` in `use-session-websocket.ts`) must be updated to include the three new fields: `latestAssistantMessage`, `lastSentUserMessage`, and `isOpeningMessage`. The current interface does not include these. If T12 is implemented before the return type is updated, TypeScript will error when destructuring these fields in `SessionContainer.tsx`.

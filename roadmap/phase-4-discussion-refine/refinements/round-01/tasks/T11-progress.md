@@ -444,6 +444,9 @@ const [isInRabbithole, setIsInRabbithole] = useState(false);
 const [pendingRecallAnimations, setPendingRecallAnimations] = useState(0);
 
 // Handler additions in the message handler switch:
+// NOTE: The WS event name is 'recall_point_recalled' (with recall_ prefix), matching T13's event catalog.
+// T01 emits 'point_recalled' from the engine, but the WS server message type is 'recall_point_recalled'.
+// Ensure consistency between engine event names and WS message type names.
 case 'recall_point_recalled':
   if (isInRabbithole) {
     // Buffer the animation — don't update recalledCount visually yet
@@ -457,6 +460,8 @@ case 'rabbithole_entered':
   setIsInRabbithole(true);
   break;
 
+// NOTE: The rabbithole_exited payload (per T09/T13) has { label, pointsRecalledDuring },
+// NOT { label, completionPending }. Use pointsRecalledDuring for buffer flush count.
 case 'rabbithole_exited':
   setIsInRabbithole(false);
   // Flush buffered recalls
@@ -538,3 +543,19 @@ function playProgrammaticChime() {
 15. **Sound file**: Either a real MP3 file exists at `web/public/sounds/recall-chime.mp3`, or a programmatic Web Audio API fallback is implemented that produces a pleasant chime.
 16. **Integration**: `SessionContainer.tsx` passes all required props to the new `SessionProgress`. The WebSocket hook provides the necessary state values.
 17. **Build passes**: `bun run build` in `web/` completes without errors. No TypeScript type errors from the new props interface.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: WS event name mismatch — `point_recalled` vs `recall_point_recalled`**
+> T01 emits `'point_recalled'` from the session engine. T13's final event catalog uses `'recall_point_recalled'` as the WS server message type. Ensure the WebSocket handler translates between these names, or ensure T01 and T13 agree on the same name. The handler code in section 11 uses `'recall_point_recalled'` (the WS message type), which is correct for the frontend.
+
+> **WARNING: Timer may have stale closure bug**
+> Section 6 references `useSessionTimer` hook at lines 48-59 of `SessionContainer.tsx`. If the timer uses `setInterval` inside a `useEffect` that captures `elapsedSeconds` in a closure, the timer will not increment correctly (stale value captured). Verify that the existing timer uses a ref or functional `setState(prev => prev + 1)` pattern.
+
+> **WARNING: `rabbithole_exited` payload structure**
+> The `rabbithole_exited` WS message payload (per T09/T13) contains `{ label, pointsRecalledDuring }`, NOT `{ completionPending }`. The `label` field is what should be appended to the labels array. The `pointsRecalledDuring` field tells how many points were recalled during the rabbit hole (for buffered animation count). The `completionPending` flag is a separate concern handled by the overlay — check for a `session_complete_overlay` event that may follow.
+
+> **WARNING: Stale closure in recall animation effect**
+> The `useEffect` in section 3 closes over `recalledCount` via `prevRecalledCount.current`. When multiple points are recalled during a rabbit hole and then flushed on exit, the `for` loop with `setTimeout` captures `setAnimatingIndex` — this is fine (functional React state), but `playRecallChime()` may capture a stale `isMuted` value. Use a ref for `isMuted` in the chime playback function.

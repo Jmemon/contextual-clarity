@@ -156,4 +156,11 @@ Note: T01 modifies `SocraticTutorPromptParams` and the point-related sections. T
 
 14. **No behavioral regression**: The prompt still produces a functional recall session. The agent still asks questions, still guides toward recall, still uses point content/context. The change is in identity and framing, not in fundamental behavior.
 
-15. **Existing tests**: Any tests that reference `buildCustomPromptSection` are updated to test `buildSupplementaryGuidelinesSection` instead. Tests for `buildUniversalAgentSection` are added to verify the prompt contains key phrases: "recall session", "facilitator", "evaluator", "UI handles", and does NOT contain "AI Tutor" or "patient tutor".
+15. **Existing tests**: Any tests that reference `buildCustomPromptSection` are updated to test `buildSupplementaryGuidelinesSection` instead. Tests for `buildUniversalAgentSection` are added to verify the prompt contains key phrases: "recall session", "facilitator", "evaluator", "UI handles", and does NOT contain "AI Tutor" or "patient tutor". **Note:** As of this writing, zero prompt-builder tests exist in the codebase. This criterion means: create new tests for the new functions. Do not expect to find existing test files to update.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: Prompt contradiction with `session-engine.ts`**
+> The new universal agent prompt says "Do not generate congratulatory text, celebration, or praise" and "The UI handles all positive reinforcement". However, `session-engine.ts` contains hardcoded instructions in `generateTransitionMessage()` (line ~934: "Generate a brief, congratulatory transition message"), `generateCompletionMessage()` (line ~938: "Generate a congratulatory message"), and `getOpeningMessage()` (line ~980-981: "Celebrate recall warmly"). These instructions directly contradict the new universal agent prompt. **T07 (Tone Overhaul) must address these hardcoded prompts.** Until T07 lands, the agent will receive contradictory instructions. This is acceptable as a known intermediate state — document it but do not block on it.

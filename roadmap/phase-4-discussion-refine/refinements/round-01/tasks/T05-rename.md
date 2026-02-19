@@ -140,9 +140,11 @@ These items reference the concept of a tutor in code, not in user-facing UI. Lea
 |--------|------|-------------|
 | MODIFY | `web/src/components/live-session/MessageList.tsx` | Line 73: `'AI Tutor'` → `'Agent'`. Line 154: `AI Tutor` → `Agent` in typing indicator |
 | MODIFY | `web/src/components/live-session/StreamingMessage.tsx` | Line 47: `AI Tutor` → `Agent` in streaming message role label |
+| MODIFY | `web/src/pages/LiveSession.tsx` | Line 261: user-visible "AI tutor" text — change to "Agent" |
 | AUDIT | `web/src/**/*.tsx` | Search for any other user-visible "AI Tutor" strings |
 | AUDIT | `web/src/**/*.ts` | Search for any other user-visible "AI Tutor" strings |
 | AUDIT | `**/*.test.ts`, `**/*.test.tsx` | Update test assertions if they check for "AI Tutor" text |
+| AUDIT | `e2e/tests/07-live-session.spec.ts` | Line 141: `getByText(/AI Tutor/i)` assertion — update to match "Agent" |
 
 ---
 

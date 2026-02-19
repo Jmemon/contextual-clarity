@@ -103,11 +103,24 @@ export type SessionEventData =
   | { type: 'session_started'; sessionId: string; recallSetName: string; totalPoints: number }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete_overlay'; message: string; recalledCount: number; totalPoints: number; durationMs: number }
+  // NOTE: SessionCompletionSummary must be defined as a type — it does not currently exist.
+  // Define it alongside SessionEventData:
+  //   interface SessionCompletionSummary {
+  //     sessionId: string;
+  //     recalledCount: number;
+  //     totalPoints: number;
+  //     durationMs: number;
+  //     rabbitholeCount: number;
+  //     recalledPointIds: string[];
+  //   }
   | { type: 'session_completed'; sessionId: string; summary: SessionCompletionSummary }
   | { type: 'recall_point_recalled'; pointId: string; pointIndex: number; recalledCount: number; totalPoints: number }
   | { type: 'recall_point_near_miss'; pointId: string; feedback: string }
   | { type: 'rabbithole_detected'; topic: string; label: string; triggerMessageContent: string }
   | { type: 'rabbithole_entered'; topic: string; label: string }
+  // NOTE: T09's exitRabbithole() returns { completionPending: boolean }. The WS payload
+  // translates this to { label, pointsRecalledDuring } for the frontend (T11 needs the count).
+  // The session handler must compute pointsRecalledDuring from the engine state during the exit.
   | { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number }
   | { type: 'rabbithole_declined'; topic: string }
   | { type: 'show_image'; resourceId: string; url: string; caption?: string; mimeType?: string }
@@ -292,8 +305,13 @@ export interface LeaveSessionPayload {
 /**
  * User accepts the rabbit hole prompt and wants to explore the tangent.
  */
+// NOTE: This payload MUST include rabbitholeEventId so the server can link the entry
+// to the detected rabbithole event. The topic is also needed for the engine's enterRabbithole() call.
+// Without these fields, the server handler cannot call engine.enterRabbithole(topic, eventId).
 export interface EnterRabbitholePayload {
   type: 'enter_rabbithole';
+  rabbitholeEventId: string;  // echoed from rabbithole_detected server message
+  topic: string;              // echoed from rabbithole_detected server message
 }
 
 /**
@@ -324,7 +342,7 @@ export interface PingPayload {
 export type ClientMessage =
   | UserMessagePayload
   | LeaveSessionPayload
-  | EnterRabbitholePayload
+  | EnterRabbitholePayload  // NOTE: includes rabbitholeEventId + topic fields
   | ExitRabbitholePayload
   | DeclineRabbitholePayload
   | DismissOverlayPayload
@@ -486,8 +504,9 @@ switch (message.type) {
     await this.handleLeaveSession(ws);
     break;
 
+  // NOTE: enter_rabbithole includes rabbitholeEventId and topic in the payload
   case 'enter_rabbithole':
-    await this.handleEnterRabbithole(ws);
+    await this.handleEnterRabbithole(ws, message.rabbitholeEventId, message.topic);
     break;
 
   case 'exit_rabbithole':
@@ -795,3 +814,22 @@ Ensure that:
 18. **Graceful handling of unexpected event order**: If `rabbithole_exited` arrives before `rabbithole_entered` (shouldn't happen but could due to race conditions), the frontend does not crash. If `session_complete_overlay` arrives while in a rabbit hole, the overlay is deferred until exit.
 19. **parseClientMessage updated**: The `parseClientMessage()` function correctly parses all new client message types and rejects the old ones (`trigger_eval`, `end_session`) as `UNKNOWN_MESSAGE_TYPE`.
 20. **No regressions**: The app builds without errors in both `web/` and the backend. Existing functionality (connecting to a session, sending messages, receiving streamed responses) still works.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: `EnterRabbitholePayload` must include `rabbitholeEventId` and `topic`**
+> Section 3 originally defined `EnterRabbitholePayload` as `{ type: 'enter_rabbithole' }` with no additional fields. But the server handler (section 4) calls `engine.enterRabbithole(topic, eventId)` which requires both `topic` and `rabbitholeEventId`. Without these fields in the client message, the handler has no way to call the engine correctly. T09's section 8 correctly includes these fields — T13's definition has been corrected above to match.
+
+> **WARNING: `RabbitholeExitedPayload` field reconciliation**
+> T09's `exitRabbithole()` returns `{ completionPending: boolean }`. The `RabbitholeExitedPayload` server message uses `{ label, pointsRecalledDuring }` — different fields. The session handler must translate: read the label from the engine's rabbit hole state before exit, and compute `pointsRecalledDuring` by comparing recalled counts before/after the rabbit hole. If `completionPending` is true, the handler should also emit a `session_complete_overlay` event.
+
+> **WARNING: `SessionCompletionSummary` type does not exist**
+> The `session_completed` event data references `SessionCompletionSummary` but this type is not defined anywhere in the codebase. It must be defined alongside `SessionEventData` in `src/core/session/types.ts`. A suggested definition has been added as a comment in the code above.
+
+> **WARNING: `parseClientMessage()` must validate `enter_rabbithole` fields**
+> Since `enter_rabbithole` now includes `rabbitholeEventId` and `topic` fields, the `parseClientMessage()` function must validate that these fields are present and are strings. Without validation, a malformed client message could cause the handler to call `engine.enterRabbithole(undefined, undefined)`.
+
+> **WARNING: Event name consistency between engine and WS**
+> The engine emits events using `SessionEventType` names (e.g., `'recall_point_recalled'`). The WS server messages use their own `type` field. These may or may not match. T01 emits `'point_recalled'` but T13 defines the WS type as `'recall_point_recalled'`. Ensure the session handler's event listener translates between these names. The handler code in section 4 maps `'recall_point_recalled'` engine events to `'recall_point_recalled'` WS messages — this requires T01 to also use this name, or the handler must translate.

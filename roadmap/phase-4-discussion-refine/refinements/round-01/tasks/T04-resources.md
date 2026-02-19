@@ -419,9 +419,10 @@ resourceRoutes.get('/recall-points/:id/resources', async (c) => {
 export { resourceRoutes };
 ```
 
-Register in `src/api/server.ts`:
-- Import `resourceRoutes` from `./routes/resources`
-- Mount it on the API router (same pattern as existing routes like `recall-sets.ts` and `sessions.ts`)
+Register in `src/api/routes/index.ts` (NOT `server.ts`):
+- Import `resourceRoutes` from `./resources`
+- Mount it in the `createApiRouter()` factory function (same pattern as existing routes like `recall-sets.ts` and `sessions.ts`)
+- **NOTE:** All existing routes are registered in `src/api/routes/index.ts` via `createApiRouter()`, not directly in `server.ts`. Follow the existing convention.
 
 ### 9. Seed Runner Update
 
@@ -450,7 +451,7 @@ Modify the existing seed runner (find it by searching for where `motivationRecal
 | CREATE | `src/storage/seeds/resources/remaining-resources.ts` | Source material for sets 43-51 |
 | CREATE | `src/storage/seeds/resources/index.ts` | Re-exports all resource seed data |
 | CREATE | `src/api/routes/resources.ts` | API endpoints for fetching resources |
-| MODIFY | `src/api/server.ts` | Register resource routes on the API router |
+| MODIFY | `src/api/routes/index.ts` | Register resource routes in `createApiRouter()` (NOT `server.ts` — follow existing route registration pattern) |
 | MODIFY | Seed runner file (wherever `motivationRecallSet` is inserted) | Add resource seeding logic after recall set/point seeding |
 
 ---
@@ -477,3 +478,13 @@ Modify the existing seed runner (find it by searching for where `motivationRecal
 18. **No regressions**: Existing recall set and recall point seeding still works. No existing tests break.
 19. **Type exports**: `Resource`, `ResourceWithRelevance`, and `CreateResourceInput` types are exported and usable by other modules.
 20. **Repository registered**: `ResourceRepository` is exported from `src/storage/repositories/index.ts` alongside existing repositories.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: Recall set names must match actual seed data**
+> The list of 51 recall set names in this task (Section 5) is approximate. ~35 of the names do NOT exactly match the `name` field in the actual seed data files. The implementer MUST read the actual seed files (`src/storage/seeds/diverse-conceptual.ts`, `diverse-procedural.ts`, `diverse-creative.ts`, `diverse-remaining.ts`, `motivation-recall-set.ts`, `atp-recall-set.ts`) and use the EXACT `name` values from each seed entry. For example, the motivation recall set's name is `"motivation"` (lowercase), not `"Motivation Theory"`. The ATP set name must be verified similarly.
+
+> **WARNING: FK constraints with seed re-runs**
+> If the seed runner uses `--force` or deletes existing recall sets before re-seeding, the new `resources` and `recall_point_resources` tables will have FK constraints referencing `recallSets.id` and `recallPoints.id`. Deleting recall sets without first deleting their resources will violate FK constraints. The seed runner must delete resources and junction table entries BEFORE deleting recall sets/points, or use CASCADE delete. Add this to the seed runner update logic.

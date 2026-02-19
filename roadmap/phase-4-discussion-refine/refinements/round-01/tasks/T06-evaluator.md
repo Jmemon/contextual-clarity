@@ -84,7 +84,8 @@ async evaluateBatch(
   }
 
   // Extract conversation excerpt — last 10 messages for context, same as existing evaluate()
-  const excerpt = this.extractConversationExcerpt(conversationMessages, 10);
+  // NOTE: The existing method is named extractExcerpt(), not extractConversationExcerpt()
+  const excerpt = this.extractExcerpt(conversationMessages, 10);
 
   // Build the batch evaluation prompt
   const prompt = buildBatchEvaluatorPrompt(
@@ -94,15 +95,22 @@ async evaluateBatch(
   );
 
   // Call LLM — use Haiku model, temperature 0.3
-  const response = await this.llmClient.complete({
-    model: 'haiku',  // Use the Haiku model reference from the existing LLM client config
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.3,
-    maxTokens: 1024,  // Batch evaluation responses should be concise
-  });
+  // NOTE: AnthropicClient.complete() signature is:
+  //   complete(messages: string | LLMMessage[], config?: LLMConfig): Promise<LLMResponse>
+  // where LLMConfig has { model, maxTokens, temperature }
+  // The response has a .text field, NOT .content
+  // The model ID must be a valid Anthropic model string (e.g., 'claude-haiku-4-5-20251001'), not just 'haiku'
+  const response = await this.llmClient.complete(
+    [{ role: 'user', content: prompt }],
+    {
+      model: 'claude-haiku-4-5-20251001',
+      temperature: 0.3,
+      maxTokens: 1024,  // Batch evaluation responses should be concise
+    }
+  );
 
-  // Parse the response
-  return parseBatchEvaluationResponse(response.content);
+  // Parse the response — LLMResponse has .text, not .content
+  return parseBatchEvaluationResponse(response.text);
 }
 ```
 
@@ -230,8 +238,10 @@ async processUserMessage(content: string): Promise<ProcessMessageResult> {
   this.validateActiveSession();
 
   // 1. Save the user's message
-  const userMessage = await this.saveMessage('user', content);
-  this.emitEvent('user_message', { messageId: userMessage.id, content });
+  // NOTE: saveMessage() returns void, not the saved message object.
+  // To get a message ID, use the repository directly or generate the ID before saving.
+  await this.saveMessage('user', content);
+  this.emitEvent('user_message', { content });
 
   // 2. Run batch evaluation against all unchecked points
   const uncheckedPoints = this.getUncheckedPoints();
@@ -265,8 +275,9 @@ async processUserMessage(content: string): Promise<ProcessMessageResult> {
   const response = await this.generateTutorResponse(evalResult.feedback);
 
   // 7. Save and emit assistant message
-  const assistantMessage = await this.saveMessage('assistant', response);
-  this.emitEvent('assistant_message', { messageId: assistantMessage.id, content: response });
+  // NOTE: saveMessage() returns void — no message object is returned
+  await this.saveMessage('assistant', response);
+  this.emitEvent('assistant_message', { content: response });
 
   return {
     response,
@@ -350,7 +361,7 @@ These items must be completely removed from the codebase:
 
 The batch evaluator runs on EVERY user message, so it must be fast and cheap:
 
-- **Model**: Use Haiku (not Sonnet). The existing evaluator may use Sonnet — the batch evaluator must explicitly use Haiku.
+- **Model**: Use Haiku (not Sonnet). The existing evaluator may use Sonnet — the batch evaluator must explicitly use Haiku. **Important:** The model ID must be a valid Anthropic model string such as `'claude-haiku-4-5-20251001'`, not the shorthand `'haiku'`. Check `src/llm/types.ts` for the `LLMConfig` interface.
 - **Temperature**: 0.3 for consistency across evaluations.
 - **Max tokens**: 1024 — batch evaluation responses should be concise JSON.
 - **Conversation excerpt**: Use last 10 messages (same as existing `evaluate()`). Do not send the entire conversation history.
@@ -416,3 +427,19 @@ async evaluateEnhanced(recallPoint: RecallPoint, conversationMessages: SessionMe
 15. **Backward compatibility**: The old `evaluate()` and `evaluateEnhanced()` methods still exist (marked deprecated) so any code not yet migrated doesn't break.
 16. **FSRS updates**: For each recalled point, `recordRecallOutcome()` is called with `success: true` and the confidence from the evaluator. FSRS state is updated in the database.
 17. **No user-visible evaluation machinery**: The user sees only the tutor's natural conversational responses. No evaluation scores, no "you recalled X correctly" messages from the system. All evaluation is invisible middleware.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: `AnthropicClient.complete()` call signature**
+> The code examples in section 2 originally showed an object-based call: `this.llmClient.complete({ model, messages, temperature, maxTokens })`. The actual signature is `complete(messages: string | LLMMessage[], config?: LLMConfig)` where `LLMConfig` has `{ model, maxTokens, temperature }`. The response object has a `.text` field, NOT `.content`. These have been corrected above. Additionally, `AnthropicClient` has a stateful `systemPrompt` field — if the evaluator shares the same instance as the session engine, calling `evaluateBatch()` could interfere with the tutor's system prompt. Consider creating a separate `AnthropicClient` instance for the evaluator.
+
+> **WARNING: `extractExcerpt()` method name**
+> The existing method on `RecallEvaluator` is named `extractExcerpt()`, not `extractConversationExcerpt()`. This has been corrected above.
+
+> **WARNING: `saveMessage()` returns void**
+> The code example in section 5 originally destructured a return value from `saveMessage()` (e.g., `const userMessage = await this.saveMessage(...)`). The actual `saveMessage()` method in `SessionEngine` returns `void`. If a message ID is needed for the event payload, generate the ID before calling `saveMessage()` or use the repository directly.
+
+> **WARNING: Haiku model ID**
+> The shorthand `'haiku'` is not a valid Anthropic model ID. Use the full model string `'claude-haiku-4-5-20251001'` (or whatever is current). Check `src/llm/types.ts` for how model IDs are defined in this codebase.

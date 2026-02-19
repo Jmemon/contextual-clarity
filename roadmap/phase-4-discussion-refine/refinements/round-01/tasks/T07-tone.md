@@ -186,3 +186,17 @@ After implementation, the combined prompt (universal agent from T02 + Socratic m
 14. **DON'T list completeness**: The DON'T section contains at least these 6 prohibitions: no congratulations/praise/exclamation marks, no filler phrases, no bullet lists, no revealing answers, no yes/no questions, no elaboration requests.
 
 15. **Existing tests updated**: Any test assertions that check for the old principle text ("Encourage elaboration", "Celebrate recall", "Provide encouraging feedback") are updated to check for the new principle text instead. New test cases verify the presence of "I recall nothing" handling and evaluator observation handling sections.
+
+---
+
+## Implementation Warnings
+
+> **WARNING: Hardcoded congratulatory prompts in `session-engine.ts`**
+> The session engine contains hardcoded prompts that contradict the new tone guidelines:
+> - `generateTransitionMessage()` (line ~934): "Generate a brief, congratulatory transition message"
+> - `generateCompletionMessage()` (line ~938): "Generate a congratulatory message"
+> - `getOpeningMessage()` (lines ~980-981): "Celebrate recall warmly"
+> These hardcoded strings are in `session-engine.ts`, NOT in `socratic-tutor.ts`. This task only rewrites `buildSocraticMethodSection()` and `buildGuidelinesSection()` in `socratic-tutor.ts`. The session engine's hardcoded congratulatory prompts are outside this task's scope but will produce contradictory behavior until they are also updated. Consider adding these to the scope of this task, or explicitly document that they create a known contradiction.
+
+> **WARNING: Soft dependency on T06 evaluator feedback**
+> Section 2 of this task adds "HANDLING EVALUATOR OBSERVATIONS" guidelines that reference `[EVALUATOR OBSERVATION]` markers. These markers are injected by T06's `generateTutorResponse()` feedback injection. If T07 lands before T06, the evaluator observation handling guidelines will be present in the prompt but never triggered (no feedback is injected yet). This is acceptable as a forward-compatible change, but worth noting during implementation.
