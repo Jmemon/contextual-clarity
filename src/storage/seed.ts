@@ -25,6 +25,7 @@ import { db } from './db';
 import {
   RecallSetRepository,
   RecallPointRepository,
+  ResourceRepository,
 } from './repositories';
 import { FSRSScheduler } from '@/core/fsrs';
 import {
@@ -37,6 +38,15 @@ import {
   diverseCreativeSets,
   diverseRemainingSets,
 } from './seeds';
+import type { ResourceSeed } from './seeds/resources';
+import {
+  motivationResources,
+  atpResources,
+  conceptualResources,
+  proceduralResources,
+  creativeResources,
+  remainingResources,
+} from './seeds/resources';
 
 /**
  * Represents a recall set definition for seeding.
@@ -89,6 +99,7 @@ function generateId(prefix: string): string {
 async function seedRecallSet(
   recallSetRepo: RecallSetRepository,
   recallPointRepo: RecallPointRepository,
+  resourceRepo: ResourceRepository,
   scheduler: FSRSScheduler,
   recallSet: RecallSetSeed,
   recallPoints: RecallPointSeed[],
@@ -103,12 +114,24 @@ async function seedRecallSet(
       return false;
     }
 
-    // Force mode: delete existing recall points first (due to foreign key constraint)
+    // Force mode: delete in FK-safe order
     console.log(`  Deleting existing "${recallSet.name}" recall set...`);
+
+    // 1. Delete recall_point_resources (references both recall_points and resources)
     const existingPoints = await recallPointRepo.findByRecallSetId(existing.id);
+    for (const point of existingPoints) {
+      await resourceRepo.unlinkAllFromRecallPoint(point.id);
+    }
+
+    // 2. Delete recall_points (referenced by recall_point_resources, already cleared)
     for (const point of existingPoints) {
       await recallPointRepo.delete(point.id);
     }
+
+    // 3. Delete resources (references recall_sets, referenced by recall_point_resources already cleared)
+    await resourceRepo.deleteByRecallSetId(existing.id);
+
+    // 4. Delete the recall_set itself
     await recallSetRepo.delete(existing.id);
   }
 
@@ -171,6 +194,7 @@ async function main() {
   // Initialize repositories and scheduler
   const recallSetRepo = new RecallSetRepository(db);
   const recallPointRepo = new RecallPointRepository(db);
+  const resourceRepo = new ResourceRepository(db);
   const scheduler = new FSRSScheduler();
 
   // Define all seed data sets to process (2 original + 51 diverse = 53 total)
@@ -201,6 +225,7 @@ async function main() {
     const wasSeeded = await seedRecallSet(
       recallSetRepo,
       recallPointRepo,
+      resourceRepo,
       scheduler,
       recallSet,
       recallPoints,
@@ -214,11 +239,106 @@ async function main() {
     }
   }
 
+  // =========================================================================
+  // Seed Resources
+  // =========================================================================
+  console.log('');
+  console.log('Seeding resources...');
+
+  // Combine all resource seed data into a single array
+  const allResourceSeeds: ResourceSeed[] = [
+    ...motivationResources,
+    ...atpResources,
+    ...conceptualResources,
+    ...proceduralResources,
+    ...creativeResources,
+    ...remainingResources,
+  ];
+
+  let resourcesSeeded = 0;
+  let resourcesSkipped = 0;
+
+  for (const seed of allResourceSeeds) {
+    // Find the recall set by name
+    const recallSet = await recallSetRepo.findByName(seed.recallSetName);
+    if (!recallSet) {
+      console.log(`  WARNING: Recall set "${seed.recallSetName}" not found — skipping resources`);
+      resourcesSkipped++;
+      continue;
+    }
+
+    // Check if resources already exist for this recall set (skip if not forcing)
+    const existingResources = await resourceRepo.findByRecallSetId(recallSet.id);
+    if (existingResources.length > 0 && !force) {
+      console.log(`  Skipping resources for "${seed.recallSetName}" — already exist`);
+      resourcesSkipped++;
+      continue;
+    }
+
+    // If force mode and resources exist, they were already deleted in the recall set force-delete above
+    // (deleteByRecallSetId is called before the recall set is deleted)
+
+    // Create all resources for this recall set
+    const createdResources = await resourceRepo.createMany(
+      seed.resources.map((r) => ({
+        recallSetId: recallSet.id,
+        title: r.title,
+        type: r.type,
+        content: r.content,
+        url: r.url,
+        imageData: r.imageData,
+        mimeType: r.mimeType,
+        metadata: r.metadata,
+      }))
+    );
+
+    console.log(`  + ${createdResources.length} resource(s) for "${seed.recallSetName}"`);
+
+    // Create point-level links if specified
+    if (seed.pointLinks && seed.pointLinks.length > 0) {
+      const recallPoints = await recallPointRepo.findByRecallSetId(recallSet.id);
+      const links: Array<{ recallPointId: string; resourceId: string; relevance: string }> = [];
+
+      for (const link of seed.pointLinks) {
+        // Find the recall point whose content contains the substring
+        const matchingPoint = recallPoints.find((p) =>
+          p.content.includes(link.pointContentSubstring)
+        );
+        if (!matchingPoint) {
+          console.log(`    WARNING: No recall point matching "${link.pointContentSubstring.substring(0, 40)}..." — skipping link`);
+          continue;
+        }
+
+        // Find the resource by title
+        const matchingResource = createdResources.find((r) => r.title === link.resourceTitle);
+        if (!matchingResource) {
+          console.log(`    WARNING: No resource with title "${link.resourceTitle}" — skipping link`);
+          continue;
+        }
+
+        links.push({
+          recallPointId: matchingPoint.id,
+          resourceId: matchingResource.id,
+          relevance: link.relevance,
+        });
+      }
+
+      if (links.length > 0) {
+        await resourceRepo.linkManyToRecallPoints(links);
+        console.log(`    + ${links.length} point-level link(s)`);
+      }
+    }
+
+    resourcesSeeded++;
+  }
+
   // Print summary
   console.log('');
   console.log('Seeding complete!');
-  console.log(`  Seeded: ${seededCount} recall set(s)`);
-  console.log(`  Skipped: ${skippedCount} recall set(s)`);
+  console.log(`  Recall sets seeded: ${seededCount}`);
+  console.log(`  Recall sets skipped: ${skippedCount}`);
+  console.log(`  Resource sets seeded: ${resourcesSeeded}`);
+  console.log(`  Resource sets skipped: ${resourcesSkipped}`);
 }
 
 // Execute the seeder

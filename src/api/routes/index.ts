@@ -35,12 +35,14 @@ import { success } from '../utils/response';
 import { recallSetsRoutes } from './recall-sets';
 import { dashboardRoutes } from './dashboard';
 import { sessionsRoutes } from './sessions';
+import { resourcesRoutes } from './resources';
 
 // Re-export individual route modules for direct access
 export { healthRoutes, healthCheckHandler } from './health';
 export { recallSetsRoutes } from './recall-sets';
 export { dashboardRoutes } from './dashboard';
 export { sessionsRoutes } from './sessions';
+export { resourcesRoutes } from './resources';
 
 // ============================================================================
 // Type Definitions
@@ -136,6 +138,7 @@ export function createApiRouter(): Hono {
         { path: '/api/sessions', description: 'Study session management' },
         { path: '/api/dashboard', description: 'Dashboard data and analytics' },
         { path: '/api/analytics', description: 'Learning analytics and reports' },
+        { path: '/api/recall-sets/:id/resources', description: 'Source resources for a recall set' },
         { path: '/health', description: 'Health check endpoint' },
       ],
     };
@@ -159,6 +162,9 @@ export function createApiRouter(): Hono {
 
   // Mount sessions routes (list, details, transcript, start, abandon)
   router.route('/sessions', sessionsRoutes());
+
+  // Mount resource routes nested under recall-sets
+  router.route('/recall-sets', resourcesRoutes());
 
   // Future: router.route('/analytics', analyticsRoutes());
 

@@ -77,3 +77,10 @@ export {
   RabbitholeEventRepository,
   type TopicStats,
 } from './rabbithole-event.repository';
+
+// Resource repository and types
+export {
+  ResourceRepository,
+  type ResourceWithRelevance,
+  type CreateResourceInput,
+} from './resource.repository';

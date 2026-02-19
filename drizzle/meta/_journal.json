@@ -15,6 +15,13 @@
       "when": 1770147322257,
       "tag": "0001_large_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771530487630,
+      "tag": "0002_silly_solo",
+      "breakpoints": true
     }
   ]
 }

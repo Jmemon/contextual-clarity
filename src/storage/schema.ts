@@ -128,6 +128,99 @@ export const recallPoints = sqliteTable('recall_points', {
 });
 
 /**
+ * Resources Table
+ *
+ * Stores source materials that back each recall set. These resources are
+ * referenced by agents during sessions — the tutor quotes from them,
+ * the rabbit hole agent uses them for deeper exploration, and the
+ * transcription pipeline uses their terminology.
+ *
+ * Resource types:
+ * - 'article': A short article or blog post (200-500 words)
+ * - 'excerpt': A passage from a book or paper
+ * - 'book_passage': A longer excerpt from a book (with citation)
+ * - 'image': A visual resource (URL or base64 encoded)
+ * - 'reference': A concise reference note or summary
+ */
+export const resources = sqliteTable(
+  'resources',
+  {
+    // Unique identifier for the resource (UUID format)
+    id: text('id').primaryKey(),
+
+    // Foreign key to the recall set this resource belongs to
+    recallSetId: text('recall_set_id').notNull().references(() => recallSets.id),
+
+    // Human-readable title of the source material
+    title: text('title').notNull(),
+
+    // Classification of the resource's format
+    type: text('type', { enum: ['article', 'excerpt', 'book_passage', 'image', 'reference'] }).notNull(),
+
+    // Text content for articles, excerpts, book passages, and references.
+    // Null for image-only resources.
+    content: text('content'),
+
+    // URL for web resources, external images, or DOI links.
+    // Null for embedded content with no external source.
+    url: text('url'),
+
+    // Base64-encoded image data for small embedded images.
+    // Only used when type is 'image' and the image is stored inline.
+    imageData: text('image_data'),
+
+    // MIME type for image resources (e.g., 'image/png', 'image/jpeg', 'image/svg+xml').
+    // Null for non-image resources.
+    mimeType: text('mime_type'),
+
+    // Arbitrary key-value metadata (author, source, page number, license, etc.).
+    // Stored as JSON. Example: { "author": "James Clear", "source": "Atomic Habits", "page": "42" }
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+
+    // Timestamp when the resource was created (milliseconds since epoch)
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+
+    // Timestamp when the resource was last modified (milliseconds since epoch)
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  // Index for efficient lookups by recallSetId — third arg to sqliteTable()
+  (table) => [index('resources_recall_set_idx').on(table.recallSetId)]
+);
+
+export type Resource = typeof resources.$inferSelect;
+export type NewResource = typeof resources.$inferInsert;
+
+/**
+ * Recall Point Resources Junction Table
+ *
+ * Many-to-many relationship between recall points and resources.
+ * Links specific resources to the recall points they are most relevant to,
+ * with an optional relevance description explaining the connection.
+ */
+export const recallPointResources = sqliteTable(
+  'recall_point_resources',
+  {
+    // Unique identifier for this link (UUID format)
+    id: text('id').primaryKey(),
+
+    // Foreign key to the recall point
+    recallPointId: text('recall_point_id').notNull().references(() => recallPoints.id),
+
+    // Foreign key to the resource
+    resourceId: text('resource_id').notNull().references(() => resources.id),
+
+    // Brief description of why this resource is relevant to this specific recall point.
+    // Example: "Contains the definition of the habit loop steps"
+    relevance: text('relevance'),
+  },
+  // Index on recall_point_id for efficient lookups when querying resources for a point
+  (table) => [index('recall_point_resources_rp_idx').on(table.recallPointId)]
+);
+
+export type RecallPointResource = typeof recallPointResources.$inferSelect;
+export type NewRecallPointResource = typeof recallPointResources.$inferInsert;
+
+/**
  * Sessions Table
  *
  * A session represents a single recall practice session where the user
