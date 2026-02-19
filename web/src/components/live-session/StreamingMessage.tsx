@@ -18,6 +18,7 @@
  */
 
 import type { HTMLAttributes } from 'react';
+import { FormattedText } from '../shared/FormattedText';
 
 // ============================================================================
 // Types
@@ -46,12 +47,12 @@ export function StreamingMessage({ content, className = '', ...props }: Streamin
         {/* Role label */}
         <p className="text-xs mb-1 font-medium text-clarity-400">Agent</p>
 
-        {/* Streaming content with blinking cursor */}
-        <p className="leading-relaxed whitespace-pre-wrap">
-          {content}
+        {/* Streaming content with formatted text and blinking cursor */}
+        <div className="leading-relaxed whitespace-pre-wrap">
+          <FormattedText content={content} />
           {/* Blinking cursor indicator */}
           <span className="inline-block w-2 h-4 ml-0.5 bg-clarity-300 animate-pulse" />
-        </p>
+        </div>
       </div>
     </div>
   );

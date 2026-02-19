@@ -21,6 +21,7 @@
 import { useEffect, useRef, type HTMLAttributes } from 'react';
 import type { ChatMessage } from '@/hooks/use-session-websocket';
 import { StreamingMessage } from './StreamingMessage';
+import { FormattedText } from '../shared/FormattedText';
 
 // ============================================================================
 // Types
@@ -73,8 +74,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {isUser ? 'You' : 'Agent'}
         </p>
 
-        {/* Message content with preserved whitespace */}
-        <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
+        {/* Message content with formatted text (LaTeX, code, plain text) */}
+        <FormattedText content={message.content} />
       </div>
     </div>
   );
