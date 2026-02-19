@@ -14,20 +14,73 @@ Completely rewrite `SessionProgress.tsx` to replace the current "X / Y points" p
 
 This task depends on T01 because it reads `recalledCount` and `totalPoints` from the checklist state. It depends on T09 because it reacts to `rabbithole_entered` / `rabbithole_exited` events and displays rabbit hole labels.
 
+**Critical dependency note**: The WebSocket event types `recall_point_recalled`, `rabbithole_entered`, and `rabbithole_exited` do NOT currently exist in `SessionEventType` (in `src/core/session/types.ts`) or in the `ServerMessage` union (in `use-session-websocket.ts`). T01 must add `recall_point_recalled` and T09 must add `rabbithole_entered`/`rabbithole_exited` to the protocol types before T11's WebSocket handler code can compile. T11's implementation should be written assuming these types exist (they will after T01 and T09 complete), but the developer must verify the exact event names match what T01/T09 actually emit.
+
 ---
 
 ## Detailed Implementation
 
-### 1. Complete Rewrite of `SessionProgress.tsx` (`web/src/components/live-session/SessionProgress.tsx`)
+### 1. Fix `useSessionTimer` Bug in `SessionContainer.tsx`
+
+**Pre-existing bug**: `SessionContainer.tsx` lines 53-58 use `useState` instead of `useEffect` for the timer interval. The cleanup function returned by the `useState` initializer is silently ignored — `useState` discards return values from initializers. The interval leaks and is never cleared on unmount. T11 must fix this since it directly uses the timer output.
+
+**Fix**: Convert the broken `useState` call to a proper `useEffect`:
+
+```typescript
+function useSessionTimer() {
+  const [startTime] = useState(() => Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // BUG FIX: The original code used useState() to set up the interval,
+  // which silently discards the cleanup function. useEffect is correct.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  // Format as MM:SS
+  const formatTime = () => {
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  return { elapsedSeconds, formattedTime: formatTime() };
+}
+```
+
+### 2. Add `elapsedSeconds` to `useSessionTimer` Destructure in `SessionContainer.tsx`
+
+**Current code** at line 236:
+```typescript
+const { formattedTime } = useSessionTimer();
+```
+
+**Replace with**:
+```typescript
+const { formattedTime, elapsedSeconds } = useSessionTimer();
+```
+
+`elapsedSeconds` must be passed to the new `SessionProgress` component. The old code only used `formattedTime` for the header display; the new component needs the raw seconds value.
+
+### 3. Create `web/public/sounds/` Directory
+
+The `web/public/` directory does not currently exist. Vite serves static assets from `public/` by default.
+
+**Step**: Create the directory `web/public/sounds/` before placing the sound file.
+
+### 4. Complete Rewrite of `SessionProgress.tsx` (`web/src/components/live-session/SessionProgress.tsx`)
 
 **Delete the entire current implementation.** The current component (107 lines) shows "X / Y points" with a linear progress bar. The new component is fundamentally different.
 
 **New visual design:**
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ○ ○ ● ● ○ ○ ○    03:42    🐇 Adenosine    🔇             │
-│                              Tolerance                      │
-└─────────────────────────────────────────────────────────────┘
++---------------------------------------------------------+
+|  O O * * O O O    03:42    rabbit Adenosine    mute     |
+|                              Tolerance                   |
++---------------------------------------------------------+
 ```
 
 Layout: A single horizontal bar containing (left to right):
@@ -36,7 +89,7 @@ Layout: A single horizontal bar containing (left to right):
 3. Rabbit hole labels (small pills, right side)
 4. Mute toggle (far right)
 
-### 2. New Props Interface
+### 5. New Props Interface
 
 ```typescript
 export interface SessionProgressProps extends HTMLAttributes<HTMLDivElement> {
@@ -65,7 +118,7 @@ export interface SessionProgressProps extends HTMLAttributes<HTMLDivElement> {
 
 Note: The parent component (`SessionContainer.tsx`) is responsible for tracking `recalledCount`, `elapsedSeconds`, `rabbitholeLabels`, and `isInRabbithole` from WebSocket events. `SessionProgress` is a pure presentational component.
 
-### 3. Anonymous Point Icons
+### 6. Anonymous Point Icons
 
 Render one small circle per recall point. Circles represent anonymous progress — the user sees HOW MANY points they have recalled but NOT WHICH TOPICS remain.
 
@@ -122,10 +175,12 @@ useEffect(() => {
     const newCount = recalledCount;
     const oldCount = prevRecalledCount.current;
 
-    // Animate each newly filled circle in sequence (50ms apart)
+    // Animate each newly filled circle in sequence (150ms apart)
     for (let i = oldCount; i < newCount; i++) {
       setTimeout(() => {
         setAnimatingIndex(i);
+        // Play the recall chime, using isMutedRef to avoid stale closure
+        if (!isMutedRef.current) playRecallChime();
         // Clear animation after 300ms
         setTimeout(() => setAnimatingIndex(null), 300);
       }, (i - oldCount) * 150);
@@ -136,7 +191,7 @@ useEffect(() => {
 }, [recalledCount]);
 ```
 
-### 4. Sound Effect on Recall
+### 7. Sound Effect on Recall — With Stale Closure Fix
 
 **Sound file**: Include a short (< 1 second), pleasant chime/pop sound at `web/public/sounds/recall-chime.mp3`.
 
@@ -151,10 +206,16 @@ Download a short, pleasant notification/chime sound. Must be:
 - MP3 format
 - Not jarring or loud — soft, satisfying chime
 
-**Playing the sound**: Create a small utility hook or inline the logic in the recall animation effect:
+**Playing the sound with stale-closure-safe mute check**:
+
+The `useEffect` that triggers animations uses `setTimeout` callbacks. These callbacks capture `isMuted` from the render when the effect ran, which may be stale by the time the timeout fires (e.g., if the user toggles mute during a rapid animation sequence). Fix: use a ref that syncs with the `isMuted` prop.
 
 ```typescript
-// Audio utility at the top of SessionProgress.tsx or in a separate utils file
+// Ref that always reflects current isMuted prop value — avoids stale closure in setTimeout
+const isMutedRef = useRef(isMuted);
+useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+
+// Audio utility at the top of SessionProgress component
 const recallChimeRef = useRef<HTMLAudioElement | null>(null);
 
 useEffect(() => {
@@ -164,12 +225,13 @@ useEffect(() => {
 }, []);
 
 /**
- * Play the recall chime sound. Respects mute state.
+ * Play the recall chime sound. Uses isMutedRef (not isMuted prop) to
+ * avoid stale closure when called from setTimeout callbacks.
  * Clones the audio node if a previous chime is still playing
  * (handles rapid successive recalls after rabbit hole exit).
  */
 function playRecallChime() {
-  if (isMuted || !recallChimeRef.current) return;
+  if (isMutedRef.current || !recallChimeRef.current) return;
 
   // Clone the audio node for overlapping playback
   const chime = recallChimeRef.current.cloneNode() as HTMLAudioElement;
@@ -180,19 +242,9 @@ function playRecallChime() {
 }
 ```
 
-**Trigger**: Play the chime inside the same `useEffect` that triggers the circle animation:
-```typescript
-// Inside the recall animation effect:
-for (let i = oldCount; i < newCount; i++) {
-  setTimeout(() => {
-    setAnimatingIndex(i);
-    playRecallChime();  // Play sound with each circle fill
-    setTimeout(() => setAnimatingIndex(null), 300);
-  }, (i - oldCount) * 150);
-}
-```
+**Trigger**: Play the chime inside the same `useEffect` that triggers the circle animation (shown in section 6 above). The call uses `isMutedRef.current` inside the `setTimeout`, not the `isMuted` prop directly.
 
-### 5. Mute Toggle
+### 8. Mute Toggle
 
 A small speaker icon in the far right of the progress bar:
 
@@ -246,7 +298,7 @@ const handleToggleMute = useCallback(() => {
 }, []);
 ```
 
-### 6. Elapsed Time Display
+### 9. Elapsed Time Display
 
 Show a running timer in MM:SS format:
 
@@ -266,9 +318,9 @@ function formatElapsedTime(seconds: number): string {
 </span>
 ```
 
-The `elapsedSeconds` prop is provided by `SessionContainer.tsx`, which already has a `useSessionTimer` hook (lines 48-59 of `SessionContainer.tsx`) that updates every second.
+The `elapsedSeconds` prop is provided by `SessionContainer.tsx` via the fixed `useSessionTimer` hook (see section 1). The destructure in `SessionContainer.tsx` must include `elapsedSeconds` (see section 2).
 
-### 7. Rabbit Hole Labels Display
+### 10. Rabbit Hole Labels Display
 
 After a rabbit hole is explored (entered AND exited), its label appears as a small pill/tag:
 
@@ -294,8 +346,6 @@ function RabbitholeLabels({ labels }: { labels: string[] }) {
             rounded-full
           "
         >
-          {/* Small rabbit emoji or icon */}
-          <span className="text-[10px]" aria-hidden="true">🐇</span>
           {label}
         </span>
       ))}
@@ -304,9 +354,9 @@ function RabbitholeLabels({ labels }: { labels: string[] }) {
 }
 ```
 
-**Label source**: The `rabbitholeLabels` prop is populated from `rabbithole_exited` WebSocket events (handled in `use-session-websocket.ts`). Each `rabbithole_exited` event includes a `label` field (a 2-4 word description of the tangent topic).
+**Label source**: The `rabbitholeLabels` prop is populated from `rabbithole_exited` WebSocket events (handled in `use-session-websocket.ts`). Per the canonical payload shape (cross-task issue #12), `rabbithole_exited` includes a `label` field. Use `msg.label` to populate this array.
 
-### 8. Rabbit Hole Mode: Hide Progress
+### 11. Rabbit Hole Mode: Hide Progress
 
 When `isInRabbithole` is `true`, the entire progress bar should smoothly animate out (slide up + fade). When it becomes `false`, it slides back in.
 
@@ -325,25 +375,9 @@ When `isInRabbithole` is `true`, the entire progress bar should smoothly animate
 </div>
 ```
 
-**Buffered recall animations**: Points that are recalled DURING a rabbit hole (because the silent evaluator from T06 is still running) are NOT animated immediately. Instead, `SessionContainer.tsx` maintains a buffer:
+**Buffered recall animations**: Points that are recalled DURING a rabbit hole (because the silent evaluator from T06 is still running) are NOT animated immediately. Instead, the WebSocket hook (`use-session-websocket.ts`) maintains a buffer via `pendingRecallAnimations` (see section 14). When the rabbit hole exits, the buffered count is flushed into `recalledCount`, which triggers the animation effect in `SessionProgress` to play N sequential circle fills with N chimes (150ms apart).
 
-```typescript
-// In SessionContainer.tsx or use-session-websocket.ts:
-
-// Number of recall animations that are pending because they happened during a rabbit hole
-const [pendingRecallAnimations, setPendingRecallAnimations] = useState(0);
-
-// When a recall_point_recalled event arrives AND we are in a rabbit hole:
-//   increment pendingRecallAnimations instead of immediately updating recalledCount for display
-
-// When rabbithole_exited event arrives:
-//   flush: update recalledCount by pendingRecallAnimations
-//   this triggers the useEffect in SessionProgress that plays N animations in sequence
-```
-
-The parent component is responsible for this buffering logic. `SessionProgress` itself is stateless regarding buffering — it just reacts to `recalledCount` changes. If `recalledCount` jumps from 2 to 5 on rabbit hole exit, the animation effect plays 3 sequential circle fills with 3 chimes (150ms apart).
-
-### 9. Complete Component Assembly
+### 12. Complete Component Assembly
 
 The final `SessionProgress` component layout:
 
@@ -359,6 +393,10 @@ export function SessionProgress({
   className = '',
   ...props
 }: SessionProgressProps) {
+  // Ref to track isMuted without stale closures in setTimeout callbacks
+  const isMutedRef = useRef(isMuted);
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+
   // ... animation state, audio ref, effects ...
 
   return (
@@ -401,25 +439,37 @@ export function SessionProgress({
 }
 ```
 
-### 10. SessionContainer.tsx Integration
+### 13. SessionContainer.tsx Integration — Remove BOTH Old `SessionProgress` Calls
 
-**Modify `SessionContainer.tsx`** to pass the new props to `SessionProgress`:
+**Two existing `SessionProgress` usages must both be removed.** The current `SessionContainer.tsx` renders `SessionProgress` in two places:
 
-1. Track `recalledCount` from WebSocket events (already tracked if T01 is done)
-2. Track `rabbitholeLabels: string[]` — append on each `rabbithole_exited` event
-3. Track `isInRabbithole: boolean` — set `true` on `rabbithole_entered`, `false` on `rabbithole_exited`
-4. Track `isMuted: boolean` — from localStorage
-5. Pass all to `SessionProgress` as props
+1. **Lines 344-349** — Inside the header, with `showBar={false}`:
+   ```tsx
+   <SessionProgress
+     currentPoint={currentPointIndex}
+     totalPoints={totalPoints}
+     showBar={false}
+     className="min-w-[100px]"
+   />
+   ```
 
-Replace the current `SessionProgress` usage. Currently (around line 120-ish in `SessionContainer.tsx`):
-```tsx
-<SessionProgress
-  currentPoint={currentPointIndex + 1}
-  totalPoints={totalPoints}
-/>
-```
+2. **Lines 362-370** — Below the header, inside a `{totalPoints > 0 && (...)}` conditional, with `showBar={true}`:
+   ```tsx
+   {totalPoints > 0 && (
+     <div className="px-6 py-2 bg-clarity-900/30">
+       <SessionProgress
+         currentPoint={currentPointIndex}
+         totalPoints={totalPoints}
+         showBar={true}
+       />
+     </div>
+   )}
+   ```
 
-Replace with:
+**Remove BOTH of these.** The new single-bar design replaces them with ONE call. Also remove the old header timer display at line 339 (`{formattedTime}`) since elapsed time is now shown inside the new `SessionProgress` component.
+
+**Replace with one new call**, placed in the header area (replacing both the old timer and the old progress display):
+
 ```tsx
 <SessionProgress
   totalPoints={totalPoints}
@@ -432,27 +482,61 @@ Replace with:
 />
 ```
 
-### 11. WebSocket Hook Updates (`web/src/hooks/use-session-websocket.ts`)
+**Additional SessionContainer.tsx changes:**
 
-Add state tracking for the new progress data. These may already be partially done by T01 and T09, but verify:
+1. Add `elapsedSeconds` to the `useSessionTimer()` destructure (see section 2).
+2. Add `isMuted` state with `localStorage` persistence (see section 8).
+3. Add `handleToggleMute` callback (see section 8).
+4. Destructure the new state values from `useSessionWebSocket` (see section 14 for what the hook returns).
+
+### 14. WebSocket Hook Updates (`web/src/hooks/use-session-websocket.ts`)
+
+Add the following new state variables to the hook. These are NEW state additions — `recalledCount` is NOT the same as the existing `currentPointIndex`. The existing `currentPointIndex` will have been replaced by T01's checklist changes. `recalledCount` is a new semantic concept: the count of recall points successfully recalled, driven by `recall_point_recalled` events.
+
+**New state variables:**
 
 ```typescript
-// State additions:
+// New state for progress tracking
 const [recalledCount, setRecalledCount] = useState(0);
-const [rabbitholeLabels, setRabbitholeLabels] = useState<string[]>([]);
 const [isInRabbithole, setIsInRabbithole] = useState(false);
+const [rabbitholeLabels, setRabbitholeLabels] = useState<string[]>([]);
 const [pendingRecallAnimations, setPendingRecallAnimations] = useState(0);
 
-// Handler additions in the message handler switch:
-// NOTE: The WS event name is 'recall_point_recalled' (with recall_ prefix), matching T13's event catalog.
-// T01 emits 'point_recalled' from the engine, but the WS server message type is 'recall_point_recalled'.
-// Ensure consistency between engine event names and WS message type names.
+// Ref to avoid stale closure when reading pendingRecallAnimations inside handleMessage
+const pendingRef = useRef(0);
+```
+
+**Add to `UseSessionWebSocketReturn` interface:**
+
+```typescript
+export interface UseSessionWebSocketReturn {
+  // ... existing fields ...
+  /** Number of recall points successfully recalled */
+  recalledCount: number;
+  /** Whether the user is currently inside a rabbit hole */
+  isInRabbithole: boolean;
+  /** Labels of rabbit holes that have been explored (entered and exited) */
+  rabbitholeLabels: string[];
+  /** Number of recall animations buffered during rabbit hole */
+  pendingRecallAnimations: number;
+}
+```
+
+**Handler additions in the `handleMessage` switch** (inside the `useCallback`):
+
+```typescript
+// NOTE: These event types do NOT exist in the current ServerMessage union.
+// T01 must add 'recall_point_recalled' and T09 must add 'rabbithole_entered'
+// and 'rabbithole_exited' to the ServerMessage type before this code compiles.
+
 case 'recall_point_recalled':
   if (isInRabbithole) {
-    // Buffer the animation — don't update recalledCount visually yet
-    setPendingRecallAnimations(prev => prev + 1);
+    // Buffer the animation — don't update recalledCount visually yet.
+    // Use ref to track pending count to avoid stale closure.
+    pendingRef.current += 1;
+    setPendingRecallAnimations(pendingRef.current);
   } else {
-    setRecalledCount(msg.recalledCount);
+    setRecalledCount(prev => prev + 1);
   }
   break;
 
@@ -460,25 +544,37 @@ case 'rabbithole_entered':
   setIsInRabbithole(true);
   break;
 
-// NOTE: The rabbithole_exited payload (per T09/T13) has { label, pointsRecalledDuring },
-// NOT { label, completionPending }. Use pointsRecalledDuring for buffer flush count.
+// The canonical rabbithole_exited payload (per cross-task issue #12) is:
+// { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean; }
+// Use msg.label for the label pill and msg.pointsRecalledDuring for the buffer flush.
 case 'rabbithole_exited':
   setIsInRabbithole(false);
-  // Flush buffered recalls
-  if (pendingRecallAnimations > 0) {
-    setRecalledCount(prev => prev + pendingRecallAnimations);
+  // Flush buffered recalls using ref to get current value (avoids stale closure)
+  if (pendingRef.current > 0) {
+    setRecalledCount(prev => prev + pendingRef.current);
+    pendingRef.current = 0;
     setPendingRecallAnimations(0);
   }
-  // Add the rabbit hole label
+  // Add the rabbit hole label from the canonical payload
   if (msg.label) {
     setRabbitholeLabels(prev => [...prev, msg.label]);
   }
   break;
 ```
 
-Return these values from the hook so `SessionContainer` can pass them to `SessionProgress`.
+**Return these values from the hook** so `SessionContainer` can pass them to `SessionProgress`:
 
-### 12. Sound File
+```typescript
+return {
+  // ... existing fields ...
+  recalledCount,
+  isInRabbithole,
+  rabbitholeLabels,
+  pendingRecallAnimations,
+};
+```
+
+### 15. Sound File
 
 Create or download a sound file at `web/public/sounds/recall-chime.mp3`.
 
@@ -488,8 +584,12 @@ If no suitable royalty-free MP3 can be found during implementation, create a pla
 
 Fallback programmatic chime:
 ```typescript
+/**
+ * Fallback chime using Web Audio API if no MP3 file is available.
+ * Uses isMutedRef (not isMuted prop) to avoid stale closure.
+ */
 function playProgrammaticChime() {
-  if (isMuted) return;
+  if (isMutedRef.current) return;
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = audioCtx.createOscillator();
@@ -517,10 +617,11 @@ function playProgrammaticChime() {
 
 | Action | File | What Changes |
 |--------|------|-------------|
-| REWRITE | `web/src/components/live-session/SessionProgress.tsx` | Complete rewrite: anonymous circles, timer, rabbit hole labels, mute toggle, hide-during-rabbithole |
+| REWRITE | `web/src/components/live-session/SessionProgress.tsx` | Complete rewrite: anonymous circles, timer, rabbit hole labels, mute toggle, hide-during-rabbithole, stale-closure-safe chime playback via `isMutedRef` |
+| CREATE | `web/public/sounds/` | Create directory (does not exist yet). Vite serves static assets from `public/` by default. |
 | CREATE | `web/public/sounds/recall-chime.mp3` | Short royalty-free chime sound (or programmatic fallback) |
-| MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Pass new props to SessionProgress: `recalledCount`, `elapsedSeconds`, `rabbitholeLabels`, `isInRabbithole`, `isMuted`, `onToggleMute`. Add mute state with localStorage persistence. Add pending recall animation buffering. |
-| MODIFY | `web/src/hooks/use-session-websocket.ts` | Track `recalledCount`, `rabbitholeLabels`, `isInRabbithole`, `pendingRecallAnimations`. Handle `recall_point_recalled`, `rabbithole_entered`, `rabbithole_exited` events with buffering logic. Return these values from the hook. |
+| MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Fix `useSessionTimer` bug (convert `useState` to `useEffect` for interval). Add `elapsedSeconds` to timer destructure. Remove BOTH old `SessionProgress` calls (lines 344-349 and lines 362-370). Remove old header timer display (line 339). Replace with one new `SessionProgress` call. Add mute state with localStorage persistence. Destructure new values from WebSocket hook. |
+| MODIFY | `web/src/hooks/use-session-websocket.ts` | Add new state: `recalledCount`, `isInRabbithole`, `rabbitholeLabels`, `pendingRecallAnimations`, plus `pendingRef` ref. Add `UseSessionWebSocketReturn` fields. Handle `recall_point_recalled`, `rabbithole_entered`, `rabbithole_exited` events (these types must be added by T01/T09 first). Use ref for `pendingRecallAnimations` to avoid stale closure in flush. Return new values from hook. |
 
 ---
 
@@ -532,30 +633,37 @@ function playProgrammaticChime() {
 4. **Sound on recall**: A pleasant, short chime plays each time a circle fills. The chime is not startling — low volume (0.5), under 1 second duration.
 5. **Mute toggle**: A small speaker icon is visible in the progress bar. Clicking it toggles sound on/off. The mute state persists across browser reloads via `localStorage`.
 6. **Elapsed timer**: Displays MM:SS format, updating every second. Starts at 00:00 when the session begins. Uses a monospace/tabular-nums font so the width doesn't shift as digits change.
-7. **Rabbit hole labels**: After a rabbit hole is explored (entered AND exited), its 2-4 word label appears as a small amber-colored pill. No labels appear if no rabbit holes have been explored.
+7. **Rabbit hole labels**: After a rabbit hole is explored (entered AND exited), its 2-4 word label appears as a small amber-colored pill. No labels appear if no rabbit holes have been explored. Labels come from `msg.label` in the canonical `rabbithole_exited` payload.
 8. **Hide during rabbit hole**: When `isInRabbithole` becomes `true`, the entire progress bar smoothly animates out (fade + slide up, ~500ms). No progress information is visible during the rabbit hole.
 9. **Show after rabbit hole**: When `isInRabbithole` becomes `false`, the progress bar smoothly animates back in (~500ms).
 10. **Buffered recalls**: If 3 points are recalled during a rabbit hole, all 3 circle-fill animations and chimes play in sequence (150ms apart) when the rabbit hole exits. The total `recalledCount` jumps by 3 at that moment.
-11. **No old progress UI**: The old "X / Y points" text and the linear progress bar are completely removed. The `currentPoint` prop is no longer used. No remnants of the old design.
+11. **No old progress UI**: The old "X / Y points" text and the linear progress bar are completely removed. The `currentPoint` and `showBar` props are no longer used. BOTH old `SessionProgress` calls (lines 344-349 and 362-370) are removed. No remnants of the old design.
 12. **Props interface**: `SessionProgressProps` matches the specification: `totalPoints`, `recalledCount`, `elapsedSeconds`, `rabbitholeLabels`, `isInRabbithole`, `isMuted`, `onToggleMute`.
 13. **Accessibility**: Each circle has an `aria-label` ("Point recalled" or "Point pending"). The mute button has an `aria-label`. The timer is readable by screen readers.
 14. **No content leak**: At no point does the progress UI reveal the CONTENT or TOPIC of any unchecked recall point. The only information conveyed is: total count, recalled count, elapsed time, and which rabbit holes were explored.
 15. **Sound file**: Either a real MP3 file exists at `web/public/sounds/recall-chime.mp3`, or a programmatic Web Audio API fallback is implemented that produces a pleasant chime.
 16. **Integration**: `SessionContainer.tsx` passes all required props to the new `SessionProgress`. The WebSocket hook provides the necessary state values.
 17. **Build passes**: `bun run build` in `web/` completes without errors. No TypeScript type errors from the new props interface.
+18. **Timer bug fixed**: The `useSessionTimer` hook uses `useEffect` (not `useState`) for the interval. The interval is properly cleaned up on unmount. No interval leak.
+19. **Stale closure bugs fixed**: `isMutedRef` is used in setTimeout callbacks (not the `isMuted` prop). `pendingRef` is used in the `rabbithole_exited` handler to read the current pending count (not the stale `pendingRecallAnimations` state).
+20. **`elapsedSeconds` destructured**: `SessionContainer.tsx` destructures `elapsedSeconds` from `useSessionTimer()` and passes it to `SessionProgress`.
 
 ---
 
 ## Implementation Warnings
 
+> **WARNING: WS event types do not exist yet — hard dependency on T01 and T09**
+> The event types `recall_point_recalled`, `rabbithole_entered`, and `rabbithole_exited` are NOT in the current `SessionEventType` enum (`src/core/session/types.ts` lines 51-58) or the `ServerMessage` union (`use-session-websocket.ts` lines 64-72). T01 must add `recall_point_recalled` and T09 must add `rabbithole_entered`/`rabbithole_exited` to both the backend event types and the frontend `ServerMessage` union. T11's handler code will not compile until those types exist. The developer should verify the exact event names match what T01/T09 actually define.
+
 > **WARNING: WS event name mismatch — `point_recalled` vs `recall_point_recalled`**
-> T01 emits `'point_recalled'` from the session engine. T13's final event catalog uses `'recall_point_recalled'` as the WS server message type. Ensure the WebSocket handler translates between these names, or ensure T01 and T13 agree on the same name. The handler code in section 11 uses `'recall_point_recalled'` (the WS message type), which is correct for the frontend.
+> T01 emits `'point_recalled'` from the session engine. T13's final event catalog uses `'recall_point_recalled'` as the WS server message type. Ensure the WebSocket handler translates between these names, or ensure T01 and T13 agree on the same name. The handler code in section 14 uses `'recall_point_recalled'` (the WS message type), which is correct for the frontend.
 
-> **WARNING: Timer may have stale closure bug**
-> Section 6 references `useSessionTimer` hook at lines 48-59 of `SessionContainer.tsx`. If the timer uses `setInterval` inside a `useEffect` that captures `elapsedSeconds` in a closure, the timer will not increment correctly (stale value captured). Verify that the existing timer uses a ref or functional `setState(prev => prev + 1)` pattern.
+> **WARNING: `rabbithole_exited` canonical payload shape**
+> T09 originally defined `{ completionPending: boolean }` and T13 originally defined `{ label: string; pointsRecalledDuring: number }`. Per cross-task issue #12, the canonical shape is:
+> ```typescript
+> { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean; }
+> ```
+> T11 should use `msg.label` for `rabbitholeLabels` and `msg.pointsRecalledDuring` is available for validation, but the primary mechanism for counting buffered recalls is `pendingRef.current` (incremented by each `recall_point_recalled` event during the rabbithole).
 
-> **WARNING: `rabbithole_exited` payload structure**
-> The `rabbithole_exited` WS message payload (per T09/T13) contains `{ label, pointsRecalledDuring }`, NOT `{ completionPending }`. The `label` field is what should be appended to the labels array. The `pointsRecalledDuring` field tells how many points were recalled during the rabbit hole (for buffered animation count). The `completionPending` flag is a separate concern handled by the overlay — check for a `session_complete_overlay` event that may follow.
-
-> **WARNING: Stale closure in recall animation effect**
-> The `useEffect` in section 3 closes over `recalledCount` via `prevRecalledCount.current`. When multiple points are recalled during a rabbit hole and then flushed on exit, the `for` loop with `setTimeout` captures `setAnimatingIndex` — this is fine (functional React state), but `playRecallChime()` may capture a stale `isMuted` value. Use a ref for `isMuted` in the chime playback function.
+> **WARNING: `currentPointIndex` is being replaced by T01**
+> The existing `currentPointIndex` state in `use-session-websocket.ts` will be replaced by T01's checklist-based tracking (see cross-task issue #13). T11 adds `recalledCount` as NEW state, which is semantically different from `currentPointIndex`. `recalledCount` is driven by `recall_point_recalled` events and counts successful recalls. Do not reuse or alias `currentPointIndex` for this purpose.

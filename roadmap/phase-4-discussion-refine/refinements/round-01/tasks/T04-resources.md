@@ -22,6 +22,8 @@ This task creates two new database tables (`resources` and `recall_point_resourc
 
 Add the `resources` table after the existing `recallPoints` table definition. This table stores source materials (articles, excerpts, book passages, images, reference notes) associated with a recall set.
 
+Indexes MUST be passed as the third argument to `sqliteTable()` — standalone `index()` calls outside `sqliteTable()` will NOT create actual SQLite indexes. This matches the pattern used by `sessionMetrics`, `recallOutcomes`, `rabbitholeEvents`, and `messageTimings` in the existing schema.
+
 ```typescript
 /**
  * Resources Table
@@ -38,56 +40,64 @@ Add the `resources` table after the existing `recallPoints` table definition. Th
  * - 'image': A visual resource (URL or base64 encoded)
  * - 'reference': A concise reference note or summary
  */
-export const resources = sqliteTable('resources', {
-  // Unique identifier for the resource (UUID format)
-  id: text('id').primaryKey(),
+export const resources = sqliteTable(
+  'resources',
+  {
+    // Unique identifier for the resource (UUID format)
+    id: text('id').primaryKey(),
 
-  // Foreign key to the recall set this resource belongs to
-  recallSetId: text('recall_set_id').notNull().references(() => recallSets.id),
+    // Foreign key to the recall set this resource belongs to
+    recallSetId: text('recall_set_id').notNull().references(() => recallSets.id),
 
-  // Human-readable title of the source material
-  title: text('title').notNull(),
+    // Human-readable title of the source material
+    title: text('title').notNull(),
 
-  // Classification of the resource's format
-  type: text('type', { enum: ['article', 'excerpt', 'book_passage', 'image', 'reference'] }).notNull(),
+    // Classification of the resource's format
+    type: text('type', { enum: ['article', 'excerpt', 'book_passage', 'image', 'reference'] }).notNull(),
 
-  // Text content for articles, excerpts, book passages, and references.
-  // Null for image-only resources.
-  content: text('content'),
+    // Text content for articles, excerpts, book passages, and references.
+    // Null for image-only resources.
+    content: text('content'),
 
-  // URL for web resources, external images, or DOI links.
-  // Null for embedded content with no external source.
-  url: text('url'),
+    // URL for web resources, external images, or DOI links.
+    // Null for embedded content with no external source.
+    url: text('url'),
 
-  // Base64-encoded image data for small embedded images.
-  // Only used when type is 'image' and the image is stored inline.
-  imageData: text('image_data'),
+    // Base64-encoded image data for small embedded images.
+    // Only used when type is 'image' and the image is stored inline.
+    imageData: text('image_data'),
 
-  // MIME type for image resources (e.g., 'image/png', 'image/jpeg', 'image/svg+xml').
-  // Null for non-image resources.
-  mimeType: text('mime_type'),
+    // MIME type for image resources (e.g., 'image/png', 'image/jpeg', 'image/svg+xml').
+    // Null for non-image resources.
+    mimeType: text('mime_type'),
 
-  // Arbitrary key-value metadata (author, source, page number, license, etc.).
-  // Stored as JSON. Example: { "author": "James Clear", "source": "Atomic Habits", "page": "42" }
-  metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+    // Arbitrary key-value metadata (author, source, page number, license, etc.).
+    // Stored as JSON. Example: { "author": "James Clear", "source": "Atomic Habits", "page": "42" }
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
 
-  // Timestamp when the resource was created (milliseconds since epoch)
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    // Timestamp when the resource was created (milliseconds since epoch)
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 
-  // Timestamp when the resource was last modified (milliseconds since epoch)
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-});
+    // Timestamp when the resource was last modified (milliseconds since epoch)
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  // Index for efficient lookups by recallSetId — third arg to sqliteTable()
+  (table) => [index('resources_recall_set_idx').on(table.recallSetId)]
+);
 ```
 
-Also add an index for efficient lookups by `recallSetId`:
+Add type exports immediately after the table definition, following the existing pattern (e.g., `RecallSet`/`NewRecallSet` after `recallSets`):
+
 ```typescript
-// At the bottom of schema.ts, alongside other index definitions:
-export const resourcesRecallSetIdx = index('resources_recall_set_idx').on(resources.recallSetId);
+export type Resource = typeof resources.$inferSelect;
+export type NewResource = typeof resources.$inferInsert;
 ```
 
 ### 2. New Junction Table: `recall_point_resources` (`src/storage/schema.ts`)
 
 Links specific resources to specific recall points. A resource can be relevant to multiple points, and a point can have multiple resources.
+
+The junction table MUST include an index on `recall_point_id` for query performance, matching the pattern used by all other relationship tables in the schema (e.g., `recallOutcomes` indexes `recall_point_id`).
 
 ```typescript
 /**
@@ -97,34 +107,63 @@ Links specific resources to specific recall points. A resource can be relevant t
  * Links specific resources to the recall points they are most relevant to,
  * with an optional relevance description explaining the connection.
  */
-export const recallPointResources = sqliteTable('recall_point_resources', {
-  // Unique identifier for this link (UUID format)
-  id: text('id').primaryKey(),
+export const recallPointResources = sqliteTable(
+  'recall_point_resources',
+  {
+    // Unique identifier for this link (UUID format)
+    id: text('id').primaryKey(),
 
-  // Foreign key to the recall point
-  recallPointId: text('recall_point_id').notNull().references(() => recallPoints.id),
+    // Foreign key to the recall point
+    recallPointId: text('recall_point_id').notNull().references(() => recallPoints.id),
 
-  // Foreign key to the resource
-  resourceId: text('resource_id').notNull().references(() => resources.id),
+    // Foreign key to the resource
+    resourceId: text('resource_id').notNull().references(() => resources.id),
 
-  // Brief description of why this resource is relevant to this specific recall point.
-  // Example: "Contains the definition of the habit loop steps"
-  relevance: text('relevance'),
-});
+    // Brief description of why this resource is relevant to this specific recall point.
+    // Example: "Contains the definition of the habit loop steps"
+    relevance: text('relevance'),
+  },
+  // Index on recall_point_id for efficient lookups when querying resources for a point
+  (table) => [index('recall_point_resources_rp_idx').on(table.recallPointId)]
+);
+```
+
+Add type exports immediately after:
+
+```typescript
+export type RecallPointResource = typeof recallPointResources.$inferSelect;
+export type NewRecallPointResource = typeof recallPointResources.$inferInsert;
 ```
 
 ### 3. Repository: `src/storage/repositories/resource.repository.ts`
 
 Create a new repository following the existing pattern in `src/storage/repositories/base.ts`. The repository should use the same Drizzle ORM patterns seen in `recall-set.repository.ts` and `recall-point.repository.ts`.
 
-**Required methods:**
+**All repositories take `db: AppDatabase` as their constructor argument.** Match the existing convention:
 
 ```typescript
-import { eq, and } from 'drizzle-orm';
-import { db } from '../db';
+import { eq } from 'drizzle-orm';
+import type { AppDatabase } from '../db';
 import { resources, recallPointResources } from '../schema';
+import type { Resource, NewResource, RecallPointResource } from '../schema';
+
+/**
+ * Extended resource type that includes the relevance description from
+ * the junction table when querying resources by recall point.
+ */
+export interface ResourceWithRelevance extends Resource {
+  relevance: string | null;
+}
+
+/**
+ * Input type for creating a new resource.
+ * Excludes auto-generated fields (id, createdAt, updatedAt).
+ */
+export type CreateResourceInput = Omit<NewResource, 'id' | 'createdAt' | 'updatedAt'>;
 
 export class ResourceRepository {
+  constructor(private readonly db: AppDatabase) {}
+
   /**
    * Find all resources belonging to a specific recall set.
    * Returns resources sorted by type (articles first, then excerpts, then images).
@@ -169,57 +208,41 @@ export class ResourceRepository {
 }
 ```
 
-**Type definitions** (in the same file or a separate types file):
+**Register the repository in `src/storage/repositories/index.ts`** by adding:
 
 ```typescript
-export interface Resource {
-  id: string;
-  recallSetId: string;
-  title: string;
-  type: 'article' | 'excerpt' | 'book_passage' | 'image' | 'reference';
-  content: string | null;
-  url: string | null;
-  imageData: string | null;
-  mimeType: string | null;
-  metadata: Record<string, string> | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ResourceWithRelevance extends Resource {
-  relevance: string | null;
-}
-
-export type CreateResourceInput = Omit<Resource, 'id' | 'createdAt' | 'updatedAt'>;
+// Resource repository and types
+export {
+  ResourceRepository,
+  type ResourceWithRelevance,
+  type CreateResourceInput,
+} from './resource.repository';
 ```
-
-**Register the repository in `src/storage/repositories/index.ts`** by adding the export.
 
 ### 4. Drizzle Migration
 
-After modifying `schema.ts`, generate a new Drizzle migration:
+After modifying `schema.ts`, generate and apply a new Drizzle migration using the project's scripts:
 
 ```bash
-bun drizzle-kit generate
+bun run db:generate   # generates SQL migration file
+bun run db:migrate    # applies via project's migration runner (src/storage/migrate.ts)
 ```
 
-This will create a migration file in the `drizzle/` or `migrations/` directory (wherever the project stores them). Verify the migration SQL creates:
+**Do NOT use `bun drizzle-kit push` or `drizzle-kit push`.** The project uses `src/storage/migrate.ts` for applying migrations.
+
+Verify the migration SQL creates:
 - `resources` table with all columns
 - `recall_point_resources` junction table
-- Index on `resources.recall_set_id`
+- Index on `resources.recall_set_id` (via third arg to `sqliteTable`)
+- Index on `recall_point_resources.recall_point_id` (via third arg to `sqliteTable`)
 - Foreign key constraints
-
-Apply the migration:
-```bash
-bun drizzle-kit push
-```
 
 ### 5. Source Materials for ALL 51 Recall Sets
 
 Create seed files in `src/storage/seeds/resources/`. Organize by the same groupings as the recall set seed files:
 
-- `src/storage/seeds/resources/motivation-resources.ts` — for the `motivationRecallSet` (Motivation Theory, 5 sessions worth of content)
-- `src/storage/seeds/resources/atp-resources.ts` — for `atpRecallSet` (ATP Biochemistry, 5 sessions worth of content)
+- `src/storage/seeds/resources/motivation-resources.ts` — for the `motivation` recall set
+- `src/storage/seeds/resources/atp-resources.ts` — for the `atp` recall set
 - `src/storage/seeds/resources/conceptual-resources.ts` — for sets 1-17 (diverseConceptualSets)
 - `src/storage/seeds/resources/procedural-resources.ts` — for sets 18-30 (diverseProceduralSets)
 - `src/storage/seeds/resources/creative-resources.ts` — for sets 31-42 (diverseCreativeSets)
@@ -243,7 +266,9 @@ Each seed file exports an array of objects matching the recall set names exactly
 
 ```typescript
 export interface ResourceSeed {
-  // Must match the recall set name exactly (used by seed runner to link)
+  // Must EXACTLY match the recall set `name` field from the seed data.
+  // The seed runner uses findByName() which does case-insensitive lookup,
+  // but always use the exact casing from the source seed file for clarity.
   recallSetName: string;
   resources: Array<{
     title: string;
@@ -263,82 +288,88 @@ export interface ResourceSeed {
 }
 ```
 
-**The 51 sets to cover** (reference the seed files for exact names):
+**The 51 recall set names (EXACT values from seed files):**
 
-From `motivation-recall-set.ts`: Motivation Theory (one set, 5+ recall points)
-From `atp-recall-set.ts`: ATP Biochemistry (one set, 5+ recall points)
-From `diverse-conceptual.ts` (sets 1-17):
-1. Atomic Habits: The Habit Loop
-2. Dunning-Kruger Effect
-3. Sunk Cost Fallacy
-4. Flow State (Csikszentmihalyi)
-5. Cognitive Dissonance
-6. Caffeine & Adenosine
-7. How Mushroom Mycelium Networks Work
-8. Gut-Brain Axis
-9. Circadian Rhythm & Melatonin
-10. mRNA Vaccines
-11. Herd Immunity Thresholds
-12. Antibiotic Resistance
-13. Central Limit Theorem
-14. Bayes' Theorem
-15. Shannon Entropy
-16. Compound Interest
-17. Spaced Repetition: The Forgetting Curve
+From `motivation-recall-set.ts` (1 set):
+1. `motivation`
 
-From `diverse-procedural.ts` (sets 18-30):
-18. Existentialism: Radical Freedom
-19. Stoicism: Dichotomy of Control
-20. How SSDs Store Data
-21. How Bridges Distribute Load
-22. Why Airplane Wings Generate Lift
-23. How Sourdough Fermentation Works
-24. How Espresso Extraction Works
-25. How Vinyl Records Store Sound
-26. Git Reflog & Recovery
-27. TCP Three-Way Handshake
-28. DNS Resolution
-29. Docker Container vs VM
-30. OAuth 2.0 Authorization Flow
+From `atp-recall-set.ts` (1 set):
+2. `atp`
 
-From `diverse-creative.ts` (sets 31-42):
-31. The Rule of Thirds in Composition
-32. Color Temperature in Lighting
-33. Why Minor Keys Sound Sad
-34. How Coral Reefs Form
-35. Diaphragmatic Breathing
-36. Gradient Descent in Neural Networks
-37. Transformer Attention Mechanism
-38. CAP Theorem
-39. How Undersea Cables Work
-40. Neuroplasticity
-41. Gesture Drawing
-42. Perspective Drawing: One-Point vs Two-Point
+From `diverse-conceptual.ts` (17 sets):
+3. `Atomic Habits: The Habit Loop`
+4. `Dunning-Kruger Effect`
+5. `Sunk Cost Fallacy`
+6. `Dopamine & Motivation`
+7. `The Lindy Effect`
+8. `Caffeine & Adenosine`
+9. `How Muscle Growth Works`
+10. `Sleep & Memory Consolidation`
+11. `Intermittent Fasting Mechanisms`
+12. `Sarcomere Contraction (Sliding Filament Theory)`
+13. `Mind-Muscle Connection`
+14. `Proprioception & Balance`
+15. `Central Limit Theorem`
+16. `Shannon Entropy`
+17. `Definition of a Group (Abstract Algebra)`
+18. `Fractal Dimension`
+19. `Persistent Homology`
 
-From `diverse-remaining.ts` (sets 43-51):
-43. Godel's Incompleteness Theorems
-44. Fibonacci Sequence in Nature
-45. Monty Hall Problem
-46. Allegory of the Cave
-47. Kafka's Metamorphosis
-48. Ship of Theseus
-49. Bystander Effect
-50. Tulip Mania
-51. Maillard Reaction
+From `diverse-procedural.ts` (13 sets):
+20. `Existentialism: Radical Freedom`
+21. `Kafka's Metamorphosis as Alienation`
+22. `Compound Interest`
+23. `How SSDs Store Data`
+24. `How Vinyl Records Encode Stereo Sound`
+25. `Spaced Repetition: The Forgetting Curve`
+26. `TypeScript Generics`
+27. `Git Rebase vs Merge`
+28. `Git Reflog & Recovery`
+29. `React Re-rendering Mental Model`
+30. `Backpropagation & Computational Graphs`
+31. `How Espresso Extraction Works`
+32. `The Ralph Wiggum Loop`
+
+From `diverse-creative.ts` (12 sets):
+33. `The Rule of Thirds in Composition`
+34. `Color Temperature in Lighting`
+35. `Why Minor Keys Sound Sad`
+36. `How Mushroom Mycelium Networks Work`
+37. `Ujjayi Breath & Vagal Tone`
+38. `How LLM Tokenization Works`
+39. `Superposition & Mechanistic Interpretability`
+40. `How B-Tree Indexes Work`
+41. `How Docker Containers Actually Isolate`
+42. `The Gut-Brain Axis`
+43. `Contour Drawing & Negative Space`
+44. `How Chiaroscuro Creates Depth`
+
+From `diverse-remaining.ts` (9 sets):
+45. `Gödel's Incompleteness Theorems`
+46. `Eigenvectors Geometrically`
+47. `How the Fourier Transform Decomposes Signals`
+48. `Borges & The Library of Babel`
+49. `Negative Capability (Keats)`
+50. `Heidegger's Ready-to-Hand vs Present-at-Hand`
+51. `Transference in Psychoanalysis`
+52. `The Bretton Woods System & Its Collapse` (note: numbering is 50 in seed file comments but this is the 50th diverse set)
+53. `How to Make a Phenomenal Beef Ragù` (note: numbering is 51 in seed file comments; this is the last set)
+
+> **Total: 2 original + 49 diverse = 51 recall sets.** The numbering above goes to 53 because the two original sets (motivation, atp) are listed first before the 49 diverse sets numbered 3-51 in the seed files. The actual count is 51 unique recall sets.
 
 ### 6. Image Resources for Visual Sets
 
 For recall sets with visual content, include image resources in addition to text resources:
 
-- **The Rule of Thirds in Composition** (set 31): Include an image resource with `type: 'image'` showing a 3x3 grid overlay example. Use a public domain or CC0-licensed image URL. Set `url` to a freely-usable image. Example: a Wikimedia Commons rule-of-thirds grid image. Set `metadata` to include `{ license: 'CC0', source: 'Wikimedia Commons' }`.
+- **The Rule of Thirds in Composition** (set #33): Include an image resource with `type: 'image'` showing a 3x3 grid overlay example. Use a public domain or CC0-licensed image URL. Set `url` to a freely-usable image. Example: a Wikimedia Commons rule-of-thirds grid image. Set `metadata` to include `{ license: 'CC0', source: 'Wikimedia Commons' }`.
 
-- **Color Temperature in Lighting** (set 32): Include an image showing the Kelvin scale from warm to cool.
+- **Color Temperature in Lighting** (set #34): Include an image showing the Kelvin scale from warm to cool.
 
-- **Perspective Drawing** (set 42): Include an image showing one-point vs two-point perspective.
+- **How Chiaroscuro Creates Depth** (set #44): Include an image showing chiaroscuro technique example.
 
-- **Gesture Drawing** (set 41): Include an image showing gestural line examples.
+- **Contour Drawing & Negative Space** (set #43): Include an image showing gestural line and negative space examples.
 
-- **Fibonacci Sequence in Nature** (set 44): Include an image showing the Fibonacci spiral in nature (nautilus shell, sunflower, etc.).
+- **How the Fourier Transform Decomposes Signals** (set #47): Include an image showing the Fourier decomposition or frequency-domain representation.
 
 For image resources:
 - Prefer `url` pointing to stable, freely-licensed images (Wikimedia Commons, Unsplash, Pexels)
@@ -365,73 +396,158 @@ Add a comment at the top of each resource seed file:
  */
 ```
 
-### 8. API Endpoint: `GET /api/recall-sets/:id/resources`
+### 8. API Endpoint: Resources Routes
 
-Create `src/api/routes/resources.ts`:
+Create `src/api/routes/resources.ts` using the **factory function pattern** (matching `recallSetsRoutes()`, `sessionsRoutes()`, `dashboardRoutes()`):
 
 ```typescript
 import { Hono } from 'hono';
+import { db } from '@/storage/db';
 import { ResourceRepository } from '@/storage/repositories/resource.repository';
-
-const resourceRoutes = new Hono();
-
-/**
- * GET /api/recall-sets/:id/resources
- *
- * Returns all resources associated with a recall set.
- * Response includes text content, image URLs, and metadata.
- * Image base64 data is excluded by default (use ?includeImageData=true to include).
- */
-resourceRoutes.get('/recall-sets/:id/resources', async (c) => {
-  const recallSetId = c.req.param('id');
-  const includeImageData = c.req.query('includeImageData') === 'true';
-
-  const repo = new ResourceRepository();
-  const resources = await repo.findByRecallSetId(recallSetId);
-
-  if (!resources.length) {
-    return c.json({ resources: [] });
-  }
-
-  // Strip base64 image data unless explicitly requested (large payloads)
-  const responseResources = includeImageData
-    ? resources
-    : resources.map(r => ({ ...r, imageData: r.imageData ? '[base64 omitted]' : null }));
-
-  return c.json({ resources: responseResources });
-});
+import { success } from '../utils/response';
 
 /**
- * GET /api/recall-points/:id/resources
+ * Creates the resources API router.
  *
- * Returns all resources linked to a specific recall point.
- * Includes the relevance description from the junction table.
+ * Provides endpoints for fetching resources associated with recall sets
+ * and recall points. Uses the factory function pattern consistent with
+ * all other route modules in the codebase.
+ *
+ * Routes (relative to mount point):
+ * - GET /:recallSetId/resources — resources for a recall set
+ * - GET /by-point/:recallPointId — resources linked to a recall point
  */
-resourceRoutes.get('/recall-points/:id/resources', async (c) => {
-  const recallPointId = c.req.param('id');
+export function resourcesRoutes(): Hono {
+  const router = new Hono();
 
-  const repo = new ResourceRepository();
-  const resources = await repo.findByRecallPointId(recallPointId);
+  // Repository initialized with the shared db instance
+  const repo = new ResourceRepository(db);
 
-  return c.json({ resources });
-});
+  /**
+   * GET /:recallSetId/resources
+   *
+   * Returns all resources associated with a recall set.
+   * Response includes text content, image URLs, and metadata.
+   * Image base64 data is excluded by default (use ?includeImageData=true to include).
+   */
+  router.get('/:recallSetId/resources', async (c) => {
+    const recallSetId = c.req.param('recallSetId');
+    const includeImageData = c.req.query('includeImageData') === 'true';
 
-export { resourceRoutes };
+    const resources = await repo.findByRecallSetId(recallSetId);
+
+    // Strip base64 image data unless explicitly requested (large payloads)
+    const responseResources = includeImageData
+      ? resources
+      : resources.map(r => ({ ...r, imageData: r.imageData ? '[base64 omitted]' : null }));
+
+    return success(c, responseResources);
+  });
+
+  /**
+   * GET /by-point/:recallPointId
+   *
+   * Returns all resources linked to a specific recall point.
+   * Includes the relevance description from the junction table.
+   */
+  router.get('/by-point/:recallPointId', async (c) => {
+    const recallPointId = c.req.param('recallPointId');
+
+    const resources = await repo.findByRecallPointId(recallPointId);
+
+    return success(c, resources);
+  });
+
+  return router;
+}
 ```
 
-Register in `src/api/routes/index.ts` (NOT `server.ts`):
-- Import `resourceRoutes` from `./resources`
-- Mount it in the `createApiRouter()` factory function (same pattern as existing routes like `recall-sets.ts` and `sessions.ts`)
-- **NOTE:** All existing routes are registered in `src/api/routes/index.ts` via `createApiRouter()`, not directly in `server.ts`. Follow the existing convention.
+**Route mount strategy explained:**
+
+The router is mounted in `createApiRouter()` at `/recall-sets`, so the full paths become:
+- `GET /api/recall-sets/:recallSetId/resources` — resources for a recall set
+- `GET /api/recall-sets/by-point/:recallPointId` — resources linked to a recall point
+
+This nests naturally under the existing `/api/recall-sets` namespace. The `by-point` sub-path avoids collision with recall set IDs because IDs use the `rs_` prefix format.
+
+**Register in `src/api/routes/index.ts`:**
+
+1. Add import:
+```typescript
+import { resourcesRoutes } from './resources';
+```
+
+2. Add to re-export block:
+```typescript
+export { resourcesRoutes } from './resources';
+```
+
+3. Mount in `createApiRouter()` alongside existing routes:
+```typescript
+// Mount resource routes nested under recall-sets
+router.route('/recall-sets', resourcesRoutes());
+```
+
+> **Note:** This does NOT conflict with the existing `router.route('/recall-sets', recallSetsRoutes())` call because Hono merges routes from multiple `.route()` calls at the same path prefix. The existing recall-sets routes handle `GET /`, `POST /`, `GET /:id`, etc., while resource routes handle `GET /:recallSetId/resources` and `GET /by-point/:recallPointId` — no path collisions.
+
+4. Add to the `endpoints` array in the API root endpoint:
+```typescript
+{ path: '/api/recall-sets/:id/resources', description: 'Source resources for a recall set' },
+```
 
 ### 9. Seed Runner Update
 
-Modify the existing seed runner (find it by searching for where `motivationRecallSet` or `diverseConceptualSets` are imported and inserted) to also seed resources:
+Modify `src/storage/seed.ts` (the existing seed runner where `motivationRecallSet` and `diverseConceptualSets` are imported and inserted) to also seed resources:
 
-1. After seeding recall sets and recall points, seed resources
-2. For each resource seed entry, match `recallSetName` to the recall set ID that was just inserted
-3. Insert resource records with generated UUIDs
-4. If `pointLinks` are provided, match `pointContentSubstring` against recall point `content` fields to find the correct recall point IDs, then insert junction table records
+1. Import the `ResourceRepository` and resource seed data
+2. After seeding recall sets and recall points, seed resources
+3. For each resource seed entry, use `recallSetRepo.findByName(recallSetName)` to get the recall set ID
+4. Insert resource records with generated UUIDs using `ResourceRepository.createMany()`
+5. If `pointLinks` are provided, match `pointContentSubstring` against recall point `content` fields to find the correct recall point IDs, then insert junction table records using `ResourceRepository.linkManyToRecallPoints()`
+
+**CRITICAL: FK constraint handling in `--force` mode.**
+
+After T04 adds FK constraints (`resources.recall_set_id` references `recallSets.id`, `recall_point_resources.recall_point_id` references `recallPoints.id`, `recall_point_resources.resource_id` references `resources.id`), the delete order in the `--force` path of `seedRecallSet()` MUST be updated. The correct delete order is:
+
+1. Delete `recall_point_resources` rows for all recall points in this set
+2. Delete `recall_points` rows for this recall set
+3. Delete `resources` rows for this recall set
+4. Delete the `recall_set` row itself
+
+The current code (lines 108-112 of `seed.ts`) only deletes recall points then the recall set. After T04, it must also delete resources and junction table entries first. Update the force-delete block to:
+
+```typescript
+if (existing) {
+  if (!force) {
+    console.log(`  Skipping "${recallSet.name}" - already exists (use --force to reseed)`);
+    return false;
+  }
+
+  // Force mode: delete in FK-safe order
+  console.log(`  Deleting existing "${recallSet.name}" recall set...`);
+
+  // 1. Delete recall_point_resources (references both recall_points and resources)
+  const existingPoints = await recallPointRepo.findByRecallSetId(existing.id);
+  for (const point of existingPoints) {
+    await resourceRepo.unlinkAllFromRecallPoint(point.id);
+  }
+
+  // 2. Delete recall_points (referenced by recall_point_resources, already cleared)
+  for (const point of existingPoints) {
+    await recallPointRepo.delete(point.id);
+  }
+
+  // 3. Delete resources (references recall_sets, referenced by recall_point_resources already cleared)
+  await resourceRepo.deleteByRecallSetId(existing.id);
+
+  // 4. Delete the recall_set itself
+  await recallSetRepo.delete(existing.id);
+}
+```
+
+This requires adding two helper methods to `ResourceRepository`:
+- `unlinkAllFromRecallPoint(recallPointId: string): Promise<void>` — deletes all `recall_point_resources` rows for a given recall point
+- `deleteByRecallSetId(recallSetId: string): Promise<void>` — deletes all `resources` rows for a given recall set
 
 ---
 
@@ -439,20 +555,20 @@ Modify the existing seed runner (find it by searching for where `motivationRecal
 
 | Action | File | What Changes |
 |--------|------|-------------|
-| MODIFY | `src/storage/schema.ts` | Add `resources` table, `recallPointResources` junction table, and index |
-| CREATE | Migration file (auto-generated by `bun drizzle-kit generate`) | SQL for new tables |
-| CREATE | `src/storage/repositories/resource.repository.ts` | Repository with `findByRecallSetId`, `findByRecallPointId`, `create`, `createMany`, `linkToRecallPoint`, `linkManyToRecallPoints` |
-| MODIFY | `src/storage/repositories/index.ts` | Export `ResourceRepository` |
-| CREATE | `src/storage/seeds/resources/motivation-resources.ts` | Source material for Motivation Theory set |
-| CREATE | `src/storage/seeds/resources/atp-resources.ts` | Source material for ATP Biochemistry set |
-| CREATE | `src/storage/seeds/resources/conceptual-resources.ts` | Source material for sets 1-17 |
-| CREATE | `src/storage/seeds/resources/procedural-resources.ts` | Source material for sets 18-30 |
-| CREATE | `src/storage/seeds/resources/creative-resources.ts` | Source material for sets 31-42 |
-| CREATE | `src/storage/seeds/resources/remaining-resources.ts` | Source material for sets 43-51 |
+| MODIFY | `src/storage/schema.ts` | Add `resources` table (with index as 3rd arg), `recallPointResources` junction table (with index as 3rd arg), and type exports (`Resource`, `NewResource`, `RecallPointResource`, `NewRecallPointResource`) |
+| CREATE | Migration file (auto-generated by `bun run db:generate`) | SQL for new tables, indexes, and FK constraints |
+| CREATE | `src/storage/repositories/resource.repository.ts` | Repository with `findByRecallSetId`, `findByRecallPointId`, `findById`, `create`, `createMany`, `linkToRecallPoint`, `linkManyToRecallPoints`, `unlinkAllFromRecallPoint`, `deleteByRecallSetId` |
+| MODIFY | `src/storage/repositories/index.ts` | Export `ResourceRepository`, `ResourceWithRelevance`, `CreateResourceInput` |
+| CREATE | `src/storage/seeds/resources/motivation-resources.ts` | Source material for `motivation` set |
+| CREATE | `src/storage/seeds/resources/atp-resources.ts` | Source material for `atp` set |
+| CREATE | `src/storage/seeds/resources/conceptual-resources.ts` | Source material for sets 3-19 (diverseConceptualSets) |
+| CREATE | `src/storage/seeds/resources/procedural-resources.ts` | Source material for sets 20-32 (diverseProceduralSets) |
+| CREATE | `src/storage/seeds/resources/creative-resources.ts` | Source material for sets 33-44 (diverseCreativeSets) |
+| CREATE | `src/storage/seeds/resources/remaining-resources.ts` | Source material for sets 45-51 (diverseRemainingSets) |
 | CREATE | `src/storage/seeds/resources/index.ts` | Re-exports all resource seed data |
-| CREATE | `src/api/routes/resources.ts` | API endpoints for fetching resources |
-| MODIFY | `src/api/routes/index.ts` | Register resource routes in `createApiRouter()` (NOT `server.ts` — follow existing route registration pattern) |
-| MODIFY | Seed runner file (wherever `motivationRecallSet` is inserted) | Add resource seeding logic after recall set/point seeding |
+| CREATE | `src/api/routes/resources.ts` | API endpoints using factory function pattern (`resourcesRoutes()`) with `success()` helper |
+| MODIFY | `src/api/routes/index.ts` | Import `resourcesRoutes`, add to re-export block, mount with `router.route('/recall-sets', resourcesRoutes())` |
+| MODIFY | `src/storage/seed.ts` | Import ResourceRepository + resource seeds, add resource seeding after recall point seeding, update `--force` delete order to handle FK constraints |
 
 ---
 
@@ -460,31 +576,41 @@ Modify the existing seed runner (find it by searching for where `motivationRecal
 
 1. **Schema**: `resources` table exists with columns: `id`, `recall_set_id`, `title`, `type`, `content`, `url`, `image_data`, `mime_type`, `metadata`, `created_at`, `updated_at`. All column types and constraints match the specification.
 2. **Schema**: `recall_point_resources` junction table exists with columns: `id`, `recall_point_id`, `resource_id`, `relevance`. Foreign keys reference the correct parent tables.
-3. **Index**: An index exists on `resources.recall_set_id` for efficient lookups.
-4. **Migration**: Drizzle migration generates and applies cleanly with `bun drizzle-kit generate` and `bun drizzle-kit push`. No errors.
-5. **Repository**: `ResourceRepository` implements all six methods: `findByRecallSetId`, `findByRecallPointId`, `findById`, `create`, `createMany`, `linkToRecallPoint`, `linkManyToRecallPoints`.
-6. **Repository**: `findByRecallSetId` returns an empty array (not null, not error) for a recall set with no resources.
-7. **Repository**: `findByRecallPointId` joins through the junction table and includes the `relevance` field.
-8. **Repository**: `createMany` uses a transaction so either all resources are created or none.
-9. **Coverage**: ALL 51 recall sets have at least one source resource seeded. Zero sets are left without a resource.
-10. **Content quality**: Each source resource is 200-500 words, reads as a coherent article/excerpt (not bullet points), and contains every fact referenced in the corresponding recall set's recall points.
-11. **Content accuracy**: The terminology in each resource matches the terminology in the recall points it backs. If a recall point says "cue, craving, response, reward", the resource uses those exact terms.
-12. **Image resources**: At least 5 visual recall sets have image resources with valid URLs pointing to freely-licensed images. Each image resource has `mimeType` set and `metadata` containing license info.
-13. **Junction table**: Resources are linked to specific recall points via `recall_point_resources` where a clear relationship exists. Not every resource needs to be linked to specific points (set-level resources are fine), but multi-point sets should have at least some point-level links.
-14. **API endpoint**: `GET /api/recall-sets/:id/resources` returns the correct resources for a given recall set ID. Returns `{ resources: [] }` for a set with no resources.
-15. **API endpoint**: `GET /api/recall-points/:id/resources` returns resources linked to a specific recall point, including the `relevance` field.
-16. **API endpoint**: The `?includeImageData=true` query parameter controls whether base64 image data is included in the response. Without it, `imageData` is replaced with `'[base64 omitted]'`.
-17. **Seed runner**: Running the seed command (however the project seeds data) creates all resources and junction table links without errors. Resources are correctly associated with their recall sets by name matching.
-18. **No regressions**: Existing recall set and recall point seeding still works. No existing tests break.
-19. **Type exports**: `Resource`, `ResourceWithRelevance`, and `CreateResourceInput` types are exported and usable by other modules.
-20. **Repository registered**: `ResourceRepository` is exported from `src/storage/repositories/index.ts` alongside existing repositories.
+3. **Index**: An index exists on `resources.recall_set_id` defined as the third argument to `sqliteTable()`, NOT as a standalone export.
+4. **Index**: An index exists on `recall_point_resources.recall_point_id` defined as the third argument to `sqliteTable()`.
+5. **Migration**: Drizzle migration generates and applies cleanly with `bun run db:generate` and `bun run db:migrate`. No errors.
+6. **Type exports**: `Resource`, `NewResource`, `RecallPointResource`, `NewRecallPointResource` are exported from `schema.ts` using `$inferSelect`/`$inferInsert` pattern.
+7. **Repository**: `ResourceRepository` constructor takes `db: AppDatabase` as its argument (not no-arg constructor). Instantiated as `new ResourceRepository(db)`.
+8. **Repository**: `ResourceRepository` implements all eight methods: `findByRecallSetId`, `findByRecallPointId`, `findById`, `create`, `createMany`, `linkToRecallPoint`, `linkManyToRecallPoints`, `unlinkAllFromRecallPoint`, `deleteByRecallSetId`.
+9. **Repository**: `findByRecallSetId` returns an empty array (not null, not error) for a recall set with no resources.
+10. **Repository**: `findByRecallPointId` joins through the junction table and includes the `relevance` field.
+11. **Repository**: `createMany` uses a transaction so either all resources are created or none.
+12. **Coverage**: ALL 51 recall sets have at least one source resource seeded. Zero sets are left without a resource. Every `recallSetName` in resource seed data exactly matches a `name` field from the recall set seed files.
+13. **Content quality**: Each source resource is 200-500 words, reads as a coherent article/excerpt (not bullet points), and contains every fact referenced in the corresponding recall set's recall points.
+14. **Content accuracy**: The terminology in each resource matches the terminology in the recall points it backs. If a recall point says "cue, craving, response, reward", the resource uses those exact terms.
+15. **Image resources**: At least 5 visual recall sets have image resources with valid URLs pointing to freely-licensed images. Each image resource has `mimeType` set and `metadata` containing license info.
+16. **Junction table**: Resources are linked to specific recall points via `recall_point_resources` where a clear relationship exists. Not every resource needs to be linked to specific points (set-level resources are fine), but multi-point sets should have at least some point-level links.
+17. **API endpoint**: `GET /api/recall-sets/:id/resources` returns the correct resources for a given recall set ID, wrapped in `{ success: true, data: [...] }` format via the `success()` helper.
+18. **API endpoint**: `GET /api/recall-sets/by-point/:id` returns resources linked to a specific recall point, including the `relevance` field, wrapped in `{ success: true, data: [...] }` format.
+19. **API endpoint**: The `?includeImageData=true` query parameter controls whether base64 image data is included in the response. Without it, `imageData` is replaced with `'[base64 omitted]'`.
+20. **Route registration**: `resourcesRoutes` is a factory function exported from `src/api/routes/resources.ts`, re-exported from `src/api/routes/index.ts`, and mounted in `createApiRouter()`.
+21. **Seed runner**: Running `bun run db:seed` creates all resources and junction table links without errors. Resources are correctly associated with their recall sets by name matching.
+22. **Seed runner FK safety**: Running `bun run db:seed --force` deletes in the correct order: (1) recall_point_resources, (2) recall_points, (3) resources, (4) recall_set. No FK constraint violations.
+23. **No regressions**: Existing recall set and recall point seeding still works. No existing tests break.
+24. **Repository registered**: `ResourceRepository` is exported from `src/storage/repositories/index.ts` alongside existing repositories.
 
 ---
 
 ## Implementation Warnings
 
-> **WARNING: Recall set names must match actual seed data**
-> The list of 51 recall set names in this task (Section 5) is approximate. ~35 of the names do NOT exactly match the `name` field in the actual seed data files. The implementer MUST read the actual seed files (`src/storage/seeds/diverse-conceptual.ts`, `diverse-procedural.ts`, `diverse-creative.ts`, `diverse-remaining.ts`, `motivation-recall-set.ts`, `atp-recall-set.ts`) and use the EXACT `name` values from each seed entry. For example, the motivation recall set's name is `"motivation"` (lowercase), not `"Motivation Theory"`. The ATP set name must be verified similarly.
+> **WARNING: Recall set names must match EXACTLY**
+> The list of 51 recall set names in Section 5 was extracted directly from the seed files. Every `recallSetName` in the resource seed data MUST use one of these exact values. The seed runner uses `recallSetRepo.findByName()` which does case-insensitive lookup, but using the exact casing from the source files avoids any ambiguity. If a name is wrong, that recall set will get no resources.
 
 > **WARNING: FK constraints with seed re-runs**
-> If the seed runner uses `--force` or deletes existing recall sets before re-seeding, the new `resources` and `recall_point_resources` tables will have FK constraints referencing `recallSets.id` and `recallPoints.id`. Deleting recall sets without first deleting their resources will violate FK constraints. The seed runner must delete resources and junction table entries BEFORE deleting recall sets/points, or use CASCADE delete. Add this to the seed runner update logic.
+> When `--force` mode deletes existing data before re-seeding, the delete order is critical. After T04 adds FK constraints, the seed runner MUST delete in this exact order: (1) `recall_point_resources` (junction table), (2) `recall_points`, (3) `resources`, (4) `recall_sets`. Violating this order will cause FK constraint errors. See Section 9 for the exact code.
+
+> **WARNING: Do NOT use standalone index exports**
+> Indexes defined as `export const fooIdx = index(...)` outside `sqliteTable()` will NOT create actual SQLite indexes. Always define indexes as the third argument to `sqliteTable()`. See the `sessionMetrics`, `recallOutcomes`, `rabbitholeEvents`, and `messageTimings` tables in `schema.ts` for the correct pattern.
+
+> **WARNING: Use `success()` helper, not raw `c.json()`**
+> All API responses must use `success(c, data)` from `src/api/utils/response.ts`, returning `{ success: true, data: T }`. Never return raw `c.json({ resources: [] })` or other custom shapes.

@@ -4,7 +4,7 @@
 |-------|-------|
 | **name** | Single-Exchange UI |
 | **parallel-group** | D (wave 4) |
-| **depends-on** | T10 (Voice Input Integration) |
+| **depends-on** | T03 (Transcription Processing Pipeline — provides `FormattedText`), T10 (Voice Input Integration) |
 
 ---
 
@@ -20,9 +20,51 @@ This task pairs naturally with voice input (T10): user sees a question, speaks t
 
 ## Detailed Implementation
 
-### 1. SingleExchangeView Component (CREATE: `web/src/components/live-session/SingleExchangeView.tsx`)
+### 1. Tailwind Animation Setup (MODIFY: `web/tailwind.config.js`)
+
+> **Note**: The tailwind config is `web/tailwind.config.js` (plain JavaScript with JSDoc type annotation), NOT `.ts`.
+
+The `SingleExchangeView` component uses `animate-fade-in` in 3 places (showing_ai phase, loading phase, ai_streaming phase). This animation class does not exist in the current Tailwind configuration — `web/tailwind.config.js` has no `keyframes` or `animation` entries. Add them in the `theme.extend` section:
+
+```javascript
+// In theme.extend, after the existing 'colors' block:
+keyframes: {
+  'fade-in': {
+    '0%': { opacity: '0', transform: 'translateY(4px)' },
+    '100%': { opacity: '1', transform: 'translateY(0)' },
+  },
+},
+animation: {
+  'fade-in': 'fade-in 300ms ease-out',
+},
+```
+
+The full `theme.extend` block will look like:
+
+```javascript
+extend: {
+  colors: {
+    clarity: { /* ...existing... */ },
+  },
+  keyframes: {
+    'fade-in': {
+      '0%': { opacity: '0', transform: 'translateY(4px)' },
+      '100%': { opacity: '1', transform: 'translateY(0)' },
+    },
+  },
+  animation: {
+    'fade-in': 'fade-in 300ms ease-out',
+  },
+},
+```
+
+This produces the `animate-fade-in` Tailwind utility class automatically.
+
+### 2. SingleExchangeView Component (CREATE: `web/src/components/live-session/SingleExchangeView.tsx`)
 
 The core new component that replaces `MessageList`. It renders only the latest exchange between the AI and the user.
+
+> **Hard dependency on T03**: This component imports `FormattedText` from `../shared/FormattedText`. That component is created by T03 (Transcription Processing Pipeline). T03 must be completed before T12 can compile. The directory `web/src/components/shared/` is also created by T03.
 
 ```tsx
 import { useState, useEffect, useRef } from 'react';
@@ -257,43 +299,13 @@ export { SingleExchangeView, type ExchangePhase };
 export default SingleExchangeView;
 ```
 
-### 2. CSS Animations
-
-Add a custom `animate-fade-in` utility to the Tailwind config or as a CSS class. This is a simple opacity transition for content appearing:
-
-**Option A: Add to `tailwind.config.ts` (or `.js`):**
-
-```typescript
-// In the theme.extend section:
-keyframes: {
-  'fade-in': {
-    '0%': { opacity: '0' },
-    '100%': { opacity: '1' },
-  },
-},
-animation: {
-  'fade-in': 'fade-in 300ms ease-out',
-},
-```
-
-**Option B: Add a CSS class in the global stylesheet** (`web/src/index.css` or similar):
-
-```css
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.animate-fade-in {
-  animation: fade-in 300ms ease-out;
-}
-```
-
-If `animate-fade-in` already exists in the project's Tailwind configuration, no change is needed. Check before adding.
-
 ### 3. WebSocket Hook Changes (MODIFY: `web/src/hooks/use-session-websocket.ts`)
 
-Add a `latestAssistantMessage` state that tracks the most recent completed assistant message, separate from the full `messages` array:
+The hook currently has no `latestAssistantMessage`, `lastSentUserMessage`, or `isOpeningMessage` state variables, and does not return them. All three must be added.
+
+#### 3a. Add State Variables
+
+Add alongside existing state declarations:
 
 ```typescript
 // Add alongside existing state:
@@ -306,57 +318,90 @@ const [lastSentUserMessage, setLastSentUserMessage] = useState<string | null>(nu
 
 /** Whether this is the first assistant message in the session (for opening animation). */
 const [isOpeningMessage, setIsOpeningMessage] = useState(true);
+
+/** Ref for the clear timeout so it can be cancelled on unmount or rapid sends. */
+const lastSentClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 ```
 
-**Update the `assistant_complete` message handler:**
+#### 3b. Update the `UseSessionWebSocketReturn` Interface (lines 139-164)
 
-In the existing handler for `case 'assistant_complete':` (or equivalent):
+Add the three new fields to the return type interface:
+
+```typescript
+// Add to UseSessionWebSocketReturn interface:
+
+/** The most recent completed assistant message for single-exchange display. */
+latestAssistantMessage: string;
+
+/** The user message that was just sent. Briefly non-null for send animation, then cleared. */
+lastSentUserMessage: string | null;
+
+/** Whether the current assistant message is the opening message (skip entrance animation). */
+isOpeningMessage: boolean;
+```
+
+#### 3c. Update the `session_started` Handler (lines 295-307)
+
+When the session starts with an opening message, track it for SingleExchangeView. The `isOpeningMessage` tracking is handled inside the hook itself (not via the container's callback), because `SessionContainer`'s `handleSessionStarted` callback (lines 239-241) takes zero arguments but the hook passes `(sessionId, openingMessage)` — a pre-existing mismatch. By tracking state in the hook, we avoid relying on the container callback for this purpose.
+
+```typescript
+case 'session_started': {
+  // ... existing logic ...
+
+  // Track the opening message for SingleExchangeView
+  setLatestAssistantMessage(message.openingMessage);
+  setIsOpeningMessage(true);
+
+  break;
+}
+```
+
+#### 3d. Update the `assistant_complete` Handler (lines 314-327)
+
+When an assistant message completes, update the latest message and clear the opening flag:
 
 ```typescript
 case 'assistant_complete': {
-  const fullContent = msg.fullContent;
+  const fullContent = message.fullContent;
   // ... existing logic to add to messages array ...
 
   // Track as latest assistant message for SingleExchangeView
   setLatestAssistantMessage(fullContent);
 
-  // After the first assistant message, all subsequent ones are not "opening"
-  if (isOpeningMessage) setIsOpeningMessage(false);
+  // After the first assistant message completes, all subsequent ones are not "opening"
+  setIsOpeningMessage(false);
 
   break;
 }
 ```
 
-**Update the `session_started` message handler:**
+#### 3e. Update `sendUserMessage` (lines 501-521)
 
-When the session starts with an opening message:
-
-```typescript
-case 'session_started': {
-  // ... existing logic ...
-  setLatestAssistantMessage(msg.openingMessage);
-  setIsOpeningMessage(true);
-  break;
-}
-```
-
-**Update `sendUserMessage`:**
-
-When the user sends a message, briefly set `lastSentUserMessage` for the animation:
+When the user sends a message, briefly set `lastSentUserMessage` for the animation, then schedule a 500ms clear timeout:
 
 ```typescript
 const sendUserMessage = useCallback((content: string) => {
   // Set the sent message for SingleExchangeView animation
   setLastSentUserMessage(content);
 
+  // Clear any previously scheduled timeout to avoid stale clears
+  if (lastSentClearTimeoutRef.current) {
+    clearTimeout(lastSentClearTimeoutRef.current);
+  }
+
   // Clear the sent message after the animation completes (500ms)
-  setTimeout(() => setLastSentUserMessage(null), 500);
+  lastSentClearTimeoutRef.current = setTimeout(() => {
+    setLastSentUserMessage(null);
+    lastSentClearTimeoutRef.current = null;
+  }, 500);
 
   // ... existing WebSocket send logic ...
 }, [/* existing deps */]);
 ```
 
-**Add to the returned object:**
+Also add cleanup for the timeout ref in the hook's teardown (useEffect cleanup) to avoid memory leaks on unmount.
+
+#### 3f. Add to the Returned Object
 
 ```typescript
 return {
@@ -371,21 +416,24 @@ The full `messages` array is STILL maintained. It is still returned from the hoo
 
 ### 4. SessionContainer Changes (MODIFY: `web/src/components/live-session/SessionContainer.tsx`)
 
-**Replace `MessageList` import and usage with `SingleExchangeView`:**
+> **Pre-existing bug warning**: `SessionContainer.tsx` lines 53-58 have a timer interval leak — they use `useState` instead of `useEffect` for the interval timer. The cleanup function returned by the `useState` initializer is silently ignored. T11 is responsible for fixing this bug. T12 implementers should be aware they are editing a file with this known issue and should not attempt to fix it (to avoid merge conflicts with T11).
 
-Remove:
+#### 4a. Update Imports
+
+Remove the `MessageList` import and add `SingleExchangeView`:
+
 ```typescript
+// Remove:
 import { MessageList } from './MessageList';
-```
 
-Add:
-```typescript
+// Add:
 import { SingleExchangeView } from './SingleExchangeView';
 ```
 
-**Update the destructured WebSocket hook return** (around line 264):
+#### 4b. Destructure the 3 New Fields from the Hook
 
-Add the new fields:
+Update the destructured WebSocket hook return (around line 264) to include the new fields:
+
 ```typescript
 const {
   connectionState,
@@ -399,15 +447,17 @@ const {
   triggerEvaluation,
   endSession,
   connect,
-  latestAssistantMessage,   // NEW
-  lastSentUserMessage,       // NEW
-  isOpeningMessage,           // NEW
+  latestAssistantMessage,   // NEW — latest completed AI message for display
+  lastSentUserMessage,       // NEW — briefly non-null for send animation
+  isOpeningMessage,           // NEW — suppresses entrance animation on first message
 } = useSessionWebSocket(sessionId, {
   // ... existing callbacks
 });
 ```
 
-**Replace the `<MessageList>` JSX** (currently around line 393-398):
+#### 4c. Replace the `<MessageList>` JSX (lines 393-398)
+
+Replace the MessageList render with SingleExchangeView:
 
 Current:
 ```tsx
@@ -432,10 +482,11 @@ Replace with:
 />
 ```
 
-**Remove the evaluation feedback banner** (lines ~375-389):
+#### 4d. Remove the Evaluation Feedback Banner (lines 375-390)
 
-The `lastEvaluation` banner that shows "Great recall!" / "Keep practicing" is no longer appropriate in the single-exchange view. Evaluation feedback is now invisible (handled by T06's evaluator feedback injection into the tutor prompt). Remove the entire evaluation banner `div`:
+The `lastEvaluation` banner that shows "Great recall!" / "Keep practicing" is no longer appropriate in the single-exchange view. Evaluation feedback is now invisible (handled by T06's evaluator feedback injection into the tutor prompt). Remove:
 
+1. The entire evaluation banner JSX block:
 ```tsx
 {/* Remove this entire block: */}
 {lastEvaluation && (
@@ -445,16 +496,18 @@ The `lastEvaluation` banner that shows "Great recall!" / "Keep practicing" is no
 )}
 ```
 
-Also remove the `lastEvaluation` state variable and `handleEvaluationResult` callback if they are no longer used by any other part of the component. If other code still references `lastEvaluation`, keep the state but remove the visual rendering.
+2. The `lastEvaluation` state variable (if no other code references it).
 
-### 5. MessageList.tsx — Keep But Unused
+3. The `handleEvaluationResult` callback (lines 243-246), which sets `lastEvaluation`. If other code still references it, keep the state but remove only the visual rendering.
+
+### 5. MessageList.tsx Deprecation Comment (MODIFY: `web/src/components/live-session/MessageList.tsx`)
 
 Do NOT delete `MessageList.tsx`. It may be useful for:
 - Session replay feature (viewing past session transcripts)
 - Debugging (toggling chat view for development)
 - Future "review mode" where a user replays their session
 
-Add a comment at the top of the file:
+Add a comment block at the top of the file (before existing content):
 
 ```typescript
 /**
@@ -468,7 +521,17 @@ Add a comment at the top of the file:
  */
 ```
 
-### 6. Text Styling in SingleExchangeView
+### 6. Barrel Export Update (MODIFY: `web/src/components/live-session/index.ts`)
+
+Add the `SingleExchangeView` export to the barrel file so it can be imported alongside other live-session components:
+
+```typescript
+// Single-exchange display (replaces MessageList for live sessions)
+export { SingleExchangeView } from './SingleExchangeView';
+export type { ExchangePhase } from './SingleExchangeView';
+```
+
+### 7. Text Styling in SingleExchangeView
 
 The AI text in SingleExchangeView is NOT in a chat bubble. It is rendered as large, readable text that fills the content area:
 
@@ -480,7 +543,7 @@ The AI text in SingleExchangeView is NOT in a chat bubble. It is rendered as lar
 - **No chat bubble**: No rounded rectangle background, no message-bubble styling. Just clean text on the dark session background.
 - **Label**: Small "Agent" label above AI text in `text-clarity-400`, uppercase, tracking-wide. No "AI Tutor" label.
 
-### 7. Interaction with Voice Input (T10)
+### 8. Interaction with Voice Input (T10)
 
 The single-exchange view pairs with the VoiceInput component:
 
@@ -496,11 +559,11 @@ The single-exchange view pairs with the VoiceInput component:
 
 This flow is clean and focused. No distractions from previous exchanges.
 
-### 8. Rabbit Hole Mode
+### 9. Rabbit Hole Mode
 
 During rabbit holes (T09, future task), the single-exchange view behaves identically. There is no mini-history or multi-exchange view during rabbit holes. Consistency is more important than showing context — the evaluator has the full history and the AI agent has full context via the conversation history in its prompt. The user does not need to see it.
 
-### 9. No Scrolling Conversation
+### 10. No Scrolling Conversation
 
 There is intentionally no way for the user to scroll up and see previous exchanges during a live session. The `messages` array is not rendered. The `overflow-y-auto` on the content container only applies to the CURRENT AI text (which might be long enough to need scrolling within a single response), not to a conversation history.
 
@@ -510,11 +573,12 @@ There is intentionally no way for the user to scroll up and see previous exchang
 
 | Action | File | What Changes |
 |--------|------|-------------|
+| MODIFY | `web/tailwind.config.js` | Add `keyframes` and `animation` entries for `fade-in` in `theme.extend` — provides the `animate-fade-in` utility class |
 | CREATE | `web/src/components/live-session/SingleExchangeView.tsx` | New component: single-exchange view with phase-based rendering (showing_ai, user_sent, loading, ai_streaming) |
-| MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Replace `MessageList` with `SingleExchangeView`; add new WebSocket hook fields; remove evaluation feedback banner |
-| MODIFY | `web/src/hooks/use-session-websocket.ts` | Add `latestAssistantMessage`, `lastSentUserMessage`, `isOpeningMessage` state; update handlers for `session_started`, `assistant_complete`, and `sendUserMessage` |
-| MODIFY | `web/src/components/live-session/MessageList.tsx` | Add deprecation comment; no functional changes — preserved for future session replay |
-| MODIFY | `tailwind.config.ts` (or `web/src/index.css`) | Add `animate-fade-in` keyframe and animation utility if not already present |
+| MODIFY | `web/src/hooks/use-session-websocket.ts` | Add `latestAssistantMessage`, `lastSentUserMessage`, `isOpeningMessage` state variables; add them to `UseSessionWebSocketReturn` interface (lines 139-164); update `session_started` handler (lines 295-307) to set `latestAssistantMessage` and `isOpeningMessage(true)`; update `assistant_complete` handler (lines 314-327) to set `latestAssistantMessage` and clear `isOpeningMessage`; update `sendUserMessage` (lines 501-521) to set `lastSentUserMessage` with 500ms clear timeout; add all 3 fields to the returned object |
+| MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Import `SingleExchangeView` instead of `MessageList`; destructure 3 new hook fields (`latestAssistantMessage`, `lastSentUserMessage`, `isOpeningMessage`); replace `MessageList` render (lines 393-398) with `SingleExchangeView`; remove evaluation feedback banner (lines 375-390) and related `lastEvaluation` state; remove `handleEvaluationResult` callback (lines 243-246) |
+| MODIFY | `web/src/components/live-session/MessageList.tsx` | Add deprecation comment block at top noting it is no longer used in live sessions, preserved for potential session replay |
+| MODIFY | `web/src/components/live-session/index.ts` | Add `SingleExchangeView` and `ExchangePhase` exports to barrel file |
 
 ---
 
@@ -526,7 +590,7 @@ There is intentionally no way for the user to scroll up and see previous exchang
 
 3. **Opening message appears without animation**: When the session starts and the AI's first message arrives, it appears immediately (no fade-in animation). `isOpeningMessage=true` suppresses the entrance animation.
 
-4. **Subsequent messages animate**: After the opening message, all new AI responses use the `animate-fade-in` transition (300ms opacity fade-in).
+4. **Subsequent messages animate**: After the opening message, all new AI responses use the `animate-fade-in` transition (300ms opacity fade-in with 4px translateY).
 
 5. **User message animation**: When the user sends a message, their text briefly appears in the content area with a blue-tinted style, then animates upward (`-translate-y-4`) and fades out (`opacity-0`) over 200ms. The total visibility window is ~400ms.
 
@@ -550,9 +614,9 @@ There is intentionally no way for the user to scroll up and see previous exchang
 
 15. **FormattedText used**: Both the AI text and the brief user text animation use the `FormattedText` component (from T03) to render LaTeX and code notation correctly.
 
-16. **No evaluation banner**: The "Great recall!" / "Keep practicing" evaluation feedback banner that existed in `SessionContainer` is removed. Evaluation feedback is now invisible (processed by the evaluator and injected into the tutor's context, never shown to the user).
+16. **No evaluation banner**: The "Great recall!" / "Keep practicing" evaluation feedback banner that existed in `SessionContainer` is removed. Evaluation feedback is now invisible (processed by the evaluator and injected into the tutor's context, never shown to the user). The related `lastEvaluation` state and `handleEvaluationResult` callback are also removed.
 
-17. **MessageList preserved**: `MessageList.tsx` still exists in the codebase with a comment noting it is no longer used in live sessions but preserved for session replay. No functional changes to the file.
+17. **MessageList preserved**: `MessageList.tsx` still exists in the codebase with a deprecation comment noting it is no longer used in live sessions but preserved for session replay. No functional changes to the file.
 
 18. **Scrolling within a single response**: If the AI's current response is long enough to exceed the viewport, the user can scroll within the content area to read it. The `overflow-y-auto` on the content container enables this. But there is no scrolling to previous exchanges.
 
@@ -560,15 +624,24 @@ There is intentionally no way for the user to scroll up and see previous exchang
 
 20. **Phase state machine is correct**: The `ExchangePhase` transitions follow this strict order: `showing_ai` -> `user_sent` (200-400ms) -> `loading` -> `ai_streaming` -> `showing_ai` (repeat). No phase can be skipped. No two phases render simultaneously. If props change unexpectedly (e.g., streaming starts before loading is shown), the component handles it gracefully by jumping to the appropriate phase.
 
+21. **Tailwind animation defined**: `web/tailwind.config.js` contains `keyframes` and `animation` entries for `fade-in`, producing the `animate-fade-in` utility class.
+
+22. **Barrel export updated**: `web/src/components/live-session/index.ts` exports `SingleExchangeView` and `ExchangePhase`.
+
+23. **WebSocket hook return type updated**: The `UseSessionWebSocketReturn` interface includes `latestAssistantMessage`, `lastSentUserMessage`, and `isOpeningMessage` fields.
+
 ---
 
 ## Implementation Warnings
 
-> **WARNING: `FormattedText` component dependency on T03**
-> `SingleExchangeView` imports `FormattedText` from `'../shared/FormattedText'`. This component is created by T03 (Transcription Processing Pipeline) — it does not currently exist in the codebase. T12 has a hard dependency on T10 (Voice Input) but only a soft/implicit dependency on T03 for `FormattedText`. If T03 has not landed when T12 is implemented, either:
-> 1. Create a minimal `FormattedText` stub that just renders `<span>{content}</span>`, or
-> 2. Render the content directly without the `FormattedText` wrapper and add it later.
-> Document this dependency clearly.
+> **WARNING: T03 is a hard dependency (not soft)**
+> `SingleExchangeView` imports `FormattedText` from `'../shared/FormattedText'`. This component AND the `web/src/components/shared/` directory are both created by T03 (Transcription Processing Pipeline). Without T03 completing first, T12 will not compile. T03 is listed as a hard dependency in the `depends-on` field above.
 
 > **WARNING: `UseSessionWebSocketReturn` interface needs updating**
-> The hook's returned object type (`UseSessionWebSocketReturn` in `use-session-websocket.ts`) must be updated to include the three new fields: `latestAssistantMessage`, `lastSentUserMessage`, and `isOpeningMessage`. The current interface does not include these. If T12 is implemented before the return type is updated, TypeScript will error when destructuring these fields in `SessionContainer.tsx`.
+> The hook's returned object type (`UseSessionWebSocketReturn` in `use-session-websocket.ts`, lines 139-164) must be updated to include the three new fields: `latestAssistantMessage`, `lastSentUserMessage`, and `isOpeningMessage`. The current interface does not include these. The implementation steps in Section 3b above cover this change explicitly.
+
+> **WARNING: `session_started` handler callback mismatch**
+> `SessionContainer`'s `handleSessionStarted` callback (lines 239-241) takes zero arguments, but the hook passes `(sessionId, openingMessage)` — a pre-existing mismatch. For T12, the `isOpeningMessage` tracking is handled inside the hook itself (setting state in the `session_started` handler as described in Section 3c), not relying on the container callback. Do not attempt to fix the callback signature mismatch — that is out of scope for T12.
+
+> **WARNING: `useSessionTimer` pre-existing bug in `SessionContainer.tsx`**
+> Lines 53-58 of `SessionContainer.tsx` use `useState` instead of `useEffect` for the interval timer, causing a timer interval leak. T11 is responsible for fixing this bug. T12 implementers should be aware they are editing a file with this known issue but should NOT attempt to fix it to avoid merge conflicts with T11.

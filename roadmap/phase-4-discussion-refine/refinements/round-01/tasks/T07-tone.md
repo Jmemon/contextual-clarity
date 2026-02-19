@@ -16,6 +16,8 @@ The current prompt is too verbose, too encouraging, and fails on common edge cas
 
 This task also adds explicit instructions for handling evaluator feedback (from T06), which is injected into the conversation context as `[EVALUATOR OBSERVATION]` blocks. The agent must know how to interpret and act on these observations without revealing the machinery to the user.
 
+Additionally, this task rewrites the hardcoded congratulatory/encouraging prompts in `src/core/session/session-engine.ts` — specifically in `generateTransitionMessage()` (line 928) and `generateCompletionMessage()` (line 976). These prompts directly undermine the tone overhaul if left unchanged.
+
 ---
 
 ## Detailed Implementation
@@ -101,20 +103,83 @@ Key changes from the original:
 - New "HANDLING EVALUATOR OBSERVATIONS" section gives explicit response templates for each evaluator feedback type
 - The overall tone of the guidelines is prescriptive and concrete, not aspirational
 
-### 3. Items explicitly removed and NOT replaced
+### 3. Rewrite hardcoded prompts in `src/core/session/session-engine.ts`
+
+The session engine contains hardcoded prompts that directly contradict the tone overhaul. These MUST be rewritten as part of this task — the tone overhaul is incomplete without them.
+
+#### 3a. Rewrite `generateTransitionMessage()` prompts (line 928)
+
+Current code (lines 933-939):
+```typescript
+const successPrompt = hasNextPoint
+  ? 'The learner successfully recalled the information. Provide brief positive feedback, then smoothly transition to the next topic by asking an opening question about it.'
+  : 'The learner successfully recalled the final piece of information. Provide brief positive feedback.';
+
+const strugglePrompt = hasNextPoint
+  ? 'The learner struggled with recall. Provide encouraging feedback about what they did remember, briefly reinforce the key point, then transition to the next topic.'
+  : 'The learner struggled with the final recall point. Provide encouraging feedback and briefly reinforce the key information.';
+```
+
+Replace with tone-consistent prompts:
+```typescript
+const successPrompt = hasNextPoint
+  ? 'The user recalled this point. Transition to the next topic by asking an opening question about it. Do not congratulate or praise — just move on naturally.'
+  : 'The user recalled the final point. Wrap up briefly — no congratulations, no praise.';
+
+const strugglePrompt = hasNextPoint
+  ? 'The user struggled with this point. Briefly note the key idea they missed, then move on to the next topic with an opening question. No pity, no excessive encouragement.'
+  : 'The user struggled with the final point. Briefly note the key idea, then wrap up. No pity, no excessive encouragement.';
+```
+
+#### 3b. Rewrite `generateCompletionMessage()` prompts (line 976)
+
+Current code (lines 979-981):
+```typescript
+const feedbackPrompt = lastEvaluation.success
+  ? `The learner has completed all recall points for this session! Provide a warm congratulatory message. Summarize that they've reviewed ${this.targetPoints.length} points. Encourage them to continue their learning journey.`
+  : `The learner has completed all recall points for this session, though they struggled with the last one. Provide encouraging feedback about completing the session. Summarize that they've reviewed ${this.targetPoints.length} points. Encourage continued practice.`;
+```
+
+Replace with tone-consistent prompts:
+```typescript
+const feedbackPrompt = lastEvaluation.success
+  ? `The user has finished all ${this.targetPoints.length} recall points. Provide a brief, matter-of-fact wrap-up. No warm congratulations, no exclamation marks, no "learning journey" language.`
+  : `The user has finished all ${this.targetPoints.length} recall points, though they struggled with the last one. Provide a brief wrap-up noting the key idea they missed. No pity, no excessive encouragement.`;
+```
+
+#### 3c. Update JSDoc for `generateCompletionMessage()` (line 965)
+
+Current JSDoc says "Celebrates the user's completion" — update to reflect the new tone:
+```typescript
+/**
+ * Generates a session completion message.
+ *
+ * Provides a brief wrap-up when the user finishes all recall points.
+ *
+ * Phase 2: Now tracks token usage for metrics collection.
+ *
+ * @param lastEvaluation - The evaluation result from the final point
+ * @returns The completion message
+ */
+```
+
+### 4. Items explicitly removed and NOT replaced
 
 The following items from the current prompt are removed with no equivalent replacement:
 
 | Removed Item | Current Location | Reason |
 |---|---|---|
-| "Encourage elaboration: When they recall something correctly, ask them to explain why it matters or how it connects to other concepts." | `buildSocraticMethodSection()`, principle 4 | Recalled points should not be belabored. Rabbit holes (T09) handle exploration. |
-| "Celebrate recall: Acknowledge successful recall warmly, then deepen understanding with follow-up questions." | `buildSocraticMethodSection()`, principle 6 | UI handles positive reinforcement via structured events (T05). |
-| "Provide encouraging feedback when the learner makes progress" | `buildGuidelinesSection()`, DO section | Same as above — UI handles feedback. |
+| "Encourage elaboration: When they recall something correctly, ask them to explain why it matters or how it connects to other concepts." | `buildSocraticMethodSection()`, principle 4 (line 165) | Recalled points should not be belabored. Rabbit holes (T09) handle exploration. |
+| "Celebrate recall: Acknowledge successful recall warmly, then deepen understanding with follow-up questions." | `buildSocraticMethodSection()`, principle 6 (line 167) | UI handles positive reinforcement via structured events (T05). |
+| "Provide encouraging feedback when the learner makes progress" | `buildGuidelinesSection()`, DO section (line 246) | Same as above — UI handles feedback. |
 | "Adapt your language complexity to match the learner's responses" | `buildGuidelinesSection()`, DO section | Unnecessary instruction — LLMs do this naturally. Removing to reduce prompt verbosity. |
 | "Don't be condescending or make the learner feel bad for struggling" | `buildGuidelinesSection()`, DON'T section | Replaced by the broader tone guidance ("direct but warm") and the "I recall nothing" handling. |
 | "Don't provide so many hints that recall becomes trivial" | `buildGuidelinesSection()`, DON'T section | Replaced by the more specific "break into smaller pieces" instruction. |
+| "Provide brief positive feedback" | `generateTransitionMessage()` in `src/core/session/session-engine.ts` (line 934) | Replaced with tone-neutral transition prompts. |
+| "Provide encouraging feedback" | `generateTransitionMessage()` in `src/core/session/session-engine.ts` (line 938) | Replaced with tone-neutral transition prompts. |
+| "Provide a warm congratulatory message" | `generateCompletionMessage()` in `src/core/session/session-engine.ts` (line 980) | Replaced with tone-neutral completion prompts. |
 
-### 4. What this task does NOT change
+### 5. What this task does NOT change
 
 - `buildUniversalAgentSection()` — that is T02's output and should not be modified by this task.
 - `buildSupplementaryGuidelinesSection()` — that is T02's output.
@@ -122,8 +187,9 @@ The following items from the current prompt are removed with no equivalent repla
 - `SocraticTutorPromptParams` — that is T01's territory.
 - `buildSocraticTutorPrompt()` assembly order — that is T02's territory.
 - The evaluator prompt itself — that is T06's territory. This task only adds instructions for how the TUTOR should handle evaluator observations.
+- `getOpeningMessage()` in `src/core/session/session-engine.ts` (line 466) — its prompt is `'Begin the recall discussion. Ask an opening question that prompts the learner to recall the target information.'` which is neutral and does not contain celebratory language. No change needed.
 
-### 5. Voice consistency check
+### 6. Voice consistency check
 
 After implementation, the combined prompt (universal agent from T02 + Socratic method from this task + guidelines from this task) should produce responses that:
 - Are 1-3 sentences long
@@ -135,6 +201,18 @@ After implementation, the combined prompt (universal agent from T02 + Socratic m
 - Start with a question or a hint, not with commentary about the user's performance
 - Sound like a friend asking "what do you remember about..." not a professor saying "can you explain..."
 
+### 7. Test gap and recommendations
+
+There are currently zero unit tests that verify the prompt text produced by `buildSocraticMethodSection()`, `buildGuidelinesSection()`, or the hardcoded prompts in `generateTransitionMessage()` and `generateCompletionMessage()`. The existing integration tests call `getOpeningMessage()` as part of session flow but do not assert on prompt content or tone.
+
+Note that `buildSocraticMethodSection()` and `buildGuidelinesSection()` are module-private (not exported), so direct unit tests are not possible. Tests must go through the public `buildSocraticTutorPrompt()` function, asserting on substrings of its output.
+
+Recommended test additions:
+- Test that `buildSocraticTutorPrompt()` output contains "Ask, don't tell" and "Direct but warm" (new Socratic method content)
+- Test that `buildSocraticTutorPrompt()` output does NOT contain "Encourage elaboration", "Celebrate recall", or "encouraging feedback" (removed items)
+- Test that `buildSocraticTutorPrompt()` output contains "HANDLING EVALUATOR OBSERVATIONS" and "I RECALL NOTHING" sections
+- Test that `buildSocraticTutorPrompt()` output contains "1-3 sentences" and "Don't congratulate" (guidelines content)
+
 ---
 
 ## Relevant Files
@@ -142,6 +220,7 @@ After implementation, the combined prompt (universal agent from T02 + Socratic m
 | Action | File | What Changes |
 |--------|------|-------------|
 | MODIFY | `src/llm/prompts/socratic-tutor.ts` | Complete rewrite of `buildSocraticMethodSection()` body. Complete rewrite of `buildGuidelinesSection()` body. No function signature changes, no new functions, no structural changes. |
+| MODIFY | `src/core/session/session-engine.ts` | Rewrite hardcoded prompts in `generateTransitionMessage()` (line 928, prompt strings at lines 933-939) and `generateCompletionMessage()` (line 976, prompt strings at lines 979-981). Update JSDoc for `generateCompletionMessage()` (line 965). No function signature changes, no structural changes. |
 
 ---
 
@@ -187,16 +266,18 @@ After implementation, the combined prompt (universal agent from T02 + Socratic m
 
 15. **Existing tests updated**: Any test assertions that check for the old principle text ("Encourage elaboration", "Celebrate recall", "Provide encouraging feedback") are updated to check for the new principle text instead. New test cases verify the presence of "I recall nothing" handling and evaluator observation handling sections.
 
+16. **session-engine.ts transition prompts rewritten**: `generateTransitionMessage()` (line 928 in `src/core/session/session-engine.ts`) no longer contains "positive feedback", "congratulatory", or "encouraging feedback". The success prompt says to transition without praise. The struggle prompt says to briefly note what was missed without pity.
+
+17. **session-engine.ts completion prompts rewritten**: `generateCompletionMessage()` (line 976 in `src/core/session/session-engine.ts`) no longer contains "warm congratulatory message", "Encourage them to continue their learning journey", or "encouraging feedback". The prompts use matter-of-fact wrap-up language.
+
+18. **No "learner" in session-engine.ts prompts**: The rewritten prompts in `generateTransitionMessage()` and `generateCompletionMessage()` use "user" instead of "learner".
+
 ---
 
 ## Implementation Warnings
 
-> **WARNING: Hardcoded congratulatory prompts in `session-engine.ts`**
-> The session engine contains hardcoded prompts that contradict the new tone guidelines:
-> - `generateTransitionMessage()` (line ~934): "Generate a brief, congratulatory transition message"
-> - `generateCompletionMessage()` (line ~938): "Generate a congratulatory message"
-> - `getOpeningMessage()` (lines ~980-981): "Celebrate recall warmly"
-> These hardcoded strings are in `session-engine.ts`, NOT in `socratic-tutor.ts`. This task only rewrites `buildSocraticMethodSection()` and `buildGuidelinesSection()` in `socratic-tutor.ts`. The session engine's hardcoded congratulatory prompts are outside this task's scope but will produce contradictory behavior until they are also updated. Consider adding these to the scope of this task, or explicitly document that they create a known contradiction.
-
 > **WARNING: Soft dependency on T06 evaluator feedback**
 > Section 2 of this task adds "HANDLING EVALUATOR OBSERVATIONS" guidelines that reference `[EVALUATOR OBSERVATION]` markers. These markers are injected by T06's `generateTutorResponse()` feedback injection. If T07 lands before T06, the evaluator observation handling guidelines will be present in the prompt but never triggered (no feedback is injected yet). This is acceptable as a forward-compatible change, but worth noting during implementation.
+
+> **NOTE: Test gap**
+> There are zero existing tests for the prompt text produced by `buildSocraticMethodSection()`, `buildGuidelinesSection()`, `generateTransitionMessage()`, `generateCompletionMessage()`, or `getOpeningMessage()`. Since `buildSocraticMethodSection` and `buildGuidelinesSection` are module-private (not exported), tests must go through the public `buildSocraticTutorPrompt()` function. The implementer should add tests verifying the new prompt content as described in section 7 of Detailed Implementation.

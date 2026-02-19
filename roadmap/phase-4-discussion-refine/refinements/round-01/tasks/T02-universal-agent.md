@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|-------|
 | **name** | Universal Discussion Agent |
-| **parallel-group** | A (no dependencies) |
-| **depends-on** | none |
+| **parallel-group** | B |
+| **depends-on** | T01 |
 
 ---
 
@@ -12,7 +12,7 @@
 
 Replace the per-set `discussionSystemPrompt` as the backbone of the tutor prompt with a single universal discussion agent prompt that works across all domains. The recall points' `content` and `context` fields provide all the domain knowledge the agent needs. The existing `discussionSystemPrompt` field on each RecallSet is preserved but demoted: it becomes an optional "Supplementary Guidelines" section appended at the end of the prompt, not the opening section.
 
-This task does NOT change the data passed to the prompt builder (that is T01's job — it changes `SocraticTutorPromptParams` to pass `uncheckedPoints` and `currentProbePoint` instead of `currentPointIndex`). This task changes the prompt content that receives those params. Since T01 and T02 are both group A, implement T02 assuming T01's new params exist: `uncheckedPoints: RecallPoint[]`, `currentProbePoint: RecallPoint | null`.
+This task does NOT change the data passed to the prompt builder (that is T01's job — it changes `SocraticTutorPromptParams` to pass `uncheckedPoints` and `currentProbePoint` instead of `currentPointIndex`). This task changes the prompt content that receives those params. Since T02 depends on T01, by the time T02 runs, T01 will already be complete. T01's new params (`uncheckedPoints: RecallPoint[]`, `currentProbePoint: RecallPoint | null`) and checklist-aware point sections will already be in place. T02's changes to prompt assembly must work with T01's new param shape.
 
 This task also does NOT change the tone, Socratic method section, or guidelines section (that is T07). It only replaces the custom prompt section with the universal agent section and restructures the prompt assembly order.
 
@@ -77,13 +77,19 @@ Current order (line 95-110):
 New order:
 1. `buildUniversalAgentSection()` — universal identity and role (NEW)
 2. `buildSocraticMethodSection()` — Socratic principles (UNCHANGED by this task; T07 rewrites it)
-3. Current point / unchecked points section (UNCHANGED by this task; T01 rewrites it)
+3. Checklist-aware point sections (UNCHANGED by this task; T01 has already replaced the old `buildCurrentPointSection` and `buildUpcomingPointsSection` with checklist-aware sections)
 4. `buildGuidelinesSection()` — do's and don'ts (UNCHANGED by this task; T07 rewrites it)
 5. `buildSupplementaryGuidelinesSection(recallSet)` — optional per-set guidelines (NEW position: LAST)
 
 The key structural change: the universal agent section is FIRST (sets the identity), and supplementary guidelines are LAST (optional overrides, not the backbone).
 
-### 5. Update `buildEmptySessionPrompt()` (line 121)
+**Note on `buildUpcomingPointsSection`**: T01 has already replaced `buildUpcomingPointsSection` with checklist-aware sections that use `uncheckedPoints` and `currentProbePoint`. T02 does not modify those sections. When restructuring the assembly array, use whatever point-related section functions T01 left in place — do not re-introduce `buildUpcomingPointsSection`.
+
+### 5. Coordinate with T01's changes to the call site
+
+The only call site for `buildSocraticTutorPrompt` is `session-engine.ts` lines 1029-1033 (the `updateLLMPrompt()` method). T01 will have already changed both the `SocraticTutorPromptParams` interface and this call site to pass `uncheckedPoints` and `currentProbePoint` instead of `currentPointIndex`. T02 does NOT modify the call site or the interface. T02 only changes the prompt content functions and their assembly order within `buildSocraticTutorPrompt()`. Verify that T01's call-site changes are in place before modifying the section assembly.
+
+### 6. Update `buildEmptySessionPrompt()` (line 121)
 
 The current empty session prompt uses `recallSet.discussionSystemPrompt` as the opening line. Replace it with the universal agent framing:
 
@@ -95,16 +101,17 @@ Engage in a general discussion about the subject matter. Ask open-ended question
 }
 ```
 
-### 6. Do NOT change seed data
+### 7. Do NOT change seed data
 
 The existing `discussionSystemPrompt` values in seed files (e.g., the long custom prompts for each recall set) remain as-is. They will be injected as supplementary guidelines. No seed file changes are needed for this task.
 
-### 7. Do NOT change the `SocraticTutorPromptParams` interface
+### 8. Do NOT change the `SocraticTutorPromptParams` interface
 
-T01 is responsible for changing this interface. This task writes the prompt content that receives those params. If T01 has not yet been implemented when T02 runs, the implementer should:
-- Write the `buildUniversalAgentSection()` and `buildSupplementaryGuidelinesSection()` functions
-- Restructure the section assembly order in `buildSocraticTutorPrompt()`
-- Leave the point-related sections (3 and 4 in the current order) untouched — they still reference whatever params exist
+T01 is responsible for changing this interface. By the time T02 runs, T01 will have already changed the interface to use `uncheckedPoints` and `currentProbePoint`. T02 does not modify the interface further.
+
+### 9. AnthropicClient statefulness
+
+The universal agent prompt is assembled as part of `buildSocraticTutorPrompt()` and set via `this.llmClient.setSystemPrompt(prompt)` in session-engine.ts. This uses the session's existing `AnthropicClient` instance, which is correct — the universal agent prompt IS the session's system prompt, not a separate agent prompt. No dedicated client instance is needed for T02 because T02 is replacing the content of the existing system prompt, not adding a parallel prompt consumer.
 
 ---
 
@@ -113,6 +120,7 @@ T01 is responsible for changing this interface. This task writes the prompt cont
 | Action | File | What Changes |
 |--------|------|-------------|
 | MODIFY | `src/llm/prompts/socratic-tutor.ts` | Remove `buildCustomPromptSection()`. Create `buildUniversalAgentSection()`. Create `buildSupplementaryGuidelinesSection(recallSet)`. Restructure prompt section assembly order in `buildSocraticTutorPrompt()`. Update `buildEmptySessionPrompt()`. |
+| CREATE | `tests/unit/prompts/socratic-tutor.test.ts` | New test file for universal agent prompt and supplementary guidelines. |
 
 Note: T01 modifies `SocraticTutorPromptParams` and the point-related sections. T07 modifies `buildSocraticMethodSection()` and `buildGuidelinesSection()`. This task only touches the agent identity section and supplementary guidelines section.
 
@@ -120,7 +128,7 @@ Note: T01 modifies `SocraticTutorPromptParams` and the point-related sections. T
 
 ## Success Criteria
 
-1. **Universal agent section exists**: `buildUniversalAgentSection()` is a new exported or module-private function that returns the universal recall facilitator prompt. It contains no domain-specific references and works for any subject.
+1. **Universal agent section exists**: `buildUniversalAgentSection()` is a new module-private function that returns the universal recall facilitator prompt. It contains no domain-specific references and works for any subject.
 
 2. **Domain-agnostic identity**: The prompt identifies the agent as a "recall session facilitator" — NOT "AI Tutor", NOT "knowledgeable tutor", NOT "patient teacher". No education-specific framing.
 
@@ -136,7 +144,7 @@ Note: T01 modifies `SocraticTutorPromptParams` and the point-related sections. T
 
 8. **Non-empty discussionSystemPrompt preserved**: When `recallSet.discussionSystemPrompt` has content, it appears in full inside the supplementary guidelines section. No truncation, no summarization.
 
-9. **Section order**: The assembled prompt sections appear in this order: universal agent identity, Socratic method, point sections, guidelines, supplementary guidelines. The universal agent section is first; supplementary guidelines are last.
+9. **Section order**: The assembled prompt sections appear in this order: universal agent identity, Socratic method, checklist-aware point sections (from T01), guidelines, supplementary guidelines. The universal agent section is first; supplementary guidelines are last.
 
 10. **`buildCustomPromptSection()` removed**: The old function no longer exists. No references to it remain in the codebase.
 
@@ -156,11 +164,19 @@ Note: T01 modifies `SocraticTutorPromptParams` and the point-related sections. T
 
 14. **No behavioral regression**: The prompt still produces a functional recall session. The agent still asks questions, still guides toward recall, still uses point content/context. The change is in identity and framing, not in fundamental behavior.
 
-15. **Existing tests**: Any tests that reference `buildCustomPromptSection` are updated to test `buildSupplementaryGuidelinesSection` instead. Tests for `buildUniversalAgentSection` are added to verify the prompt contains key phrases: "recall session", "facilitator", "evaluator", "UI handles", and does NOT contain "AI Tutor" or "patient tutor". **Note:** As of this writing, zero prompt-builder tests exist in the codebase. This criterion means: create new tests for the new functions. Do not expect to find existing test files to update.
+15. **Tests**: Create a new test file at `tests/unit/prompts/socratic-tutor.test.ts` (this file does not yet exist; the directory `tests/unit/prompts/` also does not exist and must be created). The test framework is `bun:test` (used throughout the project — import from `'bun:test'`, not Vitest). Since `buildUniversalAgentSection()` and `buildSupplementaryGuidelinesSection()` are module-private functions, tests must exercise them through the public `buildSocraticTutorPrompt()` function (the only exported function besides the `SocraticTutorPromptParams` interface). Tests should verify:
+    - The assembled prompt contains key phrases: "recall session", "facilitator", "evaluator", "UI handles"
+    - The assembled prompt does NOT contain "AI Tutor" or "patient tutor"
+    - When `recallSet.discussionSystemPrompt` is non-empty, the output contains the supplementary guidelines section with the custom text
+    - When `recallSet.discussionSystemPrompt` is empty/whitespace, no supplementary guidelines section appears
+    - The universal agent section appears before the supplementary guidelines section in the output
 
 ---
 
 ## Implementation Warnings
 
 > **WARNING: Prompt contradiction with `session-engine.ts`**
-> The new universal agent prompt says "Do not generate congratulatory text, celebration, or praise" and "The UI handles all positive reinforcement". However, `session-engine.ts` contains hardcoded instructions in `generateTransitionMessage()` (line ~934: "Generate a brief, congratulatory transition message"), `generateCompletionMessage()` (line ~938: "Generate a congratulatory message"), and `getOpeningMessage()` (line ~980-981: "Celebrate recall warmly"). These instructions directly contradict the new universal agent prompt. **T07 (Tone Overhaul) must address these hardcoded prompts.** Until T07 lands, the agent will receive contradictory instructions. This is acceptable as a known intermediate state — document it but do not block on it.
+> The new universal agent prompt says "Do not generate congratulatory text, celebration, or praise" and "The UI handles all positive reinforcement". However, `session-engine.ts` contains hardcoded instructions in `generateTransitionMessage()` (line ~934: "Generate a brief, congratulatory transition message"), `generateCompletionMessage()` (line ~938: "Generate a congratulatory message"), and `getOpeningMessage()` (line ~980-981: "Celebrate recall warmly"). These instructions directly contradict the new universal agent prompt. **T07 (Tone Overhaul) is responsible for fixing these hardcoded prompts, not T02.** Until T07 lands, the agent will receive contradictory instructions. This is acceptable as a known intermediate state — document it but do not block on it.
+
+> **WARNING: T01 must be complete before T02 begins**
+> T02 depends on T01. T01 changes the `SocraticTutorPromptParams` interface (adding `uncheckedPoints` and `currentProbePoint`, removing `currentPointIndex`), replaces the point-related section functions, and updates the `session-engine.ts` call site. T02 must not start until T01's changes are merged and in place. If T01's changes are not present, T02's section assembly restructuring will not compile correctly.

@@ -10,381 +10,324 @@
 
 ## Description
 
-Transform the recall evaluator from a single-point, trigger-based scorer into continuous middleware that runs on every user message. The evaluator receives ALL unchecked points (from T01's checklist) and returns: which points were recalled, confidence per point, and a feedback string that gets injected into the tutor's context. The user never sees the evaluator's output — it shapes the tutor's next response invisibly.
+Transform the recall evaluator from a single-point, trigger-based scorer into continuous middleware that runs after every user message. Instead of waiting for trigger phrases or message-count thresholds, the engine calls the existing `evaluate()` (or `evaluateEnhanced()`) method on each unchecked recall point after every user message. For each point where the user demonstrated recall, the engine marks it recalled via T01's checklist API, records the FSRS outcome, and produces a feedback string that gets injected into the tutor's LLM context. The user never sees the evaluator's output — it shapes the tutor's next response invisibly.
 
-This task also removes the entire manual evaluation trigger mechanism: `EVALUATION_TRIGGER_PHRASES`, `trigger_eval` WebSocket message, the "I've got it!" button, `shouldTriggerEvaluation()`, `handleTriggerEval()`, and the `autoEvaluateAfter`/`maxMessagesPerPoint` config options.
+This task also removes the entire manual evaluation trigger mechanism: `EVALUATION_TRIGGER_PHRASES`, `shouldTriggerEvaluation()`, `autoEvaluateAfter`/`maxMessagesPerPoint` config options, and the "I've got it!" button. (Note: `trigger_eval` WS protocol type removal is owned by T13, not T06.)
 
 ---
 
 ## Detailed Implementation
 
-### 1. New Types (`src/core/scoring/types.ts`)
+### 1. Types — No New File Needed
 
-Add the following types. If `src/core/scoring/types.ts` does not exist, create it and move existing scoring-related types there.
+`src/core/scoring/types.ts` already exists and contains `RecallEvaluation` (with `success`, `confidence`, `reasoning`) and `EnhancedRecallEvaluation`. **Do not create this file or add batch-evaluation types to it.**
+
+The continuous evaluator does NOT use a new "batch" method. Instead, it iterates over unchecked points and calls the existing `evaluate()` or `evaluateEnhanced()` method for each one. The only new type needed is a lightweight result aggregation type, which lives in `session-engine.ts` as a local interface (not exported):
 
 ```typescript
 /**
- * Result of evaluating a batch of unchecked recall points against the latest user message.
- * Returned by RecallEvaluator.evaluateBatch().
+ * Aggregated result of evaluating all unchecked points against the latest user message.
+ * Internal to session-engine.ts — not exported.
  */
-interface BatchEvaluationResult {
-  // IDs of recall points the user demonstrated recall of in this message.
-  // Empty array if no points were recalled.
+interface ContinuousEvalResult {
+  /** IDs of recall points the user demonstrated recall of in this message */
   recalledPointIds: string[];
-
-  // Confidence score (0.0 to 1.0) for each recalled point.
-  // Only contains entries for points in recalledPointIds.
+  /** Confidence per recalled point (only entries for recalled points) */
   confidencePerPoint: Map<string, number>;
-
-  // Guidance string for the tutor. Describes what the user recalled, what was imprecise,
-  // and what remains unchecked. In rabbithole mode, this is minimal (just "point X recalled").
-  // Empty string if nothing notable happened.
-  feedback: string;
-}
-
-/**
- * Raw JSON structure returned by the batch evaluator LLM call.
- * Parsed by parseBatchEvaluationResponse().
- */
-interface BatchEvaluationRawResponse {
-  recalledPoints: Array<{
-    id: string;
-    confidence: number;
-    observation: string;
-  }>;
+  /** Feedback string for the tutor describing what was recalled, what was imprecise, what remains */
   feedback: string;
 }
 ```
 
-### 2. New Evaluator Method (`src/core/scoring/recall-evaluator.ts`)
+### 2. Dedicated AnthropicClient for the Evaluator (Cross-Task Issue #1)
 
-Add `evaluateBatch()` to the `RecallEvaluator` class. Keep the existing `evaluate()` and `evaluateEnhanced()` methods for backward compatibility but mark them as deprecated.
+`AnthropicClient` is stateful — `systemPrompt` is a private field set via `setSystemPrompt()`, and `complete()` always sends `system: this.systemPrompt` (line 168 of `src/llm/client.ts`). If the evaluator shares the same `AnthropicClient` instance as the session engine's tutor, calling evaluation methods could corrupt the tutor's system prompt or vice versa.
+
+**The evaluator MUST use its own dedicated `AnthropicClient` instance.** This is already the case in the current code — `SessionEngineDependencies` has separate `evaluator` and `llmClient` fields, and `RecallEvaluator` takes its own `AnthropicClient` in its constructor (line 103 of `recall-evaluator.ts`). **Verify that no code shares the same client instance between the evaluator and the tutor.** If they share an instance, create a separate one for the evaluator.
+
+### 3. Continuous Evaluation Logic in `processUserMessage()` (`src/core/session/session-engine.ts`)
+
+The existing `processUserMessage()` (line 529) must be surgically modified — not fully rewritten. Here are the specific changes:
+
+**Remove these blocks from `processUserMessage()`:**
+- Line 534: `this.currentPointMessageCount++;` — remove entirely
+- Lines 538-540: Remove `messageCount: this.currentPointMessageCount` from the `user_message` event data
+- Lines 547-554: Remove the `shouldEvaluate` check and the `if (shouldEvaluate) { return this.evaluateAndAdvance(); }` block
+- Lines 557-564: Remove the `autoEvaluateAfter` threshold check block entirely
+
+**Replace those removed blocks with the continuous evaluation flow.** After the `detectAndRecordRabbithole()` call (line 544), insert:
+
+```typescript
+// === Continuous evaluation: evaluate ALL unchecked points against this message ===
+const evalResult = await this.evaluateUncheckedPoints();
+
+// Process any recalled points
+for (const pointId of evalResult.recalledPointIds) {
+  // T01 provides markPointRecalled() and recordRecallOutcome()
+  this.markPointRecalled(pointId);
+  const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
+  await this.recordRecallOutcome(pointId, {
+    success: true,
+    confidence,
+    reasoning: `Continuous evaluation detected recall with confidence ${confidence}`,
+  });
+}
+
+// Check if all points are now recalled
+if (this.allPointsRecalled()) {
+  // TODO (T08): Emit session_complete_overlay event instead of completing immediately
+  return this.handleSessionCompletion();
+}
+```
+
+**Modify the `generateTutorResponse()` call** (currently at line 567). Change:
+```typescript
+const response = await this.generateTutorResponse();
+```
+To:
+```typescript
+const response = await this.generateTutorResponse(evalResult.feedback);
+```
+
+**Update the return value** (currently lines 573-579). Change from:
+```typescript
+return {
+  response,
+  completed: false,
+  pointAdvanced: false,
+  currentPointIndex: this.currentPointIndex,
+  totalPoints: this.targetPoints.length,
+};
+```
+To:
+```typescript
+return {
+  response,
+  completed: false,
+  pointsRecalledThisTurn: evalResult.recalledPointIds,
+  recalledCount: this.getRecalledCount(),  // from T01
+  totalPoints: this.targetPoints.length,
+};
+```
+
+### 4. New Private Method: `evaluateUncheckedPoints()` (`src/core/session/session-engine.ts`)
+
+Add this new private method to `SessionEngine`. It iterates over unchecked points and calls the existing `evaluate()` or `evaluateEnhanced()` for each one, then aggregates results into a feedback string.
 
 ```typescript
 /**
- * Evaluates ALL unchecked recall points against the conversation so far.
- * Runs on every user message. Returns which points (if any) were demonstrated,
- * confidence per point, and a feedback string for the tutor.
+ * Evaluates all unchecked recall points against the current conversation.
+ * Called on every user message. Uses the existing evaluate()/evaluateEnhanced()
+ * methods on RecallEvaluator — no new evaluator API is needed.
  *
- * Uses Haiku for speed and cost — this runs on EVERY message.
- * Temperature 0.3 for consistency.
+ * For each unchecked point, calls evaluate() with the point and current messages.
+ * Aggregates results into a ContinuousEvalResult with recalled IDs, confidence
+ * scores, and a feedback string for the tutor.
  *
- * @param uncheckedPoints - Points from T01's getUncheckedPoints() — only pending points
- * @param conversationMessages - Full conversation history (or last N messages for context window)
- * @param mode - 'recall' for full feedback, 'rabbithole' for minimal silent tagging
+ * Performance note: This calls evaluate() once per unchecked point. As points
+ * are recalled, the number of calls decreases. The existing evaluator already
+ * uses extractExcerpt() (line 134 of recall-evaluator.ts) to limit conversation
+ * context to the last 10 messages, keeping token usage reasonable.
  */
-async evaluateBatch(
-  uncheckedPoints: RecallPoint[],
-  conversationMessages: SessionMessage[],
-  mode: 'recall' | 'rabbithole'
-): Promise<BatchEvaluationResult> {
-  // Early return if no points to evaluate
+private async evaluateUncheckedPoints(): Promise<ContinuousEvalResult> {
+  const uncheckedPoints = this.getUncheckedPoints(); // from T01
+
+  // Early return if nothing to evaluate
   if (uncheckedPoints.length === 0) {
     return { recalledPointIds: [], confidencePerPoint: new Map(), feedback: '' };
   }
 
-  // Extract conversation excerpt — last 10 messages for context, same as existing evaluate()
-  // NOTE: The existing method is named extractExcerpt(), not extractConversationExcerpt()
-  const excerpt = this.extractExcerpt(conversationMessages, 10);
+  const recalledPointIds: string[] = [];
+  const confidencePerPoint = new Map<string, number>();
+  const feedbackParts: string[] = [];
 
-  // Build the batch evaluation prompt
-  const prompt = buildBatchEvaluatorPrompt(
-    uncheckedPoints.map(p => ({ id: p.id, content: p.content })),
-    excerpt,
-    mode
-  );
+  // Evaluate each unchecked point against the conversation
+  // Uses existing evaluate() or evaluateEnhanced() — no new evaluator method needed
+  for (const point of uncheckedPoints) {
+    let evaluation: RecallEvaluation;
 
-  // Call LLM — use Haiku model, temperature 0.3
-  // NOTE: AnthropicClient.complete() signature is:
-  //   complete(messages: string | LLMMessage[], config?: LLMConfig): Promise<LLMResponse>
-  // where LLMConfig has { model, maxTokens, temperature }
-  // The response has a .text field, NOT .content
-  // The model ID must be a valid Anthropic model string (e.g., 'claude-haiku-4-5-20251001'), not just 'haiku'
-  const response = await this.llmClient.complete(
-    [{ role: 'user', content: prompt }],
-    {
-      model: 'claude-haiku-4-5-20251001',
-      temperature: 0.3,
-      maxTokens: 1024,  // Batch evaluation responses should be concise
+    if (this.metricsEnabled) {
+      // Enhanced evaluation provides concept-level detail
+      evaluation = await this.evaluator.evaluateEnhanced(
+        point,
+        this.messages,
+        {
+          attemptNumber: point.fsrsState?.reps ?? 1,
+          previousSuccesses: point.fsrsState?.reps ?? 0,
+          topic: this.currentRecallSet?.name ?? 'Unknown',
+        }
+      );
+    } else {
+      evaluation = await this.evaluator.evaluate(point, this.messages);
     }
-  );
 
-  // Parse the response — LLMResponse has .text, not .content
-  return parseBatchEvaluationResponse(response.text);
-}
-```
-
-**Important implementation detail:** The existing `evaluate()` method uses a specific model configured in the evaluator. Check `RecallEvaluator`'s constructor to see how the model is configured, and ensure `evaluateBatch()` explicitly overrides to use Haiku. If the LLM client doesn't support model selection per-call, add that capability or use a separate client instance configured for Haiku.
-
-### 3. New Evaluator Prompt (`src/llm/prompts/recall-evaluator.ts`)
-
-Add `buildBatchEvaluatorPrompt()` alongside the existing prompt builders. Do NOT remove the existing `buildRecallEvaluatorPrompt()` or `buildEnhancedRecallEvaluatorPrompt()` yet — they may still be referenced by deprecated code paths. Mark them deprecated.
-
-```typescript
-/**
- * Builds the prompt for batch evaluation of multiple recall points against the conversation.
- * Designed to be concise (runs on every message via Haiku).
- *
- * @param uncheckedPoints - Array of {id, content} for all pending recall points
- * @param conversationExcerpt - Recent conversation messages as formatted string
- * @param mode - 'recall' = full feedback for tutor; 'rabbithole' = minimal tagging only
- */
-function buildBatchEvaluatorPrompt(
-  uncheckedPoints: Array<{ id: string; content: string }>,
-  conversationExcerpt: string,
-  mode: 'recall' | 'rabbithole'
-): string {
-  const pointsList = uncheckedPoints
-    .map((p, i) => `${i + 1}. [${p.id}] ${p.content}`)
-    .join('\n');
-
-  const feedbackInstruction = mode === 'recall'
-    ? `Provide a "feedback" string summarizing what happened in this exchange. Include:
-- Which points were recalled and how accurately
-- Any imprecisions or near-misses (e.g., "described the mechanism but used the wrong term")
-- What remains unchecked
-This feedback will guide the tutor's next response. Be specific and actionable.`
-    : `Provide a minimal "feedback" string. Just list which points were recalled, nothing more. Example: "Point rp_xxx was recalled." If no points were recalled, feedback is empty.`;
-
-  return `You are a recall evaluation system. Your job is to determine which recall points (if any) the user demonstrated knowledge of in the conversation below.
-
-## Unchecked Recall Points
-${pointsList}
-
-## Recent Conversation
-${conversationExcerpt}
-
-## Instructions
-Analyze the user's most recent message(s) in the context of the full conversation excerpt. For each unchecked recall point, determine if the user demonstrated genuine recall of that concept. A point is "recalled" if the user expressed the core idea in their own words — it does not need to be verbatim.
-
-Be conservative: only mark a point as recalled if the user clearly demonstrated understanding of its core content. Partial or tangential mentions do not count.
-
-${feedbackInstruction}
-
-## Response Format
-Respond with ONLY a JSON object in this exact format, no other text:
-{
-  "recalledPoints": [
-    {"id": "rp_xxx", "confidence": 0.85, "observation": "correctly described the concept of..."}
-  ],
-  "feedback": "User recalled point X accurately. Their description of Y was close but imprecise — they said Z without mentioning W. Points A and B remain unchecked."
-}
-
-If no points were recalled, return:
-{
-  "recalledPoints": [],
-  "feedback": "No recall points were demonstrated in this message. [brief note on what user discussed instead, if relevant]"
-}`;
-}
-```
-
-### 4. Response Parser (`src/llm/prompts/recall-evaluator.ts`)
-
-Add alongside the prompt builder:
-
-```typescript
-/**
- * Parses the raw LLM response from the batch evaluator into a typed result.
- * Handles malformed JSON gracefully — returns empty result on parse failure.
- */
-function parseBatchEvaluationResponse(response: string): BatchEvaluationResult {
-  try {
-    // Strip markdown code fences if present (LLMs sometimes wrap JSON in ```json ... ```)
-    const cleaned = response.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
-    const raw: BatchEvaluationRawResponse = JSON.parse(cleaned);
-
-    const recalledPointIds = raw.recalledPoints.map(p => p.id);
-    const confidencePerPoint = new Map<string, number>(
-      raw.recalledPoints.map(p => [p.id, p.confidence])
-    );
-
-    return {
-      recalledPointIds,
-      confidencePerPoint,
-      feedback: raw.feedback || '',
-    };
-  } catch (error) {
-    // If parsing fails, return empty result — don't crash the session
-    console.error('Failed to parse batch evaluation response:', error);
-    return {
-      recalledPointIds: [],
-      confidencePerPoint: new Map(),
-      feedback: '',
-    };
-  }
-}
-```
-
-### 5. SessionEngine Integration — New `processUserMessage()` Flow (`src/core/session/session-engine.ts`)
-
-Rewrite the core message processing loop. The old flow was:
-1. Save message
-2. Check if evaluation should trigger (phrase match or message count)
-3. If triggered: evaluate single current point, possibly advance
-4. Generate tutor response
-
-The new flow is:
-1. Save message
-2. Call `evaluator.evaluateBatch(getUncheckedPoints(), messages, currentMode)`
-3. For each recalled point ID in result:
-   a. Call `markPointRecalled(id)` (from T01 — emits `point_recalled` event)
-   b. Call `recordRecallOutcome(id, { success: true, confidence })` (from T01 — updates FSRS)
-4. If `allPointsRecalled()`: handle auto-end (T08 adds overlay; for now, mark session complete)
-5. Call `generateTutorResponse(result.feedback)` — feedback shapes the tutor's next reply
-6. Return `ProcessMessageResult` with new shape
-
-```typescript
-async processUserMessage(content: string): Promise<ProcessMessageResult> {
-  this.validateActiveSession();
-
-  // 1. Save the user's message
-  // NOTE: saveMessage() returns void, not the saved message object.
-  // To get a message ID, use the repository directly or generate the ID before saving.
-  await this.saveMessage('user', content);
-  this.emitEvent('user_message', { content });
-
-  // 2. Run batch evaluation against all unchecked points
-  const uncheckedPoints = this.getUncheckedPoints();
-  const currentMode = this.isInRabbitHole() ? 'rabbithole' : 'recall';
-  // Determine the current mode. isInRabbitHole() checks if a rabbit hole is active.
-  // If no rabbit hole detection exists yet, default to 'recall'.
-
-  const evalResult = await this.evaluator.evaluateBatch(
-    uncheckedPoints,
-    this.messages,
-    currentMode
-  );
-
-  // 3. Process recalled points
-  const pointsRecalledThisTurn: string[] = [];
-  for (const pointId of evalResult.recalledPointIds) {
-    this.markPointRecalled(pointId); // Emits point_recalled event, advances probe index
-    const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
-    await this.recordRecallOutcome(pointId, { success: true, confidence });
-    pointsRecalledThisTurn.push(pointId);
+    if (evaluation.success && evaluation.confidence >= 0.6) {
+      recalledPointIds.push(point.id);
+      confidencePerPoint.set(point.id, evaluation.confidence);
+      feedbackParts.push(
+        `Point "${point.content.substring(0, 60)}..." was recalled (confidence: ${evaluation.confidence.toFixed(2)}). ${evaluation.reasoning}`
+      );
+    } else if (evaluation.confidence >= 0.3) {
+      // Near-miss: user was close but didn't fully demonstrate recall
+      feedbackParts.push(
+        `Near-miss on "${point.content.substring(0, 60)}...": ${evaluation.reasoning}`
+      );
+    }
   }
 
-  // 4. Check completion
-  const isComplete = this.allPointsRecalled();
-  // TODO (T08): If isComplete, emit session_complete_overlay event instead of completing immediately
-
-  // 5. Update the tutor prompt with current checklist state
-  this.updateLLMPrompt();
-
-  // 6. Generate tutor response, shaped by evaluator feedback
-  const response = await this.generateTutorResponse(evalResult.feedback);
-
-  // 7. Save and emit assistant message
-  // NOTE: saveMessage() returns void — no message object is returned
-  await this.saveMessage('assistant', response);
-  this.emitEvent('assistant_message', { content: response });
+  // Build aggregated feedback string
+  const remainingCount = uncheckedPoints.length - recalledPointIds.length;
+  if (recalledPointIds.length === 0) {
+    feedbackParts.push(`No recall points were demonstrated in this message. ${remainingCount} points remain unchecked.`);
+  } else {
+    feedbackParts.push(`${remainingCount} points remain unchecked.`);
+  }
 
   return {
-    response,
-    completed: isComplete,
-    pointsRecalledThisTurn,
-    recalledCount: this.getRecalledCount(),
-    totalPoints: this.targetPoints.length,
+    recalledPointIds,
+    confidencePerPoint,
+    feedback: feedbackParts.join(' '),
   };
 }
 ```
 
-### 6. Feedback Injection into Tutor Response (`src/core/session/session-engine.ts`)
+**Important**: The `extractExcerpt()` method on `RecallEvaluator` is **private** (line 134). The `evaluateUncheckedPoints()` method does NOT call `extractExcerpt()` directly — it passes the full `this.messages` array to `evaluate()` or `evaluateEnhanced()`, which internally call `extractExcerpt()` to limit context to the last 10 messages.
 
-Modify `generateTutorResponse()` to accept an optional feedback parameter:
+### 5. Feedback Injection into Tutor Response (`src/core/session/session-engine.ts`)
+
+Modify the existing `generateTutorResponse()` method (line 890) to accept an optional feedback parameter. The feedback is injected as an additional message in the LLM conversation context, NOT saved to the persistent conversation history.
+
+**Current signature** (line 890):
+```typescript
+private async generateTutorResponse(): Promise<string> {
+```
+
+**New signature:**
+```typescript
+private async generateTutorResponse(evaluatorFeedback?: string): Promise<string> {
+```
+
+**Concrete mechanism**: The feedback is prepended as an additional `assistant`-role message at the beginning of the `conversationHistory` array passed to `this.llmClient.complete()`. This message is ephemeral — it exists only in the LLM call, not in `this.messages` or the database.
+
+**Specific change inside `generateTutorResponse()`** — after line 892 (`const conversationHistory = this.buildConversationHistory();`), insert:
 
 ```typescript
-/**
- * Generates the tutor's next response, optionally shaped by evaluator feedback.
- * The feedback is injected as a system-level observation that the user never sees.
- *
- * @param evaluatorFeedback - Guidance from the batch evaluator about what the user recalled.
- *                            Injected as a system context note before the conversation history.
- */
-private async generateTutorResponse(evaluatorFeedback?: string): Promise<string> {
-  const messages = [...this.messages];
-
-  // If feedback is present, prepend it as a system-level context note.
-  // This appears in the LLM's context but is NOT added to the stored conversation history.
-  // The tutor sees it and adjusts its response accordingly.
-  if (evaluatorFeedback && evaluatorFeedback.trim().length > 0) {
-    messages.unshift({
-      role: 'system',
-      content: `[EVALUATOR OBSERVATION — not visible to user, do not reference directly]: ${evaluatorFeedback}`,
-    });
-  }
-
-  // ... rest of existing generation logic, using the modified messages array
+// Inject evaluator feedback as an ephemeral context note at the start of the conversation.
+// This shapes the tutor's response without being visible to the user or saved to the DB.
+// Uses 'assistant' role to avoid issues with the Anthropic API's system prompt handling
+// (the system prompt is already set on the AnthropicClient instance via setSystemPrompt()).
+if (evaluatorFeedback && evaluatorFeedback.trim().length > 0) {
+  conversationHistory.unshift({
+    role: 'assistant',
+    content: `[Internal observation — do not reference or quote directly to the user]: ${evaluatorFeedback}`,
+  });
 }
 ```
 
-**Important:** The feedback message is NOT saved to `sessionMessages` in the database. It's ephemeral — constructed fresh each turn. It should be injected into the LLM call's messages array, not into the persistent conversation history.
+**Why `assistant` role, not `system` role?** The `AnthropicClient.complete()` method already sends `system: this.systemPrompt` (line 168 of client.ts). The `LLMMessage` type only supports `'user' | 'assistant'` roles — there is no per-message `system` role in the Anthropic messages API. The feedback is therefore injected as a synthetic `assistant` message at the start of the conversation history that the model will treat as prior context.
 
-If the existing `generateTutorResponse()` method doesn't directly take a messages array (e.g., it reads from `this.messages`), refactor it to accept an optional prepended context. The exact mechanism depends on how the LLM client is called, but the key requirement is: feedback appears in the LLM's input, not in the stored conversation.
+**Why not modify `this.messages`?** The feedback must NOT be saved to `this.messages` (the persistent session message list). It is generated fresh each turn and is only meaningful for the current LLM call. Saving it would pollute future evaluation context and conversation history.
 
-### 7. Kill List — Removals
+### 6. Update `ProcessMessageResult` (`src/core/session/types.ts`)
 
-These items must be completely removed from the codebase:
+Modify `ProcessMessageResult` (line 259) to replace the old fields with the new continuous evaluation shape:
+
+**Remove these fields:**
+- `pointAdvanced: boolean` — no longer applicable (points are recalled, not "advanced to")
+- `currentPointIndex: number` — replaced by T01's checklist-based tracking
+
+**Add these fields:**
+```typescript
+/** IDs of recall points the user demonstrated recall of in this message (may be empty) */
+pointsRecalledThisTurn: string[];
+
+/** Total number of points recalled so far across the session */
+recalledCount: number;
+```
+
+**Updated interface:**
+```typescript
+export interface ProcessMessageResult {
+  /** The AI tutor's response to display */
+  response: string;
+  /** Whether the session has completed (all points recalled) */
+  completed: boolean;
+  /** IDs of recall points the user demonstrated recall of in this message */
+  pointsRecalledThisTurn: string[];
+  /** Total number of points recalled so far */
+  recalledCount: number;
+  /** Total number of recall points in the session */
+  totalPoints: number;
+}
+```
+
+### 7. Kill List — Removals Owned by T06
 
 **`src/core/session/types.ts`:**
-- Remove `EVALUATION_TRIGGER_PHRASES` constant (line ~283). This array of trigger strings like "i think i understand", "got it", etc. is no longer needed.
-- Remove `autoEvaluateAfter` from `SessionEngineConfig` (the message-count threshold for auto-evaluation)
-- Remove `maxMessagesPerPoint` from `SessionEngineConfig` (the per-point message limit)
+- Remove `EVALUATION_TRIGGER_PHRASES` constant (line 283+). This array of trigger strings is no longer needed.
+- Remove `autoEvaluateAfter` from `SessionEngineConfig` (line 123). Remove its JSDoc.
+- Remove `maxMessagesPerPoint` from `SessionEngineConfig` (line 113). Remove its JSDoc.
+- Update `DEFAULT_SESSION_CONFIG` (line 150) to remove `maxMessagesPerPoint: 10` and `autoEvaluateAfter: 6`.
+
+**`src/core/session/index.ts`:**
+- Remove `EVALUATION_TRIGGER_PHRASES` from the re-export at line 63. The updated export block should be:
+  ```typescript
+  export { DEFAULT_SESSION_CONFIG } from './types';
+  ```
 
 **`src/core/session/session-engine.ts`:**
-- Remove `shouldTriggerEvaluation()` method (line ~667). This checked message content against `EVALUATION_TRIGGER_PHRASES`.
-- Remove `evaluateCurrentPoint()` method (line ~712). This called `evaluator.evaluate()` for a single point. Replaced by the batch evaluation in `processUserMessage()`.
-- Remove or fully refactor `advanceToNextPoint()` method (line ~763). Its responsibilities are now split across `markPointRecalled()`, `advanceProbeIndex()`, and `recordRecallOutcome()` from T01. If any remaining code path still calls it, redirect to the new methods.
+- Remove `shouldTriggerEvaluation()` method (line 667-673). This checked message content against `EVALUATION_TRIGGER_PHRASES`.
+- Remove `evaluateCurrentPoint()` method (line 712-749). Its role is replaced by `evaluateUncheckedPoints()`.
+- Remove `evaluateAndAdvance()` method (line 686-699). Its role is replaced by the inline logic in `processUserMessage()`.
+- Remove `triggerEvaluation()` public method (line 599-602). There is no more manual trigger.
 - Remove the `currentPointMessageCount` property and any logic that increments it.
-- Remove any `if (this.currentPointMessageCount >= config.autoEvaluateAfter)` checks.
-
-**`src/api/ws/types.ts`:**
-- Remove `trigger_eval` from the `ClientMessage` union type. This WebSocket message type is no longer needed since evaluation is continuous.
-
-**`src/api/ws/session-handler.ts`:**
-- Remove `handleTriggerEval()` method (line ~445). This handled the `trigger_eval` client message.
-- Remove the `case 'trigger_eval':` branch in the message handler switch/if-else.
-
-**`web/src/hooks/use-session-websocket.ts`:**
-- Remove `triggerEvaluation` from the returned object. This function sent the `trigger_eval` WebSocket message.
-- Remove any state or handler related to `trigger_eval`.
+- Remove any references to `config.autoEvaluateAfter` or `config.maxMessagesPerPoint`.
+- The `advanceToNextPoint()` method (line 763) should be reviewed. If T01's `markPointRecalled()` + `recordRecallOutcome()` fully replace its functionality (FSRS update, history recording, point advancement), remove it. If it still has unique logic (e.g., generating transition messages), retain the relevant parts and refactor into the continuous flow.
 
 **`web/src/components/live-session/SessionControls.tsx`:**
 - Remove the "I've got it!" button entirely. This button called `onTriggerEvaluation` which sent `trigger_eval`.
 - Remove the `onTriggerEvaluation` prop.
+- (Note: T13 also touches this file for other WS protocol removals. If T13 handles this removal, add a comment noting the overlap and ensure only one task actually does it.)
+
+**`web/src/hooks/use-session-websocket.ts`:**
+- Remove `triggerEvaluation` from the returned hook object. This function sent the `trigger_eval` WebSocket message.
 
 **`web/src/components/live-session/SessionContainer.tsx`:**
 - Remove any state or callbacks related to `triggerEvaluation` or `onTriggerEvaluation`.
 - Remove any imports of evaluation-related types that are now deleted.
 
+**T06 does NOT own these removals (they belong to T13):**
+- `trigger_eval` from `ClientMessage` union type in `src/api/ws/types.ts`
+- `TriggerEvalPayload` from `src/api/ws/types.ts`
+- `handleTriggerEval()` from `session-handler.ts`
+- `case 'trigger_eval':` branch in `session-handler.ts`
+
 ### 8. Performance Considerations
 
-The batch evaluator runs on EVERY user message, so it must be fast and cheap:
+The continuous evaluator calls `evaluate()` (or `evaluateEnhanced()`) once per unchecked point on every user message. This means:
 
-- **Model**: Use Haiku (not Sonnet). The existing evaluator may use Sonnet — the batch evaluator must explicitly use Haiku. **Important:** The model ID must be a valid Anthropic model string such as `'claude-haiku-4-5-20251001'`, not the shorthand `'haiku'`. Check `src/llm/types.ts` for the `LLMConfig` interface.
-- **Temperature**: 0.3 for consistency across evaluations.
-- **Max tokens**: 1024 — batch evaluation responses should be concise JSON.
-- **Conversation excerpt**: Use last 10 messages (same as existing `evaluate()`). Do not send the entire conversation history.
-- **Point list**: Send only unchecked points, not all points. As points are recalled, the prompt gets shorter.
-- **Prompt size**: The prompt template is tight — no verbose instructions. The response format is minimal JSON.
+- **Early in session (many unchecked points):** Multiple LLM calls per user message. Each call already uses the evaluator's configured model and `EVALUATION_TEMPERATURE` (0.3) and `EVALUATION_MAX_TOKENS` (512), as defined at the top of `recall-evaluator.ts` (lines 59, 66).
+- **Late in session (few unchecked points):** Fewer calls, eventually zero when all points are recalled.
+- **Conversation excerpt:** The existing `extractExcerpt()` (line 134 of `recall-evaluator.ts`) already limits context to `DEFAULT_EXCERPT_SIZE` (10 messages, line 52). This keeps token usage bounded.
 
-If the LLM client supports streaming, the batch evaluator should NOT stream — it needs the full JSON response to parse.
+**Optimization option (not required for initial implementation):** If the number of unchecked points is large (e.g., >5), consider calling `evaluate()` only on points whose content has keyword overlap with the user's latest message. This is a future optimization — the initial implementation should evaluate all unchecked points for correctness.
 
-### 9. Deprecation of Old Methods
+**Model choice:** The existing evaluator uses whatever model the `AnthropicClient` instance was configured with. If cost/latency of running evaluation on every message is a concern, the evaluator's client can be configured with Haiku (`claude-haiku-4-5-20251001`) instead of Sonnet. This is a configuration decision made when constructing `SessionEngineDependencies`, not a code change in `RecallEvaluator` itself.
 
-Mark these as deprecated but do not delete them yet (other parts of the codebase may reference them and will be updated in later tasks):
+### 9. No Deprecation of Existing Methods
 
-```typescript
-/** @deprecated Use evaluateBatch() instead. Will be removed after T06 migration is complete. */
-async evaluate(recallPoint: RecallPoint, conversationMessages: SessionMessage[]): Promise<RecallEvaluationResult> {
-  // ... existing implementation
-}
+The existing `evaluate()` and `evaluateEnhanced()` methods on `RecallEvaluator` are NOT deprecated. They are the primary API used by the continuous evaluation flow. Do not mark them as deprecated. Do not add any new methods to `RecallEvaluator`.
 
-/** @deprecated Use evaluateBatch() instead. Will be removed after T06 migration is complete. */
-async evaluateEnhanced(recallPoint: RecallPoint, conversationMessages: SessionMessage[], context?: any): Promise<EnhancedRecallEvaluationResult> {
-  // ... existing implementation
-}
-```
+### 10. Using Existing Prompt Functions
+
+The continuous evaluator uses the existing prompt functions — no new prompt functions are needed:
+- `buildRecallEvaluatorPrompt(recallPointContent, conversationExcerpt)` — used by `evaluate()`
+- `buildEnhancedRecallEvaluatorPrompt(recallPointContent, conversationExcerpt, context)` — used by `evaluateEnhanced()`
+- `parseRecallEvaluationResponse(response)` — used by `evaluate()`
+- `parseEnhancedRecallEvaluationResponse(response)` — used by `evaluateEnhanced()`
+- `deriveRatingFromConfidence(confidence)` — available for rating derivation
+
+Do NOT add `buildBatchEvaluatorPrompt()` or `parseBatchEvaluationResponse()`. These do not exist and are not needed.
 
 ---
 
@@ -392,54 +335,60 @@ async evaluateEnhanced(recallPoint: RecallPoint, conversationMessages: SessionMe
 
 | Action | File | What Changes |
 |--------|------|-------------|
-| MODIFY | `src/core/scoring/recall-evaluator.ts` | Add `evaluateBatch()` method, mark `evaluate()` and `evaluateEnhanced()` as deprecated |
-| MODIFY | `src/llm/prompts/recall-evaluator.ts` | Add `buildBatchEvaluatorPrompt()`, add `parseBatchEvaluationResponse()`, mark old prompt builders as deprecated |
-| MODIFY or CREATE | `src/core/scoring/types.ts` | Add `BatchEvaluationResult`, `BatchEvaluationRawResponse` types |
-| MODIFY | `src/core/session/session-engine.ts` | Rewrite `processUserMessage()` with continuous eval flow, modify `generateTutorResponse()` for feedback injection, remove `shouldTriggerEvaluation()`, `evaluateCurrentPoint()`, refactor `advanceToNextPoint()` |
-| MODIFY | `src/core/session/types.ts` | Remove `EVALUATION_TRIGGER_PHRASES`, remove `autoEvaluateAfter`, remove `maxMessagesPerPoint`, update `ProcessMessageResult` |
-| MODIFY | `src/api/ws/types.ts` | Remove `trigger_eval` from `ClientMessage`, add evaluation-related server message types if needed |
-| MODIFY | `src/api/ws/session-handler.ts` | Remove `handleTriggerEval()` method and its case branch |
+| MODIFY | `src/core/session/session-engine.ts` | Modify `processUserMessage()` to remove trigger-based evaluation and add continuous evaluation loop; add `evaluateUncheckedPoints()` private method; modify `generateTutorResponse()` to accept feedback parameter; remove `shouldTriggerEvaluation()`, `evaluateCurrentPoint()`, `evaluateAndAdvance()`, `triggerEvaluation()`, `currentPointMessageCount`; refactor or remove `advanceToNextPoint()` |
+| MODIFY | `src/core/session/types.ts` | Remove `EVALUATION_TRIGGER_PHRASES`, remove `autoEvaluateAfter` and `maxMessagesPerPoint` from `SessionEngineConfig` and `DEFAULT_SESSION_CONFIG`, update `ProcessMessageResult` to use `pointsRecalledThisTurn`/`recalledCount` instead of `pointAdvanced`/`currentPointIndex` |
+| MODIFY | `src/core/session/index.ts` | Remove `EVALUATION_TRIGGER_PHRASES` from re-exports (line 63) |
+| READ | `src/core/scoring/recall-evaluator.ts` | No changes needed — existing `evaluate()` and `evaluateEnhanced()` are used as-is |
+| READ | `src/core/scoring/types.ts` | No changes needed — `RecallEvaluation` and `EnhancedRecallEvaluation` already exist |
+| READ | `src/llm/prompts/recall-evaluator.ts` | No changes needed — existing prompt functions are used as-is |
 | MODIFY | `web/src/hooks/use-session-websocket.ts` | Remove `triggerEvaluation` from returned object |
-| MODIFY | `web/src/components/live-session/SessionControls.tsx` | Remove "I've got it!" button and `onTriggerEvaluation` prop entirely |
+| MODIFY | `web/src/components/live-session/SessionControls.tsx` | Remove "I've got it!" button and `onTriggerEvaluation` prop (coordinate with T13 if it also removes this) |
 | MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Remove evaluation-related state, callbacks, and imports |
+| MODIFY | `tests/integration/session-engine-metrics.test.ts` | Update 25+ references to `autoEvaluateAfter`/`maxMessagesPerPoint` in test configs and assertions. Tests that configure these options must be updated to remove them. Tests that assert on trigger-based evaluation behavior must be rewritten for continuous evaluation. |
+| MODIFY | `tests/integration/session-flow.test.ts` | Update reference to `EVALUATION_TRIGGER_PHRASES`. Tests that rely on trigger phrase matching must be rewritten for continuous evaluation. |
 
 ---
 
 ## Success Criteria
 
-1. **Continuous evaluation**: Every call to `processUserMessage()` triggers `evaluateBatch()` with all unchecked points. No message is processed without evaluation.
-2. **Multi-point recall**: If a user recalls 3 points in a single message, all 3 are checked off in that turn. `pointsRecalledThisTurn` contains all 3 IDs.
-3. **Zero recall**: If a user's message doesn't demonstrate recall of any point, `recalledPointIds` is empty, no points are checked off, and the feedback string reflects this (e.g., "No recall points were demonstrated").
-4. **Feedback injection**: The evaluator's feedback string is passed to `generateTutorResponse()` and injected into the LLM context as a system-level note. The user never sees the raw feedback. The tutor's response is shaped by it.
-5. **Feedback quality in recall mode**: Feedback is specific and actionable. Examples:
-   - "User recalled point rp_123 (adenosine receptor blocking) accurately with high confidence."
-   - "User's description of tolerance was close but imprecise — they said 'your body adjusts' without mentioning upregulation. This does not meet the threshold for recall."
-   - "Points rp_456 and rp_789 remain unchecked."
-6. **Feedback in rabbithole mode**: Feedback is minimal — just "Point rp_xxx was recalled" with no steering guidance. The rabbit hole agent operates independently.
-7. **EVALUATION_TRIGGER_PHRASES removed**: The constant is deleted from `types.ts`. No references to it exist anywhere in the codebase. `grep -r "EVALUATION_TRIGGER_PHRASES"` returns nothing.
-8. **`trigger_eval` removed**: The client message type is deleted from `types.ts`. `handleTriggerEval()` is deleted from `session-handler.ts`. `triggerEvaluation` is removed from the WebSocket hook. `grep -r "trigger_eval"` returns nothing (except possibly in git history or task files).
-9. **"I've got it!" button removed**: The button is completely removed from `SessionControls.tsx`. The `onTriggerEvaluation` prop is removed. No UI element triggers manual evaluation.
-10. **Config options removed**: `autoEvaluateAfter` and `maxMessagesPerPoint` are removed from `SessionEngineConfig`. No code references them.
-11. **Haiku model**: `evaluateBatch()` explicitly uses the Haiku model, not Sonnet or any other model. Verify this by checking the LLM client call parameters.
-12. **Temperature 0.3**: The batch evaluator call uses temperature 0.3.
-13. **Idempotency on already-recalled points**: The evaluator only receives unchecked points (from `getUncheckedPoints()`). If a user repeats something already recalled, it's not in the unchecked list, so it can't be re-evaluated. This is guaranteed by the flow, not by the evaluator prompt.
-14. **Parse failure resilience**: If the LLM returns malformed JSON, `parseBatchEvaluationResponse()` catches the error and returns an empty result (no points recalled, empty feedback). The session does not crash.
-15. **Backward compatibility**: The old `evaluate()` and `evaluateEnhanced()` methods still exist (marked deprecated) so any code not yet migrated doesn't break.
-16. **FSRS updates**: For each recalled point, `recordRecallOutcome()` is called with `success: true` and the confidence from the evaluator. FSRS state is updated in the database.
+1. **Continuous evaluation**: Every call to `processUserMessage()` runs `evaluateUncheckedPoints()` against all unchecked points. No message is processed without evaluation.
+2. **Multi-point recall**: If a user recalls 3 points in a single message, all 3 are detected, checked off, and reported in `pointsRecalledThisTurn`. The evaluator iterates all unchecked points, not just one.
+3. **Zero recall**: If a user's message doesn't demonstrate recall of any point, `recalledPointIds` is empty, no points are checked off, and the feedback string notes this.
+4. **Feedback injection**: The evaluator feedback string is passed to `generateTutorResponse()` and prepended to the conversation history as an ephemeral `assistant`-role message. The user never sees the raw feedback. The tutor's response is shaped by it.
+5. **Feedback is NOT persisted**: The feedback message exists only in the LLM call's message array. It is NOT added to `this.messages`, NOT saved via `saveMessage()`, and NOT stored in the database.
+6. **EVALUATION_TRIGGER_PHRASES removed**: The constant is deleted from `types.ts` and its re-export from `index.ts`. No references exist anywhere in the codebase. `grep -r "EVALUATION_TRIGGER_PHRASES"` returns nothing (except task files/docs).
+7. **"I've got it!" button removed**: The button is completely removed from `SessionControls.tsx`. The `onTriggerEvaluation` prop is removed. No UI element triggers manual evaluation.
+8. **Config options removed**: `autoEvaluateAfter` and `maxMessagesPerPoint` are removed from `SessionEngineConfig` and `DEFAULT_SESSION_CONFIG`. No code references them.
+9. **`shouldTriggerEvaluation()` removed**: The private method is deleted from `session-engine.ts`. No code calls it.
+10. **Uses existing evaluator API**: The implementation calls `evaluate()` and/or `evaluateEnhanced()` on the existing `RecallEvaluator` class. No `evaluateBatch()` method exists or is added.
+11. **Uses existing prompt functions**: The implementation relies on `buildRecallEvaluatorPrompt`, `buildEnhancedRecallEvaluatorPrompt`, and their parsers. No new prompt functions are added.
+12. **`saveMessage()` return value not used**: No code does `const msg = await this.saveMessage(...)` — the method returns `Promise<void>`.
+13. **Separate AnthropicClient instances**: The evaluator and the tutor use separate `AnthropicClient` instances so system prompts don't interfere with each other.
+14. **`extractExcerpt` is correct name**: All references use `extractExcerpt` (the actual private method name at line 134 of `recall-evaluator.ts`), not `extractConversationExcerpt`.
+15. **Parse failure resilience**: If the LLM returns malformed JSON, the existing `parseRecallEvaluationResponse()` / `parseEnhancedRecallEvaluationResponse()` handle it gracefully with default failure results. No session crash.
+16. **FSRS updates**: For each recalled point, `recordRecallOutcome()` (from T01) is called with `success: true`, the confidence from the evaluator, and the reasoning. All three fields of `RecallEvaluation` are provided (success, confidence, reasoning — per cross-task issue #18).
 17. **No user-visible evaluation machinery**: The user sees only the tutor's natural conversational responses. No evaluation scores, no "you recalled X correctly" messages from the system. All evaluation is invisible middleware.
+18. **Test files updated**: `tests/integration/session-engine-metrics.test.ts` (25 references to removed config options) and `tests/integration/session-flow.test.ts` (EVALUATION_TRIGGER_PHRASES reference) are updated to work with the new continuous evaluation flow.
+19. **T06 does NOT remove WS protocol types**: `trigger_eval` in `ClientMessage`, `TriggerEvalPayload`, `handleTriggerEval()`, and the `case 'trigger_eval':` branch in `session-handler.ts` are owned by T13.
 
 ---
 
 ## Implementation Warnings
 
-> **WARNING: `AnthropicClient.complete()` call signature**
-> The code examples in section 2 originally showed an object-based call: `this.llmClient.complete({ model, messages, temperature, maxTokens })`. The actual signature is `complete(messages: string | LLMMessage[], config?: LLMConfig)` where `LLMConfig` has `{ model, maxTokens, temperature }`. The response object has a `.text` field, NOT `.content`. These have been corrected above. Additionally, `AnthropicClient` has a stateful `systemPrompt` field — if the evaluator shares the same instance as the session engine, calling `evaluateBatch()` could interfere with the tutor's system prompt. Consider creating a separate `AnthropicClient` instance for the evaluator.
+> **WARNING: `AnthropicClient` is stateful (Cross-Task Issue #1)**
+> `systemPrompt` is a private instance field. `complete()` always sends it. The evaluator and tutor MUST use separate `AnthropicClient` instances. The current `SessionEngineDependencies` already has separate `evaluator` (which wraps its own client) and `llmClient` (for the tutor). Verify this separation is maintained when constructing dependencies.
 
-> **WARNING: `extractExcerpt()` method name**
-> The existing method on `RecallEvaluator` is named `extractExcerpt()`, not `extractConversationExcerpt()`. This has been corrected above.
+> **WARNING: `saveMessage()` returns `Promise<void>` (Cross-Task Issue #17)**
+> Do not destructure or assign the return value of `saveMessage()`. It returns nothing.
 
-> **WARNING: `saveMessage()` returns void**
-> The code example in section 5 originally destructured a return value from `saveMessage()` (e.g., `const userMessage = await this.saveMessage(...)`). The actual `saveMessage()` method in `SessionEngine` returns `void`. If a message ID is needed for the event payload, generate the ID before calling `saveMessage()` or use the repository directly.
+> **WARNING: `extractExcerpt()` is private and correctly named**
+> The method on `RecallEvaluator` is `extractExcerpt` (line 134), not `extractConversationExcerpt`. It is `private` — do not call it from outside the class. The `evaluate()` and `evaluateEnhanced()` methods call it internally.
 
-> **WARNING: Haiku model ID**
-> The shorthand `'haiku'` is not a valid Anthropic model ID. Use the full model string `'claude-haiku-4-5-20251001'` (or whatever is current). Check `src/llm/types.ts` for how model IDs are defined in this codebase.
+> **WARNING: `RecallEvaluation` has 3 required fields (Cross-Task Issue #18)**
+> `{ success: boolean; confidence: number; reasoning: string }`. Any code creating a `RecallEvaluation` must include all three. The `reasoning` field cannot be omitted.
+
+> **WARNING: Performance of per-point evaluation**
+> Calling `evaluate()` per unchecked point means N LLM calls per user message (where N = unchecked points). This is acceptable because: (a) N decreases as points are recalled, (b) each call uses `extractExcerpt()` limiting to 10 messages, (c) `EVALUATION_MAX_TOKENS` is 512, (d) the evaluator can be configured with a fast/cheap model. If N is large, consider a future optimization to pre-filter points by keyword relevance before calling the LLM.
+
+> **WARNING: `processUserMessage()` already saves the assistant message**
+> The existing `generateTutorResponse()` (line 890) saves the assistant message via `saveMessage()` at line 901 and emits the `assistant_message` event at line 909. Do NOT add duplicate save/emit calls in `processUserMessage()`. After calling `generateTutorResponse()`, the message is already saved and emitted.

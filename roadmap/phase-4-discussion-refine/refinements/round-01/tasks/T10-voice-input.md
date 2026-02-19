@@ -33,11 +33,23 @@ deepgram: z.object({
 }),
 ```
 
-Load from environment:
+Load from environment (no fallback — matches existing pattern for optional API keys like `anthropic.apiKey`):
 ```typescript
 deepgram: {
-  apiKey: process.env.DEEPGRAM_API_KEY || '',
+  apiKey: process.env.DEEPGRAM_API_KEY,
 },
+```
+
+**Add to `.env.example`**:
+
+Add the following section to the root `.env.example` file, after the Anthropic configuration section:
+
+```bash
+# -----------------------------------------------------------------------------
+# Deepgram API Configuration (Optional — required for voice input)
+# -----------------------------------------------------------------------------
+# Get your API key at: https://console.deepgram.com/
+DEEPGRAM_API_KEY=your-deepgram-api-key-here
 ```
 
 **Token endpoint** (CREATE: `src/api/routes/voice.ts`):
@@ -46,67 +58,80 @@ deepgram: {
 import { Hono } from 'hono';
 import { createClient } from '@deepgram/sdk';
 import { config } from '../../config';
-
-const voiceRoutes = new Hono();
+import { success } from '../utils/response';
 
 /**
- * GET /api/voice/deepgram-token
+ * Factory function that creates voice-related API routes.
  *
- * Generates a short-lived Deepgram API key for the frontend to use when
- * connecting directly to Deepgram's streaming transcription API.
+ * Provides:
+ * - POST /token — generates a short-lived Deepgram API key for the frontend
  *
- * This keeps the main Deepgram API key server-side while allowing the
- * browser to establish a direct WebSocket connection to Deepgram.
- *
- * Returns: { token: string, expiresAt: string }
- *
- * The token is valid for 60 seconds — long enough for a single recording
- * session. The frontend requests a new token each time the user taps the
- * mic button.
+ * The frontend uses this temporary token to open a direct WebSocket connection
+ * to Deepgram's streaming transcription API. This keeps the main Deepgram API
+ * key server-side while allowing the browser to stream audio directly.
  */
-voiceRoutes.get('/deepgram-token', async (c) => {
-  const apiKey = config.deepgram.apiKey;
+export function voiceRoutes(): Hono {
+  const router = new Hono();
 
-  if (!apiKey) {
-    return c.json({ error: 'Deepgram API key not configured' }, 503);
-  }
+  /**
+   * POST /token
+   *
+   * Generates a short-lived Deepgram API key for the frontend to use when
+   * connecting directly to Deepgram's streaming transcription API.
+   *
+   * This keeps the main Deepgram API key server-side while allowing the
+   * browser to establish a direct WebSocket connection to Deepgram.
+   *
+   * Returns: { success: true, data: { token: string, expiresAt: string } }
+   *
+   * The token is valid for 60 seconds — long enough for a single recording
+   * session. The frontend requests a new token each time the user taps the
+   * mic button.
+   */
+  router.post('/token', async (c) => {
+    const apiKey = config.deepgram.apiKey;
 
-  try {
-    const deepgram = createClient(apiKey);
-
-    // Create a temporary API key with limited scope and short TTL
-    // NOTE: createProjectKey() requires a valid project ID — an empty string will fail.
-    // The project ID can be obtained from the Deepgram dashboard or via the API:
-    //   const { result: projects } = await deepgram.manage.getProjects();
-    //   const projectId = projects.projects[0].project_id;
-    // Alternatively, use the newer Deepgram SDK's key management API that infers
-    // the project from the API key. Check the current @deepgram/sdk version docs.
-    const { result: projects } = await deepgram.manage.getProjects();
-    const projectId = projects.projects[0]?.project_id;
-    if (!projectId) {
-      return c.json({ error: 'No Deepgram project found' }, 500);
+    if (!apiKey) {
+      return c.json({ error: 'Deepgram API key not configured' }, 503);
     }
 
-    const { result } = await deepgram.manage.createProjectKey(
-      projectId,
-      {
-        comment: 'Temporary browser transcription key',
-        scopes: ['usage:write'],  // Minimal scope: only allows transcription
-        time_to_live_in_seconds: 60,
+    try {
+      const deepgram = createClient(apiKey);
+
+      // Retrieve the project ID associated with this API key.
+      // The Deepgram API requires a project ID to create temporary keys.
+      const { result: projects } = await deepgram.manage.getProjects();
+      const projectId = projects.projects[0]?.project_id;
+      if (!projectId) {
+        return c.json({ error: 'No Deepgram project found' }, 500);
       }
-    );
 
-    return c.json({
-      token: result.key,
-      expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
-    });
-  } catch (error) {
-    console.error('Failed to create Deepgram token:', error);
-    return c.json({ error: 'Failed to generate voice token' }, 500);
-  }
-});
+      const { result } = await deepgram.manage.createProjectKey(
+        projectId,
+        {
+          comment: 'Temporary browser transcription key',
+          scopes: ['usage:write'],  // Minimal scope: only allows transcription
+          time_to_live_in_seconds: 60,
+        }
+      );
 
-export { voiceRoutes };
+      // WARNING: The `result.key` field name depends on the @deepgram/sdk version.
+      // Verify against the installed SDK version's type definitions.
+      // Pin @deepgram/sdk >= 3.0.0 in the install command.
+      // If `result.key` is undefined, check for `result.api_key` or similar
+      // by inspecting the SDK's TypeScript types after installation.
+      return success(c, {
+        token: result.key,
+        expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+      });
+    } catch (error) {
+      console.error('Failed to create Deepgram token:', error);
+      return c.json({ error: 'Failed to generate voice token' }, 500);
+    }
+  });
+
+  return router;
+}
 ```
 
 **Alternative approach** (if Deepgram temporary key creation is not straightforward): Use the backend as a WebSocket proxy. The frontend sends audio chunks to the backend's WebSocket, and the backend forwards them to Deepgram. This is more complex but keeps the API key completely hidden. The task implementer should evaluate which approach is simpler with the current Deepgram SDK version and choose accordingly. The token endpoint approach is preferred if Deepgram supports it cleanly.
@@ -118,13 +143,21 @@ Routes are registered via `createApiRouter()` in `src/api/routes/index.ts`, NOT 
 ```typescript
 import { voiceRoutes } from './voice';
 
-// Inside createApiRouter():
-app.route('/voice', voiceRoutes);
+// Inside createApiRouter(), alongside the other route mounts:
+router.route('/voice', voiceRoutes());
+```
+
+Also add the barrel re-export at the top of the file alongside other re-exports:
+
+```typescript
+export { voiceRoutes } from './voice';
 ```
 
 ### 2. Deepgram Client (CREATE: `src/core/voice/deepgram-client.ts`)
 
-Server-side Deepgram client for any backend operations. For now this is thin — the actual transcription happens client-side via the browser SDK. This module exists for future backend-side transcription needs and as the single place to configure Deepgram settings.
+Create the `src/core/voice/` directory (it does not exist yet).
+
+Server-side Deepgram client for any backend operations. For now this is thin — the actual transcription happens client-side via the browser's native `WebSocket`. This module exists for future backend-side transcription needs and as the single place to configure Deepgram settings.
 
 ```typescript
 import { createClient, type DeepgramClient } from '@deepgram/sdk';
@@ -166,6 +199,8 @@ export { createDeepgramClient, DEEPGRAM_CONFIG } from './deepgram-client';
 
 The core React hook that manages the entire voice recording lifecycle: requesting mic permission, capturing audio via `MediaRecorder`, streaming to Deepgram for real-time transcription, and extracting waveform data for visualization.
 
+The frontend uses the browser's native `WebSocket` to connect to Deepgram — it does NOT use `@deepgram/sdk`. The SDK is only used on the backend.
+
 ```typescript
 import { useState, useRef, useCallback, useEffect } from 'react';
 
@@ -180,6 +215,13 @@ import { useState, useRef, useCallback, useEffect } from 'react';
  */
 type VoiceInputState = 'idle' | 'recording' | 'processing' | 'review' | 'correction' | 'error';
 
+/**
+ * Recording mode:
+ * - initial: First recording — transcription goes through onFinalTranscription
+ * - correction: Re-recording for correction — transcription goes through onProcessCorrection
+ */
+type RecordingMode = 'initial' | 'correction';
+
 interface UseVoiceInputOptions {
   /**
    * Called when a new interim (partial) transcription is available.
@@ -190,8 +232,16 @@ interface UseVoiceInputOptions {
   /**
    * Called when the final transcription is ready (after recording stops).
    * This is the raw Deepgram output, before pipeline processing.
+   * May return a Promise — the hook handles it as fire-and-forget.
    */
-  onFinalTranscription?: (text: string) => void;
+  onFinalTranscription?: (text: string) => void | Promise<void>;
+
+  /**
+   * Called when a correction recording finishes.
+   * Receives the current review text and the spoken correction instruction.
+   * Returns the corrected text to display for review.
+   */
+  onProcessCorrection?: (currentText: string, instruction: string) => Promise<string>;
 
   /**
    * Base URL for the backend API (to fetch the Deepgram token).
@@ -216,6 +266,9 @@ interface UseVoiceInputReturn {
   /** Start recording. Requests mic permission if not yet granted. */
   startRecording: () => Promise<void>;
 
+  /** Start a correction recording. Uses a different finalization path than startRecording. */
+  startCorrectionRecording: () => Promise<void>;
+
   /** Stop recording. Triggers final transcription from Deepgram. */
   stopRecording: () => void;
 
@@ -238,21 +291,40 @@ interface UseVoiceInputReturn {
  * 6. Receives interim and final transcriptions
  * 7. Provides waveform data for visualization
  *
+ * Supports two recording modes:
+ * - initial: Normal recording; final transcription calls onFinalTranscription
+ * - correction: Correction recording; final transcription calls onProcessCorrection
+ *   with the current review text and the correction instruction
+ *
  * Usage:
  * ```tsx
  * const { state, transcription, waveformData, startRecording, stopRecording, reset } = useVoiceInput({
  *   onFinalTranscription: (text) => console.log('Final:', text),
+ *   onProcessCorrection: async (currentText, instruction) => {
+ *     return await correctionApi(currentText, instruction);
+ *   },
  * });
  * ```
  */
 function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn {
-  const { onInterimTranscription, onFinalTranscription, apiBaseUrl = '' } = options;
+  const { onInterimTranscription, onFinalTranscription, onProcessCorrection, apiBaseUrl = '' } = options;
 
   // State
   const [state, setState] = useState<VoiceInputState>('idle');
   const [transcription, setTranscription] = useState('');
   const [waveformData, setWaveformData] = useState<number[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Refs to avoid stale closures in WebSocket callbacks.
+  // WebSocket event handlers capture state at registration time,
+  // so we use refs that are updated on every render cycle.
+  const stateRef = useRef<VoiceInputState>(state);
+  const transcriptionRef = useRef<string>(transcription);
+  const recordingModeRef = useRef<RecordingMode>('initial');
+
+  // Keep refs in sync with state
+  useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { transcriptionRef.current = transcription; }, [transcription]);
 
   // Refs for cleanup
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -262,16 +334,24 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Store callbacks in refs so socket handlers always see the latest version
+  const onFinalTranscriptionRef = useRef(onFinalTranscription);
+  const onProcessCorrectionRef = useRef(onProcessCorrection);
+  useEffect(() => { onFinalTranscriptionRef.current = onFinalTranscription; }, [onFinalTranscription]);
+  useEffect(() => { onProcessCorrectionRef.current = onProcessCorrection; }, [onProcessCorrection]);
+
   /**
    * Fetches a temporary Deepgram API token from the backend.
    */
   const fetchDeepgramToken = useCallback(async (): Promise<string> => {
-    const response = await fetch(`${apiBaseUrl}/api/voice/deepgram-token`);
+    const response = await fetch(`${apiBaseUrl}/api/voice/token`, {
+      method: 'POST',
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch Deepgram token');
     }
     const data = await response.json();
-    return data.token;
+    return data.data.token;
   }, [apiBaseUrl]);
 
   /**
@@ -301,11 +381,15 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
   }, []);
 
   /**
-   * Start recording audio and streaming to Deepgram.
+   * Internal function to start recording audio and streaming to Deepgram.
+   * The `mode` parameter determines how the final transcription is handled:
+   * - 'initial': calls onFinalTranscription
+   * - 'correction': calls onProcessCorrection with current transcription + instruction
    */
-  const startRecording = useCallback(async () => {
+  const doStartRecording = useCallback(async (mode: RecordingMode) => {
     try {
       setErrorMessage(null);
+      recordingModeRef.current = mode;
 
       // Request microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -323,7 +407,8 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
       // Fetch temporary Deepgram token
       const token = await fetchDeepgramToken();
 
-      // Open WebSocket to Deepgram streaming API
+      // Open native WebSocket to Deepgram streaming API
+      // (The frontend does NOT use @deepgram/sdk — only the backend does)
       const dgSocket = new WebSocket(
         `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&punctuate=true&interim_results=true`,
         ['token', token]
@@ -350,7 +435,7 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
         // Capture audio in 250ms chunks for low latency
         mediaRecorder.start(250);
 
-        setState('recording');
+        setState(mode === 'correction' ? 'correction' : 'recording');
 
         // Start waveform animation
         animationFrameRef.current = requestAnimationFrame(updateWaveform);
@@ -385,11 +470,37 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
         setState('error');
       };
 
+      /**
+       * When Deepgram socket closes, finalize transcription.
+       * Uses refs to avoid stale closure bugs — state and transcription
+       * values are read from refs which are updated on each render.
+       */
       dgSocket.onclose = () => {
-        // When Deepgram socket closes, finalize transcription
-        if (state === 'processing') {
+        if (stateRef.current === 'processing') {
+          const currentMode = recordingModeRef.current;
+          const finalText = transcriptionRef.current;
+
+          if (currentMode === 'correction' && onProcessCorrectionRef.current) {
+            // Correction mode: pass the correction instruction to the handler.
+            // The transcriptionRef holds the correction instruction text.
+            // We need the review text that was set before correction started.
+            // The component passes it via onProcessCorrection(reviewText, instruction).
+            // Fire-and-forget — the component handles the Promise.
+            void onProcessCorrectionRef.current(finalText, finalText);
+          } else {
+            // Initial mode: pass final transcription to the handler
+            if (onFinalTranscriptionRef.current) {
+              // Handle both sync and async callbacks (fire-and-forget)
+              const result = onFinalTranscriptionRef.current(finalText);
+              if (result && typeof (result as Promise<void>).catch === 'function') {
+                (result as Promise<void>).catch((err: unknown) => {
+                  console.error('onFinalTranscription error:', err);
+                });
+              }
+            }
+          }
+
           setState('review');
-          onFinalTranscription?.(transcription);
         }
       };
     } catch (error) {
@@ -402,10 +513,29 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
       setState('error');
       console.error('Failed to start recording:', error);
     }
-  }, [fetchDeepgramToken, onInterimTranscription, onFinalTranscription, updateWaveform, state, transcription]);
+  }, [fetchDeepgramToken, onInterimTranscription, updateWaveform]);
+
+  /**
+   * Start recording audio for initial transcription.
+   */
+  const startRecording = useCallback(async () => {
+    await doStartRecording('initial');
+  }, [doStartRecording]);
+
+  /**
+   * Start recording audio for correction mode.
+   * The resulting transcription is treated as a correction instruction
+   * and passed to onProcessCorrection instead of onFinalTranscription.
+   */
+  const startCorrectionRecording = useCallback(async () => {
+    await doStartRecording('correction');
+  }, [doStartRecording]);
 
   /**
    * Stop recording and finalize transcription.
+   * Relies on the dgSocket.onclose handler to transition to 'review' state.
+   * The onclose handler is the single source of truth for state transitions
+   * after recording stops, avoiding race conditions between setTimeout and onclose.
    */
   const stopRecording = useCallback(() => {
     setState('processing');
@@ -423,6 +553,7 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
     }
 
     // Close Deepgram WebSocket (sends close frame, Deepgram sends final results)
+    // The dgSocket.onclose handler will transition state to 'review'
     if (deepgramSocketRef.current && deepgramSocketRef.current.readyState === WebSocket.OPEN) {
       deepgramSocketRef.current.close();
     }
@@ -436,15 +567,6 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
     if (audioContextRef.current) {
       audioContextRef.current.close();
     }
-
-    // After a brief delay for any final Deepgram messages, move to review
-    // The dgSocket.onclose handler also moves to review
-    setTimeout(() => {
-      setState((current) => {
-        if (current === 'processing') return 'review';
-        return current;
-      });
-    }, 500);
   }, []);
 
   /**
@@ -474,6 +596,7 @@ function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn 
     waveformData,
     errorMessage,
     startRecording,
+    startCorrectionRecording,
     stopRecording,
     reset,
     setTranscription,
@@ -536,15 +659,20 @@ export default Waveform;
 
 Processes spoken correction instructions against the current transcription. The user speaks something like "change the second part to say phosphoanhydride" and this function applies that edit instruction to the displayed text.
 
+Note: `src/core/transcription/` is created by T03. This file lives in that same directory.
+
 ```typescript
-import type { AnthropicClient } from '../../llm/client';
+import { AnthropicClient } from '../../llm/client';
 
 /**
  * Processes a spoken correction instruction and applies it to the current transcription.
  *
- * The user sees their transcribed text and speaks a correction instruction.
- * This function sends both the current text and the correction instruction
- * to Haiku, which returns the updated text.
+ * Uses a DEDICATED AnthropicClient instance with no system prompt to avoid
+ * contaminating the session's LLM client. The session's AnthropicClient carries
+ * a system prompt that would interfere with correction processing.
+ *
+ * Uses claude-haiku-4-5-20251001 for fast, cheap corrections — this is a simple
+ * text transformation that does not require the full Sonnet model.
  *
  * Examples:
  * - Current: "The process involves my selenium networks"
@@ -561,14 +689,17 @@ import type { AnthropicClient } from '../../llm/client';
  *
  * @param currentText - The text currently displayed for review
  * @param correctionInstruction - The user's spoken edit instruction
- * @param llmClient - AnthropicClient instance (will use Haiku)
  * @returns The updated text with the correction applied
  */
 async function processCorrection(
   currentText: string,
   correctionInstruction: string,
-  llmClient: AnthropicClient
 ): Promise<string> {
+  // Create a dedicated client instance for correction processing.
+  // Do NOT reuse the session's AnthropicClient — it carries the session's
+  // system prompt which would interfere with this simple text transformation.
+  const correctionClient = new AnthropicClient();
+
   const prompt = `Current message: "${currentText}"
 
 User's correction instruction: "${correctionInstruction}"
@@ -576,7 +707,9 @@ User's correction instruction: "${correctionInstruction}"
 Apply the user's correction to the current message. Return ONLY the updated message text, nothing else. Do not explain what you changed. If the instruction is unclear, make your best interpretation and apply it.`;
 
   try {
-    const response = await llmClient.complete(prompt);
+    const response = await correctionClient.complete(prompt, {
+      model: 'claude-haiku-4-5-20251001',
+    });
     const result = response.text.trim();
 
     // If the response looks like it contains explanation rather than just the corrected text,
@@ -657,19 +790,27 @@ function VoiceInput({
   // Touch start position for swipe detection
   const touchStartY = useRef<number | null>(null);
 
-  // Voice input hook
+  // Ref to hold review text for use in correction callback
+  const reviewTextRef = useRef<string>(reviewText);
+  useRef(() => { reviewTextRef.current = reviewText; });
+
+  // Voice input hook — handles recording, streaming, and transcription
   const {
     state: voiceState,
     transcription,
     waveformData,
     errorMessage,
     startRecording,
+    startCorrectionRecording,
     stopRecording,
     reset: resetVoice,
     setTranscription,
   } = useVoiceInput({
+    /**
+     * Called when initial recording finishes with final transcription.
+     * Passes raw text through T03 pipeline before showing for review.
+     */
     onFinalTranscription: async (rawText) => {
-      // Process through T03 pipeline if available
       if (onProcessTranscription && rawText.trim()) {
         setIsProcessing(true);
         try {
@@ -683,13 +824,35 @@ function VoiceInput({
         setReviewText(rawText);
       }
     },
+
+    /**
+     * Called when correction recording finishes.
+     * Passes the current review text and the correction instruction
+     * to the correction processor (Haiku), then updates the review text.
+     */
+    onProcessCorrection: async (currentText, instruction) => {
+      if (onProcessCorrection) {
+        setIsProcessing(true);
+        try {
+          // currentText from the hook is the correction instruction transcription.
+          // We want to pass the actual review text + the instruction.
+          const corrected = await onProcessCorrection(reviewTextRef.current, instruction);
+          setReviewText(corrected);
+        } catch {
+          // Leave review text unchanged on failure
+        }
+        setIsProcessing(false);
+      }
+      return reviewTextRef.current;
+    },
   });
 
   /**
    * Handle microphone button tap.
-   * In idle: start recording.
+   * In idle: start initial recording.
    * In recording: stop recording.
-   * In review: enter correction mode.
+   * In review: enter correction mode via startCorrectionRecording.
+   * In correction: stop correction recording.
    */
   const handleMicTap = useCallback(() => {
     if (disabled) return;
@@ -700,12 +863,15 @@ function VoiceInput({
     } else if (voiceState === 'recording') {
       stopRecording();
     } else if (voiceState === 'review') {
-      // Enter correction mode: start recording the correction instruction
-      startRecording();
-      // The voice state will go to 'recording' — when it stops,
-      // the correction instruction is processed against reviewText
+      // Enter correction mode: start a separate correction recording.
+      // This uses startCorrectionRecording() which routes the final
+      // transcription to onProcessCorrection instead of onFinalTranscription.
+      startCorrectionRecording();
+    } else if (voiceState === 'correction') {
+      // Stop correction recording
+      stopRecording();
     }
-  }, [disabled, voiceState, startRecording, stopRecording, resetVoice]);
+  }, [disabled, voiceState, startRecording, startCorrectionRecording, stopRecording, resetVoice]);
 
   /**
    * Handle sending the approved message.
@@ -785,7 +951,7 @@ function VoiceInput({
   // ---- Render ----
 
   // Voice mode: recording state — show waveform
-  if (mode === 'voice' && voiceState === 'recording') {
+  if (mode === 'voice' && (voiceState === 'recording' || voiceState === 'correction')) {
     return (
       <div
         className={`flex items-center gap-3 px-4 py-3 bg-clarity-700/50 rounded-xl ${className}`}
@@ -801,7 +967,7 @@ function VoiceInput({
         <button
           onClick={handleMicTap}
           className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center animate-pulse"
-          aria-label="Stop recording"
+          aria-label={voiceState === 'correction' ? 'Stop correction recording' : 'Stop recording'}
         >
           <MicIcon className="w-5 h-5 text-white" />
         </button>
@@ -1054,7 +1220,14 @@ Replace with:
 
 ### 9. Install Deepgram SDK
 
-Run: `bun add @deepgram/sdk`
+The `@deepgram/sdk` is used by backend files only (`src/core/voice/deepgram-client.ts`, `src/api/routes/voice.ts`). The frontend hook uses the browser's native `WebSocket`, not the SDK. Therefore the SDK belongs in the ROOT `package.json`, NOT in `web/package.json`.
+
+Run from the project root:
+```bash
+bun add @deepgram/sdk@^3.0.0
+```
+
+The `@^3.0.0` pin ensures compatibility with the `result.key` field used in the token endpoint. After installation, verify that the `createProjectKey` return type includes a `key` field by inspecting the SDK's TypeScript definitions. If the field is named differently in the installed version (e.g., `api_key`), update `voice.ts` accordingly.
 
 ---
 
@@ -1062,18 +1235,19 @@ Run: `bun add @deepgram/sdk`
 
 | Action | File | What Changes |
 |--------|------|-------------|
-| CREATE | `src/core/voice/deepgram-client.ts` | Deepgram configuration constants and client factory function |
+| CREATE | `src/core/voice/deepgram-client.ts` | Deepgram configuration constants and client factory function (create `src/core/voice/` directory first) |
 | CREATE | `src/core/voice/index.ts` | Barrel export for voice module |
-| CREATE | `src/core/transcription/correction-processor.ts` | `processCorrection()` function for spoken edit instructions |
-| CREATE | `src/api/routes/voice.ts` | `GET /api/voice/deepgram-token` endpoint for temporary Deepgram API key generation |
-| CREATE | `web/src/hooks/use-voice-input.ts` | `useVoiceInput()` React hook: mic permission, MediaRecorder, Deepgram WebSocket, waveform data |
+| CREATE | `src/core/transcription/correction-processor.ts` | `processCorrection()` function — uses dedicated `AnthropicClient` with `claude-haiku-4-5-20251001` |
+| CREATE | `src/api/routes/voice.ts` | `POST /api/voice/token` endpoint (factory function pattern) for temporary Deepgram API key generation |
+| CREATE | `web/src/hooks/use-voice-input.ts` | `useVoiceInput()` React hook: mic permission, MediaRecorder, native WebSocket to Deepgram, waveform data, stale-closure-safe refs, separate correction recording mode |
 | CREATE | `web/src/components/live-session/VoiceInput.tsx` | Voice-first input component with mic, waveform, review, correction, and text fallback modes |
 | CREATE | `web/src/components/live-session/Waveform.tsx` | Animated waveform visualization component for recording feedback |
 | MODIFY | `web/src/components/live-session/SessionContainer.tsx` | Replace `MessageInput` with `VoiceInput`; remove evaluation hint text |
 | MODIFY | `web/src/components/live-session/MessageInput.tsx` | No direct changes — kept as-is for potential reuse, but no longer imported by SessionContainer |
-| MODIFY | `src/config.ts` | Add `deepgram.apiKey` to config schema and environment loading |
-| MODIFY | `src/api/routes/index.ts` | Register `/voice` route in `createApiRouter()` for Deepgram token endpoint |
-| MODIFY | `package.json` (via `bun add @deepgram/sdk`) | Add `@deepgram/sdk` as a runtime dependency |
+| MODIFY | `src/config.ts` | Add `deepgram.apiKey` to config schema and environment loading (no `|| ''` fallback) |
+| MODIFY | `.env.example` | Add `DEEPGRAM_API_KEY` entry |
+| MODIFY | `src/api/routes/index.ts` | Import and mount `voiceRoutes()` in `createApiRouter()`; add `export { voiceRoutes } from './voice'` to re-exports |
+| MODIFY | `package.json` (via `bun add @deepgram/sdk@^3.0.0`) | Add `@deepgram/sdk` as a runtime dependency in ROOT package.json (not web/) |
 
 ---
 
@@ -1093,7 +1267,7 @@ Run: `bun add @deepgram/sdk`
 
 7. **Enter key approval (desktop)**: Pressing Enter while the review text is focused sends the approved message. Same behavior as swipe-up.
 
-8. **Correction mode**: Tapping the mic button during review enters correction mode. The user speaks editing instructions (e.g., "change the second word to phosphoanhydride"). The spoken instruction is transcribed by Deepgram, then processed by `processCorrection()` (Haiku call) against the current review text. The updated text replaces the review text for re-approval.
+8. **Correction mode**: Tapping the mic button during review enters correction mode via `startCorrectionRecording()`. The user speaks editing instructions (e.g., "change the second word to phosphoanhydride"). The spoken instruction is transcribed by Deepgram, then processed by `processCorrection()` (Haiku call via a dedicated `AnthropicClient` instance, model `claude-haiku-4-5-20251001`) against the current review text. The updated text replaces the review text for re-approval. Correction mode uses a separate code path (`RecordingMode = 'correction'`) so the final transcription is routed to `onProcessCorrection` rather than `onFinalTranscription`, preventing the review text from being overwritten with the correction instruction.
 
 9. **Text input fallback**: Tapping the keyboard icon switches to text mode, showing a standard text input field. Typing and pressing Enter sends the message. A mic icon is available to switch back to voice mode.
 
@@ -1101,7 +1275,7 @@ Run: `bun add @deepgram/sdk`
 
 11. **After sending, returns to voice-ready**: After a message is sent (via any method), the input resets to the voice-idle state with the mic button prominent and ready.
 
-12. **Deepgram API key stays server-side**: The frontend never has the main `DEEPGRAM_API_KEY`. It fetches a temporary token from `GET /api/voice/deepgram-token` before each recording session. The token is short-lived (60 seconds).
+12. **Deepgram API key stays server-side**: The frontend never has the main `DEEPGRAM_API_KEY`. It fetches a temporary token from `POST /api/voice/token` before each recording session. The token is short-lived (60 seconds).
 
 13. **Token endpoint error handling**: If `DEEPGRAM_API_KEY` is not configured, the endpoint returns 503 with a clear error. If token generation fails, it returns 500. The frontend handles both by falling back to text input.
 
@@ -1119,18 +1293,24 @@ Run: `bun add @deepgram/sdk`
 
 20. **MessageInput preserved**: The original `MessageInput.tsx` file is not deleted. It is no longer imported by `SessionContainer` but remains in the codebase for potential reuse in session replay or other features.
 
+21. **No stale closures**: The `useVoiceInput` hook uses `useRef` for `state`, `transcription`, and callback values that are read inside WebSocket event handlers (`dgSocket.onclose`, `dgSocket.onmessage`). Refs are kept in sync with state via `useEffect`. This prevents stale closure bugs where socket handlers would read values captured at callback creation time.
+
+22. **Route pattern compliance**: The voice route module exports a factory function `voiceRoutes()` (not a bare `Hono` instance), matching the pattern used by `recallSetsRoutes()`, `sessionsRoutes()`, and `dashboardRoutes()`. The route is re-exported from `src/api/routes/index.ts`.
+
+23. **SDK install location**: `@deepgram/sdk` is installed in the root `package.json` (via `bun add @deepgram/sdk@^3.0.0` from project root), not in `web/package.json`. The frontend uses the browser's native `WebSocket` API to connect to Deepgram.
+
 ---
 
 ## Implementation Warnings
 
-> **WARNING: Deepgram `createProjectKey()` requires a valid project ID**
-> The original code passed `''` (empty string) as the project ID to `deepgram.manage.createProjectKey()`. This will fail. You must first retrieve the project ID via `deepgram.manage.getProjects()` or use a newer SDK method that infers the project from the API key. The code above has been corrected.
-
-> **WARNING: Stale closure bugs in `useVoiceInput` hook**
-> The `startRecording` callback closes over `state` and `transcription`. Inside `dgSocket.onclose`, it reads `state` and `transcription` — but these are stale by the time the socket closes (React state closures capture the value at callback creation time). Use refs (`stateRef`, `transcriptionRef`) for values read inside async callbacks, and only use state for rendering.
-
-> **WARNING: Correction mode disconnect**
-> In section 7's `handleMicTap`, when `voiceState === 'review'` and the user taps mic for correction mode, `startRecording()` is called again. But the new recording's `onFinalTranscription` callback (set in the hook options) is the same callback that sets `reviewText` — it will REPLACE the review text with the correction instruction instead of processing it. The correction flow needs a separate code path: detect that we're in correction mode, and when the second recording finishes, call `onProcessCorrection(reviewText, newTranscription)` instead of `onProcessTranscription()`.
+> **WARNING: Deepgram `createProjectKey()` API shape may vary by SDK version**
+> The `result.key` field name depends on the `@deepgram/sdk` version. After installing `@deepgram/sdk@^3.0.0`, verify the return type by inspecting the SDK's TypeScript definitions. If the field is named `api_key` or something else, update the token endpoint accordingly. The code above assumes `result.key` which is correct for SDK v3.x.
 
 > **WARNING: Route registration is in `src/api/routes/index.ts`**
-> Routes are registered via `createApiRouter()` in `src/api/routes/index.ts`, not directly in `src/api/server.ts`. This has been corrected above and in the Relevant Files table.
+> Routes are registered via `createApiRouter()` in `src/api/routes/index.ts`, not directly in `src/api/server.ts`. The route module exports a factory function `voiceRoutes()` and is mounted as `router.route('/voice', voiceRoutes())`.
+
+> **WARNING: Dedicated AnthropicClient for correction processing**
+> The `processCorrection()` function in `correction-processor.ts` creates its own `AnthropicClient` instance. This is intentional per CROSS-TASK-ISSUES item 1: the session's `AnthropicClient` carries a system prompt (set via `setSystemPrompt()`) that would interfere with the simple text correction task. The dedicated instance uses no system prompt and specifies `model: 'claude-haiku-4-5-20251001'` for fast, cheap corrections.
+
+> **WARNING: Config pattern — no empty string fallback**
+> The `deepgram.apiKey` config uses `process.env.DEEPGRAM_API_KEY` with no `|| ''` fallback. This matches the existing pattern for `anthropic.apiKey` in `loadFromEnvironment()`. An empty string would pass the `if (!apiKey)` check in the token endpoint, making it look like a configured key and producing a confusing Deepgram API error instead of the clear 503.

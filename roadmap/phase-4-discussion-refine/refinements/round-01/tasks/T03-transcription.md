@@ -20,10 +20,20 @@ This task does NOT add voice input (that is T10). It builds the processing layer
 
 ### 1. Pipeline Architecture (CREATE: `src/core/transcription/pipeline.ts`)
 
+> **IMPORTANT: Create the directory `src/core/transcription/` if it doesn't exist.** This directory is new — nothing in the codebase references it yet.
+
 The pipeline is the single entry point for all transcription processing. It accepts raw text and returns a structured result containing both the display-ready text and the LLM-ready text (these may differ when LaTeX delimiters are present).
 
+> **CRITICAL: Create a new `AnthropicClient` instance for the transcription pipeline. Do NOT reuse the session's client — `AnthropicClient` stores `systemPrompt` as private instance state and sharing clients will corrupt prompts.** There is NO per-call system prompt override in `LLMConfig` (it only has `model`, `maxTokens`, `temperature`). The ONLY valid approach is a dedicated client instance.
+
 ```typescript
-import type { AnthropicClient } from '../../llm/client';
+import { AnthropicClient } from '../../llm/client';
+
+/**
+ * The exact model ID for Claude Haiku 4.5, used for all pipeline LLM calls.
+ * Haiku is chosen for speed and low cost — this runs on every voice message.
+ */
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 
 /**
  * Configuration for the transcription pipeline, initialized once per session.
@@ -67,9 +77,11 @@ interface ProcessedTranscription {
  * Runs terminology correction and notation detection in a single Haiku call for efficiency.
  *
  * Usage:
- * 1. At session start: construct with extracted terminology from the recall set
- * 2. On each user message: call process() with raw text
- * 3. Use the returned displayText for UI and llmText for the LLM context
+ * 1. At session start: create a DEDICATED AnthropicClient instance for the pipeline
+ *    (do NOT share the session's client — systemPrompt is private instance state)
+ * 2. Construct with extracted terminology from the recall set
+ * 3. On each user message: call process() with raw text
+ * 4. Use the returned displayText for UI and llmText for the LLM context
  */
 class TranscriptionPipeline {
   constructor(
@@ -137,8 +149,9 @@ If no corrections were made, the corrections array should be empty.
 
 Raw transcription: "${rawText}"`;
 
-    // Use Haiku for speed and cost — this runs on every voice message
-    const response = await this.llmClient.complete(prompt);
+    // Use Haiku for speed and cost — this runs on every voice message.
+    // Pass the Haiku model explicitly via LLMConfig to ensure it's not overridden.
+    const response = await this.llmClient.complete(prompt, { model: HAIKU_MODEL });
     return this.parseResponse(response.text, rawText);
   }
 
@@ -153,7 +166,8 @@ Return ONLY a JSON object: {"correctedText": "the text here", "corrections": []}
 
 Text: "${rawText}"`;
 
-    const response = await this.llmClient.complete(prompt);
+    // Use Haiku for speed and cost
+    const response = await this.llmClient.complete(prompt, { model: HAIKU_MODEL });
     return this.parseResponse(response.text, rawText);
   }
 
@@ -198,6 +212,7 @@ Text: "${rawText}"`;
 
 export {
   TranscriptionPipeline,
+  HAIKU_MODEL,
   type TranscriptionPipelineConfig,
   type ProcessedTranscription,
 };
@@ -208,10 +223,12 @@ export {
 Extracts domain-specific terms from a recall set's points at session start. The result is cached for the entire session duration — extract once, reuse for every message.
 
 ```typescript
-import type { AnthropicClient } from '../../llm/client';
+import { AnthropicClient } from '../../llm/client';
 import type { RecallSet } from '../models/recall-set';   // Actual location of RecallSet type
 import type { RecallPoint } from '../models/recall-point'; // Actual location of RecallPoint type
 // NOTE: RecallSet and RecallPoint live in src/core/models/, NOT in src/core/session/types.ts
+
+import { HAIKU_MODEL } from './pipeline';
 
 /**
  * Extracts domain-specific terminology from a recall set's recall points.
@@ -223,19 +240,24 @@ import type { RecallPoint } from '../models/recall-point'; // Actual location of
  * The result is a flat string array of terms. Cache this per session —
  * call once at session start and reuse for every TranscriptionPipeline.process() call.
  *
- * @param recallSet - The recall set with its populated recallPoints
- * @param llmClient - AnthropicClient instance configured for Haiku
+ * NOTE: RecallSet does NOT have an embedded `recallPoints` array. Points are stored
+ * in a separate table with a `recallSetId` FK. The caller must fetch points separately
+ * and pass them as the second argument via RecallPointRepository.findByRecallSetId().
+ *
+ * NOTE: RecallPoint.context is a required field (type: string, NOT optional).
+ *
+ * @param recallSet - The recall set (only name is used)
+ * @param recallPoints - Array of recall points fetched separately from the recall point table
+ * @param llmClient - A DEDICATED AnthropicClient instance (NOT the session's client)
  * @returns Array of domain-specific terms
  */
-// NOTE: RecallSet does NOT have an embedded `recallPoints` array. Points are stored
-// in a separate table with a `recallSetId` FK. The caller must fetch points separately
-// and pass them as the second argument.
 async function extractTerminology(
   recallSet: { name: string },
-  recallPoints: Array<{ content: string; context?: string }>,
+  recallPoints: Array<{ content: string; context: string }>,
   llmClient: AnthropicClient
 ): Promise<string[]> {
-  // Combine all recall point content and context into a single text block
+  // Combine all recall point content and context into a single text block.
+  // RecallPoint.context is required (not optional), so it is always present.
   const pointTexts = recallPoints
     .map((p, i) => {
       const parts = [`${i + 1}. ${p.content}`];
@@ -263,7 +285,8 @@ Material:
 ${pointTexts}`;
 
   try {
-    const response = await llmClient.complete(prompt);
+    // Use Haiku for speed and cost
+    const response = await llmClient.complete(prompt, { model: HAIKU_MODEL });
 
     // Strip markdown code fences if present
     const cleaned = response.text
@@ -296,6 +319,7 @@ A focused module for the terminology correction step. In the combined pipeline, 
 
 ```typescript
 import type { AnthropicClient } from '../../llm/client';
+import { HAIKU_MODEL } from './pipeline';
 
 /**
  * Corrects mistranscribed domain terminology in a raw transcription.
@@ -310,7 +334,7 @@ import type { AnthropicClient } from '../../llm/client';
  *
  * @param rawText - The raw transcription text
  * @param domainTerms - Array of domain-specific terms the transcription should contain
- * @param llmClient - AnthropicClient instance
+ * @param llmClient - A DEDICATED AnthropicClient instance (NOT the session's client)
  * @returns Object with corrected text and list of corrections made
  */
 async function correctTerminology(
@@ -332,7 +356,8 @@ Return ONLY a JSON object: {"correctedText": "...", "corrections": [{"original":
 Text: "${rawText}"`;
 
   try {
-    const response = await llmClient.complete(prompt);
+    // Use Haiku for speed and cost
+    const response = await llmClient.complete(prompt, { model: HAIKU_MODEL });
     const cleaned = response.text
       .replace(/^```(?:json)?\n?/m, '')
       .replace(/\n?```$/m, '')
@@ -358,6 +383,7 @@ A focused module for the notation detection and conversion step. Like the termin
 
 ```typescript
 import type { AnthropicClient } from '../../llm/client';
+import { HAIKU_MODEL } from './pipeline';
 
 /**
  * Detects and converts natural-language math, code, and formulas into proper notation.
@@ -374,7 +400,7 @@ import type { AnthropicClient } from '../../llm/client';
  * If no notation is detected in the input, returns the text unchanged.
  *
  * @param text - The text to check for natural-language notation
- * @param llmClient - AnthropicClient instance
+ * @param llmClient - A DEDICATED AnthropicClient instance (NOT the session's client)
  * @returns Object with converted text and whether any notation was found
  */
 async function convertNotation(
@@ -392,7 +418,8 @@ Return ONLY a JSON object: {"convertedText": "...", "hasNotation": true/false}
 Text: "${text}"`;
 
   try {
-    const response = await llmClient.complete(prompt);
+    // Use Haiku for speed and cost
+    const response = await llmClient.complete(prompt, { model: HAIKU_MODEL });
     const cleaned = response.text
       .replace(/^```(?:json)?\n?/m, '')
       .replace(/\n?```$/m, '')
@@ -415,13 +442,15 @@ export { convertNotation };
 ### 5. Barrel Export (CREATE: `src/core/transcription/index.ts`)
 
 ```typescript
-export { TranscriptionPipeline, type TranscriptionPipelineConfig, type ProcessedTranscription } from './pipeline';
+export { TranscriptionPipeline, HAIKU_MODEL, type TranscriptionPipelineConfig, type ProcessedTranscription } from './pipeline';
 export { extractTerminology } from './terminology-extractor';
 export { correctTerminology } from './terminology-corrector';
 export { convertNotation } from './notation-converter';
 ```
 
 ### 6. Frontend: FormattedText Component (CREATE: `web/src/components/shared/FormattedText.tsx`)
+
+> **IMPORTANT: Create the directory `web/src/components/shared/` if it doesn't exist.** This directory is new — nothing in the codebase references it yet.
 
 A React component that renders text containing mixed content: plain text, inline LaTeX ($...$), block LaTeX ($$...$$), inline code (`...`), and code blocks (```...```). Uses the `katex` package for LaTeX rendering.
 
@@ -524,6 +553,9 @@ function renderLatex(latex: string, displayMode: boolean): string {
  * - ```...``` renders as a code block with monospace styling and background
  * - Everything else renders as plain text with preserved whitespace
  *
+ * NOTE: The root element is a <div> (not a <span>) because block LaTeX ($$...$$)
+ * renders as a <div>, and nesting <div> inside <span> is invalid HTML.
+ *
  * Usage:
  * ```tsx
  * <FormattedText content="The formula is $a^2 + b^2 = c^2$ and the code is `x + 1`" />
@@ -534,7 +566,7 @@ export function FormattedText({ content, className = '' }: FormattedTextProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
   return (
-    <span className={`leading-relaxed ${className}`}>
+    <div className={`leading-relaxed ${className}`}>
       {segments.map((segment, index) => {
         switch (segment.type) {
           case 'text':
@@ -586,7 +618,7 @@ export function FormattedText({ content, className = '' }: FormattedTextProps) {
             return null;
         }
       })}
-    </span>
+    </div>
   );
 }
 
@@ -639,16 +671,30 @@ import { FormattedText } from '../shared/FormattedText';
 
 ### 9. Install KaTeX Dependency
 
-Run: `bun add katex`
-Run: `bun add -d @types/katex` (if types are separate; check if katex ships its own types)
+Run from the `web/` directory (KaTeX is a frontend rendering library — it belongs in `web/package.json`, NOT the root `package.json`):
+
+```bash
+cd web && bun add katex
+```
+
+> **NOTE: Do NOT install `@types/katex`.** Modern katex (v0.16+) ships its own TypeScript declarations. A separate `@types/katex` package is unnecessary and may cause type conflicts.
 
 ### 10. Pipeline Initialization at Session Start
 
 When a session starts (in `SessionEngine.startSession()` or wherever the session is initialized), the transcription pipeline should be constructed:
 
-1. Call `extractTerminology(recallSet, haiku LLM client)` to get the term list
-2. Construct `new TranscriptionPipeline(llmClient, { recallSetTerminology: terms, enableNotationDetection: true })`
-3. Store the pipeline instance for the session's lifetime
+1. Create a **dedicated** `AnthropicClient` instance for the pipeline — do NOT reuse the session's client. The session client has a Socratic tutor system prompt that would corrupt transcription calls. Example:
+   ```typescript
+   // Create a dedicated client for the transcription pipeline.
+   // Do NOT share with the session's client — AnthropicClient stores
+   // systemPrompt as private instance state. Use getSystemPrompt() / setSystemPrompt()
+   // to inspect or modify it (systemPrompt is private, not directly accessible).
+   const transcriptionClient = new AnthropicClient();
+   transcriptionClient.setSystemPrompt('You are a transcription processing assistant. Return only JSON as instructed.');
+   ```
+2. Call `extractTerminology(recallSet, recallPoints, transcriptionClient)` to get the term list. Recall points must be fetched separately via `RecallPointRepository.findByRecallSetId()` — they are NOT embedded in `RecallSet`.
+3. Construct `new TranscriptionPipeline(transcriptionClient, { recallSetTerminology: terms, enableNotationDetection: true })`
+4. Store the pipeline instance for the session's lifetime
 
 This initialization step is the integration point for T10 (voice input) — when voice input lands, it will call `pipeline.process(rawVoiceText)` before sending the message. For now, the pipeline is constructed but not yet wired into the message flow. The integration point is documented so T10 knows exactly where to call it.
 
@@ -671,15 +717,17 @@ For typed input before T10 exists: the pipeline can optionally run on typed text
 
 | Action | File | What Changes |
 |--------|------|-------------|
-| CREATE | `src/core/transcription/pipeline.ts` | Main pipeline class: `TranscriptionPipeline` with `process()` method, combined Haiku call for terminology + notation |
+| CREATE | `src/core/transcription/` (directory) | Create this directory — it does not exist yet |
+| CREATE | `src/core/transcription/pipeline.ts` | Main pipeline class: `TranscriptionPipeline` with `process()` method, combined Haiku call for terminology + notation. Defines `HAIKU_MODEL` constant. |
 | CREATE | `src/core/transcription/terminology-extractor.ts` | `extractTerminology()` function: sends recall point content to Haiku, returns domain term list |
 | CREATE | `src/core/transcription/terminology-corrector.ts` | `correctTerminology()` standalone function for terminology correction |
 | CREATE | `src/core/transcription/notation-converter.ts` | `convertNotation()` standalone function for notation detection and conversion |
 | CREATE | `src/core/transcription/index.ts` | Barrel export for all transcription module exports |
-| CREATE | `web/src/components/shared/FormattedText.tsx` | React component rendering mixed text/LaTeX/code content via KaTeX |
+| CREATE | `web/src/components/shared/` (directory) | Create this directory — it does not exist yet |
+| CREATE | `web/src/components/shared/FormattedText.tsx` | React component rendering mixed text/LaTeX/code content via KaTeX. Root element is `<div>` (not `<span>`) to allow valid nesting of block-level LaTeX. |
 | MODIFY | `web/src/components/live-session/MessageList.tsx` | Replace raw `<p>` in `MessageBubble` with `FormattedText` component; add import |
 | MODIFY | `web/src/components/live-session/StreamingMessage.tsx` | Replace raw `<p>` with `FormattedText` component; add import |
-| MODIFY | `package.json` (via `bun add katex`) | Add `katex` as a runtime dependency |
+| MODIFY | `web/package.json` (via `cd web && bun add katex`) | Add `katex` as a runtime dependency in the web package |
 
 ---
 
@@ -695,7 +743,7 @@ For typed input before T10 exists: the pipeline can optionally run on typed text
 
 5. **Typed input skips terminology**: `TranscriptionPipeline.process("A squared plus B squared", true)` (with `skipTerminologyCorrection=true`) skips terminology correction but still detects and converts notation.
 
-6. **Terminology extraction**: `extractTerminology(recallSet, llmClient)` given a recall set with biochemistry recall points returns an array containing terms like "ATP", "phosphoanhydride", "adenosine". The function handles empty recall sets by returning `[]`.
+6. **Terminology extraction**: `extractTerminology(recallSet, recallPoints, llmClient)` given a recall set with biochemistry recall points returns an array containing terms like "ATP", "phosphoanhydride", "adenosine". The function handles empty recall sets by returning `[]`.
 
 7. **Terminology extraction caching**: The extractor is called once at session start. The pipeline reuses the same terminology list for every `process()` call during the session. No re-extraction per message.
 
@@ -719,24 +767,40 @@ For typed input before T10 exists: the pipeline can optionally run on typed text
 
 17. **KaTeX failure graceful**: If KaTeX fails to render a LaTeX expression (e.g., malformed LaTeX), the component shows the raw LaTeX string in a styled error span rather than crashing the component tree.
 
-18. **Pipeline uses Haiku model**: All LLM calls in the pipeline (terminology extraction, combined processing, notation-only processing) explicitly use the Haiku model for speed and cost. Not Sonnet.
+18. **Pipeline uses Haiku model**: All LLM calls in the pipeline (terminology extraction, combined processing, notation-only processing) explicitly pass `{ model: 'claude-haiku-4-5-20251001' }` via the `LLMConfig` parameter to `complete()`. The `HAIKU_MODEL` constant is used consistently. Not Sonnet.
 
 19. **Corrections tracked**: Every correction made by the pipeline is recorded in the `corrections` array with `{original, corrected}`. This allows optional display of "Did you mean X? Changed from Y." in the UI (not required for this task, but the data must be available).
 
 20. **No regression in text-only messages**: Messages that contain no LaTeX or code render identically to the current behavior — plain text with preserved whitespace. The `FormattedText` component does not alter the appearance of plain text messages.
 
+21. **Dedicated client instance**: The transcription pipeline uses its own `AnthropicClient` instance, NOT the session's client. The pipeline client has a transcription-specific system prompt (or none), NOT the Socratic tutor prompt.
+
+22. **Valid HTML nesting**: The `FormattedText` component's root element is a `<div>` (not a `<span>`), ensuring that block-level children (`<div>` for block LaTeX, `<pre>` for code blocks) do not violate HTML nesting rules.
+
 ---
 
 ## Implementation Warnings
 
-> **CRITICAL: Shared `AnthropicClient` is stateful**
-> `AnthropicClient` stores a `systemPrompt` field that is applied to all `complete()` calls made through that instance. If the transcription pipeline shares the session's `AnthropicClient` instance, Haiku calls will carry the recall tutor's system prompt, producing incorrect behavior. **Solution:** Create a separate `AnthropicClient` instance for the pipeline, configured with no system prompt (or a minimal transcription-specific prompt). Alternatively, if the client supports per-call system prompt override, use that.
+> **CRITICAL: Shared `AnthropicClient` is stateful — create a dedicated instance**
+> `AnthropicClient` stores `systemPrompt` as a **private** instance field. It is accessible only via `setSystemPrompt()` and `getSystemPrompt()` — you CANNOT read `client.systemPrompt` directly. The `complete()` method ALWAYS sends `system: this.systemPrompt` with every call. `LLMConfig` (the second parameter to `complete()`) has ONLY `model`, `maxTokens`, `temperature` — there is **NO `system` field** and **NO per-call system prompt override**. If the transcription pipeline shares the session's `AnthropicClient` instance, Haiku calls will carry the recall tutor's system prompt, producing incorrect behavior. **Solution:** Create a new `AnthropicClient` instance for the transcription pipeline. Do NOT reuse the session's client.
 
 > **CRITICAL: Haiku model specification**
-> The pipeline says "use Haiku for speed and cost" but the `complete()` method uses whatever model the client is configured with. The `LLMConfig` type has a `model` field. Pipeline calls must pass `{ model: 'claude-haiku-4-5-20251001' }` (or the appropriate Haiku model ID constant) as the config parameter: `this.llmClient.complete(prompt, { model: HAIKU_MODEL_ID })`. The shorthand `'haiku'` is NOT a valid Anthropic model ID.
+> The correct Haiku model ID is `'claude-haiku-4-5-20251001'`. Define it as a constant: `const HAIKU_MODEL = 'claude-haiku-4-5-20251001';`. All pipeline `complete()` calls must pass `{ model: HAIKU_MODEL }` as the LLMConfig parameter. The shorthand `'haiku'` is NOT a valid Anthropic model ID. The default model on `AnthropicClient` is Sonnet, so failing to pass the model config will use Sonnet instead of Haiku.
 
 > **WARNING: `recallSet.recallPoints` does not exist**
 > The `RecallSet` model type has no embedded `recallPoints` array. Recall points are stored in a separate table with a `recallSetId` FK. The `extractTerminology()` function must accept recall points as a separate parameter, fetched by the caller via `RecallPointRepository.findByRecallSetId()`.
 
+> **WARNING: `RecallPoint.context` is required**
+> The `RecallPoint` interface defines `context: string` (required, NOT optional). The `extractTerminology()` function's `recallPoints` parameter must type `context` as `string`, not `string | undefined` or `context?: string`.
+
+> **WARNING: Directories must be created**
+> Both `src/core/transcription/` and `web/src/components/shared/` are new directories that do not exist in the codebase. The implementation must explicitly create them before writing files into them (e.g., `mkdir -p src/core/transcription` and `mkdir -p web/src/components/shared/`).
+
+> **WARNING: KaTeX install location**
+> Run `cd web && bun add katex` — the `katex` package is a frontend rendering library and belongs in `web/package.json`, NOT the root `package.json`. Do NOT install `@types/katex` — modern katex (v0.16+) ships its own TypeScript declarations.
+
+> **WARNING: FormattedText root element**
+> The `FormattedText` component must use a `<div>` (not `<span>`) as its root element. Block LaTeX (`$$...$$`) renders as a `<div>`, and nesting `<div>` inside `<span>` is invalid HTML that causes hydration errors in React and rendering issues in browsers.
+
 > **WARNING: Barrel export path**
-> The barrel export `src/core/transcription/index.ts` must update `extractTerminology` to reflect the corrected function signature (separate `recallPoints` parameter).
+> The barrel export `src/core/transcription/index.ts` must export the `HAIKU_MODEL` constant and update `extractTerminology` to reflect the corrected function signature (separate `recallPoints` parameter with `context: string`).
