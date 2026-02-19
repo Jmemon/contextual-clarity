@@ -70,7 +70,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             ${isUser ? 'text-blue-200' : 'text-clarity-400'}
           `}
         >
-          {isUser ? 'You' : 'AI Tutor'}
+          {isUser ? 'You' : 'Agent'}
         </p>
 
         {/* Message content with preserved whitespace */}
@@ -151,7 +151,7 @@ export function MessageList({
       {isThinking && !streamingContent && (
         <div className="flex justify-start">
           <div className="bg-clarity-700/50 text-clarity-100 rounded-2xl rounded-tl-sm p-4 mr-12">
-            <p className="text-xs mb-1 font-medium text-clarity-400">AI Tutor</p>
+            <p className="text-xs mb-1 font-medium text-clarity-400">Agent</p>
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 bg-clarity-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-2 h-2 bg-clarity-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />

@@ -138,7 +138,7 @@ test.describe('Live Session', () => {
       // Wait for AI response
       await expect(
         messageList.locator('.bg-clarity-700\\/50').or(
-          messageList.getByText(/AI Tutor/i)
+          messageList.getByText(/Agent/i)
         )
       ).toHaveCount(2, { timeout: 30000 }); // At least 2 AI messages
     });

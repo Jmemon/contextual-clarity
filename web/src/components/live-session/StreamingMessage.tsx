@@ -44,7 +44,7 @@ export function StreamingMessage({ content, className = '', ...props }: Streamin
     >
       <div className="max-w-2xl bg-clarity-700/50 text-clarity-100 rounded-2xl rounded-tl-sm p-4 mr-12">
         {/* Role label */}
-        <p className="text-xs mb-1 font-medium text-clarity-400">AI Tutor</p>
+        <p className="text-xs mb-1 font-medium text-clarity-400">Agent</p>
 
         {/* Streaming content with blinking cursor */}
         <p className="leading-relaxed whitespace-pre-wrap">

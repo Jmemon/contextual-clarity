@@ -3,10 +3,10 @@
  *
  * Full-screen study session interface for active learning with real-time
  * WebSocket communication. This page does NOT use the MainLayout - it's
- * designed for distraction-free, focused study with the AI tutor.
+ * designed for distraction-free, focused study with the Agent.
  *
  * Features:
- * - Real-time conversation with AI tutor via WebSocket
+ * - Real-time conversation with Agent via WebSocket
  * - Streaming responses that show as they arrive
  * - Progress tracking through recall points
  * - "I've got it" button to trigger evaluation
@@ -258,7 +258,7 @@ function StartSessionScreen() {
       {/* Footer */}
       <footer className="px-6 py-3 bg-clarity-900/50 text-center">
         <p className="text-clarity-500 text-sm">
-          Sessions use WebSocket for real-time communication with the AI tutor
+          Sessions use WebSocket for real-time communication with the Agent
         </p>
       </footer>
     </div>
