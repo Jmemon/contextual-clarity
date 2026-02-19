@@ -410,7 +410,7 @@ describe('Session Flow E2E', () => {
 
     // First point should be evaluated, advancing to second
     expect(result1.pointAdvanced).toBe(true);
-    expect(result1.currentPointIndex).toBe(1);
+    expect(result1.recalledCount).toBe(1);
 
     // Process second point
     await engine.processUserMessage('Internal motivation is about autonomy, mastery, and purpose.');
@@ -418,7 +418,7 @@ describe('Session Flow E2E', () => {
 
     // Session should be completed
     expect(finalResult.completed).toBe(true);
-    expect(finalResult.currentPointIndex).toBe(1);
+    expect(finalResult.recalledCount).toBe(2);
     expect(finalResult.totalPoints).toBe(2);
 
     // Verify session status in database
@@ -627,6 +627,7 @@ describe('Session Flow E2E', () => {
     expect(eventTypes).toContain('assistant_message');
     expect(eventTypes).toContain('user_message');
     expect(eventTypes).toContain('point_evaluated');
+    expect(eventTypes).toContain('point_recalled');
     expect(eventTypes).toContain('point_completed');
   });
 
@@ -643,9 +644,9 @@ describe('Session Flow E2E', () => {
     expect(state).not.toBeNull();
     expect(state!.session).not.toBeNull();
     expect(state!.recallSet.id).toBe(testRecallSet.id);
-    expect(state!.currentPointIndex).toBe(0);
+    expect(state!.recalledCount).toBe(0);
     expect(state!.totalPoints).toBe(2);
-    expect(state!.currentPoint.id).toBe(testRecallPoints[0].id);
+    expect(state!.currentProbePoint!.id).toBe(testRecallPoints[0].id);
     expect(state!.messageCount).toBeGreaterThan(0);
   });
 

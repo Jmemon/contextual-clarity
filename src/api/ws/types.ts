@@ -184,14 +184,28 @@ export interface EvaluationResultPayload {
  */
 export interface PointTransitionPayload {
   type: 'point_transition';
-  /** ID of the recall point that was just completed */
+  /** ID of the recall point that was just recalled */
   fromPointId: string;
-  /** ID of the next recall point to discuss */
+  /** ID of the next recall point the tutor will probe (empty string if all recalled) */
   toPointId: string;
-  /** Number of recall points remaining after this transition */
+  /** Number of recall points remaining (still pending) */
   pointsRemaining: number;
-  /** Current point index (0-based) */
-  currentPointIndex: number;
+  /** Number of points recalled so far */
+  recalledCount: number;
+}
+
+/**
+ * Sent when a specific recall point has been marked as recalled.
+ * Contains progress information about the session.
+ */
+export interface PointRecalledPayload {
+  type: 'point_recalled';
+  /** ID of the recall point that was recalled */
+  pointId: string;
+  /** Number of points recalled so far */
+  recalledCount: number;
+  /** Total number of recall points in the session */
+  totalPoints: number;
 }
 
 /**
@@ -260,6 +274,7 @@ export type ServerMessage =
   | AssistantCompletePayload
   | EvaluationResultPayload
   | PointTransitionPayload
+  | PointRecalledPayload
   | SessionCompletePayload
   | ErrorPayload
   | PongPayload;

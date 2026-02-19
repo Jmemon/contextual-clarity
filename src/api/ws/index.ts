@@ -97,6 +97,7 @@ export {
   type AssistantCompletePayload,
   type EvaluationResultPayload,
   type PointTransitionPayload,
+  type PointRecalledPayload,
   type SessionCompletePayload,
   type ErrorPayload,
   type PongPayload,

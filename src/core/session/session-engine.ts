@@ -69,6 +69,7 @@ import {
   type SessionEngineConfig,
   type ProcessMessageResult,
   type SessionEvent,
+  type SessionState,
   DEFAULT_SESSION_CONFIG,
   EVALUATION_TRIGGER_PHRASES,
 } from './types';
@@ -174,8 +175,13 @@ export class SessionEngine {
   /** Recall points targeted for review in this session */
   private targetPoints: RecallPoint[] = [];
 
-  /** Index of the current recall point being discussed (0-based) */
-  private currentPointIndex: number = 0;
+  // Tracks whether each recall point has been recalled during this session.
+  // Keyed by recall point ID. Values: 'pending' = not yet recalled, 'recalled' = demonstrated by user.
+  private pointChecklist: Map<string, 'pending' | 'recalled'> = new Map();
+
+  // Index into targetPoints[] for the next point the tutor should probe.
+  // This is a suggestion, not a constraint — the evaluator (T06) can mark any point as recalled at any time.
+  private currentProbeIndex: number = 0;
 
   /** Messages in the current session, loaded from DB and kept in sync */
   private messages: SessionMessage[] = [];
@@ -351,7 +357,10 @@ export class SessionEngine {
     this.currentSession = session;
     this.currentRecallSet = recallSet;
     this.targetPoints = duePoints;
-    this.currentPointIndex = 0;
+    this.pointChecklist = new Map(
+      this.targetPoints.map(p => [p.id, 'pending'])
+    );
+    this.currentProbeIndex = 0;
     this.messages = [];
     this.currentPointMessageCount = 0;
     this.currentPointStartIndex = 0;
@@ -413,10 +422,11 @@ export class SessionEngine {
     this.targetPoints = points;
     this.messages = existingMessages;
 
-    // Determine current point index by analyzing message history
-    // For simplicity, we start from the beginning if resuming
-    // A more sophisticated implementation could track progress in the session
-    this.currentPointIndex = 0;
+    // TODO (T08): When resuming a paused session, populate recalled state from session.recalledPointIds
+    this.pointChecklist = new Map(
+      this.targetPoints.map(p => [p.id, 'pending'])
+    );
+    this.currentProbeIndex = 0;
     this.currentPointMessageCount = existingMessages.length;
     this.currentPointStartIndex = 0;
 
@@ -466,10 +476,11 @@ export class SessionEngine {
   async getOpeningMessage(): Promise<string> {
     this.validateActiveSession();
 
-    // Emit point started event
+    // Emit point started event for the first probe point
+    const firstProbePoint = this.getNextProbePoint();
     this.emitEvent('point_started', {
-      pointIndex: this.currentPointIndex,
-      pointId: this.targetPoints[this.currentPointIndex].id,
+      pointIndex: this.currentProbeIndex,
+      pointId: firstProbePoint?.id ?? '',
       totalPoints: this.targetPoints.length,
     });
 
@@ -518,7 +529,7 @@ export class SessionEngine {
    * console.log('Tutor:', result.response);
    *
    * if (result.pointAdvanced) {
-   *   console.log(`Now on point ${result.currentPointIndex + 1} of ${result.totalPoints}`);
+   *   console.log(`Recalled ${result.recalledCount} of ${result.totalPoints}`);
    * }
    *
    * if (result.completed) {
@@ -574,8 +585,9 @@ export class SessionEngine {
       response,
       completed: false,
       pointAdvanced: false,
-      currentPointIndex: this.currentPointIndex,
+      recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
+      pointsRecalledThisTurn: [],
     };
   }
 
@@ -630,16 +642,9 @@ export class SessionEngine {
   /**
    * Gets the current session state for UI display.
    *
-   * @returns Object with current session details, or null if no session
+   * @returns SessionState object with checklist-based progress data, or null if no session
    */
-  getSessionState(): {
-    session: Session;
-    recallSet: RecallSet;
-    currentPointIndex: number;
-    totalPoints: number;
-    currentPoint: RecallPoint;
-    messageCount: number;
-  } | null {
+  getSessionState(): SessionState | null {
     if (!this.currentSession || !this.currentRecallSet) {
       return null;
     }
@@ -647,10 +652,16 @@ export class SessionEngine {
     return {
       session: this.currentSession,
       recallSet: this.currentRecallSet,
-      currentPointIndex: this.currentPointIndex,
+      // New checklist fields — replace currentPointIndex
+      pointChecklist: Object.fromEntries(this.pointChecklist),
+      currentProbeIndex: this.currentProbeIndex,
+      currentProbePoint: this.getNextProbePoint(),
       totalPoints: this.targetPoints.length,
-      currentPoint: this.targetPoints[this.currentPointIndex],
+      recalledCount: this.getRecalledCount(),
+      uncheckedPoints: this.getUncheckedPoints(),
+      // Keep existing fields
       messageCount: this.messages.length,
+      isComplete: this.allPointsRecalled(),
     };
   }
 
@@ -687,9 +698,11 @@ export class SessionEngine {
     // Evaluate the current recall
     const evaluation = await this.evaluateCurrentPoint();
 
+    // Get the current probe point for the evaluation event
+    const probePoint = this.getNextProbePoint();
     // Emit evaluation event
     this.emitEvent('point_evaluated', {
-      pointId: this.targetPoints[this.currentPointIndex].id,
+      pointId: probePoint?.id ?? '',
       success: evaluation.success,
       confidence: evaluation.confidence,
       reasoning: evaluation.reasoning,
@@ -710,7 +723,7 @@ export class SessionEngine {
    * @returns The evaluation result with success, confidence, and reasoning
    */
   private async evaluateCurrentPoint(): Promise<RecallEvaluation> {
-    const currentPoint = this.targetPoints[this.currentPointIndex];
+    const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
 
     // === Phase 2: Use enhanced evaluation when metrics are enabled ===
     // Enhanced evaluation provides concept-level analysis and rating suggestions
@@ -750,12 +763,10 @@ export class SessionEngine {
 
   /**
    * Advances to the next recall point or completes the session.
-   *
-   * This method:
-   * 1. Determines the FSRS rating from the evaluation
-   * 2. Updates the recall point's scheduling state
-   * 3. Records the recall attempt in history
-   * 4. Either advances to next point or completes session
+   * @deprecated TODO (T06): Remove this method. Responsibilities split into:
+   * - FSRS update + recall history -> recordRecallOutcome()
+   * - Index advancement -> advanceProbeIndex()
+   * - Session completion check -> allPointsRecalled()
    *
    * @param evaluation - The evaluation result from the current point
    * @returns Result with response and session status
@@ -763,25 +774,17 @@ export class SessionEngine {
   private async advanceToNextPoint(
     evaluation: RecallEvaluation
   ): Promise<ProcessMessageResult> {
-    const currentPoint = this.targetPoints[this.currentPointIndex];
+    const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
 
-    // Map evaluation to FSRS rating
-    const rating = this.evaluationToRating(evaluation);
+    // Record recall outcome (FSRS update + recall history persistence)
+    await this.recordRecallOutcome(currentPoint.id, evaluation);
 
-    // Calculate new FSRS state
-    const newState = this.scheduler.schedule(currentPoint.fsrsState, rating);
-
-    // Update the recall point's FSRS state in the database
-    await this.recallPointRepo.updateFSRSState(currentPoint.id, newState);
-
-    // Record the recall attempt in history
-    await this.recallPointRepo.addRecallAttempt(currentPoint.id, {
-      timestamp: new Date(),
-      success: evaluation.success,
-      latencyMs: 0, // We don't track latency in conversational recall
-    });
+    // Mark the point as recalled in the checklist
+    this.markPointRecalled(currentPoint.id);
 
     // Emit point completed event
+    const rating = this.evaluationToRating(evaluation);
+    const newState = this.scheduler.schedule(currentPoint.fsrsState, rating);
     this.emitEvent('point_completed', {
       pointId: currentPoint.id,
       rating,
@@ -789,12 +792,10 @@ export class SessionEngine {
       success: evaluation.success,
     });
 
-    // Check if there are more points to review
-    const hasMorePoints = this.currentPointIndex < this.targetPoints.length - 1;
+    // Check if there are more unchecked points
+    const hasMorePoints = !this.allPointsRecalled();
 
     if (hasMorePoints) {
-      // Advance to the next point
-      this.currentPointIndex++;
       this.currentPointMessageCount = 0;
 
       // === Phase 2: Track the starting message index for the next recall point ===
@@ -810,10 +811,11 @@ export class SessionEngine {
         true
       );
 
-      // Emit point started event for the new point
+      // Emit point started event for the new probe point
+      const nextProbe = this.getNextProbePoint();
       this.emitEvent('point_started', {
-        pointIndex: this.currentPointIndex,
-        pointId: this.targetPoints[this.currentPointIndex].id,
+        pointIndex: this.currentProbeIndex,
+        pointId: nextProbe?.id ?? '',
         totalPoints: this.targetPoints.length,
       });
 
@@ -821,11 +823,12 @@ export class SessionEngine {
         response: transitionResponse,
         completed: false,
         pointAdvanced: true,
-        currentPointIndex: this.currentPointIndex,
+        recalledCount: this.getRecalledCount(),
         totalPoints: this.targetPoints.length,
+        pointsRecalledThisTurn: [currentPoint.id],
       };
     } else {
-      // Session complete - all points reviewed
+      // Session complete - all points recalled
       await this.completeSession();
 
       // Generate completion message
@@ -835,10 +838,129 @@ export class SessionEngine {
         response: completionResponse,
         completed: true,
         pointAdvanced: true,
-        currentPointIndex: this.currentPointIndex,
+        recalledCount: this.getRecalledCount(),
         totalPoints: this.targetPoints.length,
+        pointsRecalledThisTurn: [currentPoint.id],
       };
     }
+  }
+
+  // ============================================================================
+  // Checklist Helper Methods
+  // ============================================================================
+
+  /**
+   * Returns all recall points that have NOT been recalled yet, in their original order.
+   * Used by the evaluator (T06) to know which points to evaluate against.
+   */
+  getUncheckedPoints(): RecallPoint[] {
+    return this.targetPoints.filter(p => this.pointChecklist.get(p.id) === 'pending');
+  }
+
+  /**
+   * Returns the next point the tutor should probe, starting from currentProbeIndex.
+   * Skips already-recalled points. Wraps around if needed.
+   * Returns null if all points are recalled.
+   */
+  getNextProbePoint(): RecallPoint | null {
+    if (this.allPointsRecalled()) return null;
+
+    const total = this.targetPoints.length;
+    for (let offset = 0; offset < total; offset++) {
+      const idx = (this.currentProbeIndex + offset) % total;
+      const point = this.targetPoints[idx];
+      if (this.pointChecklist.get(point.id) === 'pending') {
+        return point;
+      }
+    }
+    return null; // Should not reach here if allPointsRecalled() is false
+  }
+
+  /**
+   * Marks a recall point as recalled. Idempotent — if the point is already recalled, this is a no-op.
+   * Also advances currentProbeIndex past this point if it was the current probe target.
+   * Emits a point_recalled event with progress data.
+   */
+  markPointRecalled(pointId: string): void {
+    if (this.pointChecklist.get(pointId) !== 'pending') return; // already recalled or unknown ID
+
+    this.pointChecklist.set(pointId, 'recalled');
+
+    this.emitEvent('point_recalled', {
+      pointId,
+      recalledCount: this.getRecalledCount(),
+      totalPoints: this.targetPoints.length,
+    });
+
+    // Advance probe index if this was the current probe target
+    const currentProbePoint = this.targetPoints[this.currentProbeIndex];
+    if (currentProbePoint && currentProbePoint.id === pointId) {
+      this.advanceProbeIndex();
+    }
+  }
+
+  /**
+   * Returns true if every point in the checklist has been recalled.
+   */
+  allPointsRecalled(): boolean {
+    for (const status of this.pointChecklist.values()) {
+      if (status === 'pending') return false;
+    }
+    return true;
+  }
+
+  /**
+   * Returns the count of points that have been recalled so far.
+   */
+  getRecalledCount(): number {
+    let count = 0;
+    for (const status of this.pointChecklist.values()) {
+      if (status === 'recalled') count++;
+    }
+    return count;
+  }
+
+  /**
+   * Advances currentProbeIndex to the next unchecked point.
+   * Called internally after marking a point as recalled.
+   */
+  private advanceProbeIndex(): void {
+    const total = this.targetPoints.length;
+    for (let offset = 1; offset <= total; offset++) {
+      const idx = (this.currentProbeIndex + offset) % total;
+      if (this.pointChecklist.get(this.targetPoints[idx].id) === 'pending') {
+        this.currentProbeIndex = idx;
+        return;
+      }
+    }
+    // All recalled — probe index doesn't matter anymore, but set to length as sentinel
+    this.currentProbeIndex = total;
+  }
+
+  /**
+   * Records a recall outcome for a specific point: maps evaluation result to FSRS rating,
+   * runs the FSRS scheduler, persists the updated FSRS state, and records the recall attempt
+   * in the point's recall history.
+   * Extracted from the old advanceToNextPoint() so it can be called for any point at any time.
+   */
+  private async recordRecallOutcome(
+    pointId: string,
+    evaluation: RecallEvaluation // { success: boolean; confidence: number; reasoning: string }
+  ): Promise<void> {
+    const rating = this.evaluationToRating(evaluation);
+    const point = this.targetPoints.find(p => p.id === pointId);
+    if (!point) return;
+
+    // Update FSRS scheduling state
+    const schedulingResult = this.scheduler.schedule(point.fsrsState, rating);
+    await this.recallPointRepo.updateFSRSState(pointId, schedulingResult);
+
+    // Persist recall attempt in history (mirrors old advanceToNextPoint behavior)
+    await this.recallPointRepo.addRecallAttempt(pointId, {
+      timestamp: new Date(),
+      success: evaluation.success,
+      latencyMs: 0, // We don't track latency in conversational recall
+    });
   }
 
   /**
@@ -1029,7 +1151,8 @@ export class SessionEngine {
     const prompt = buildSocraticTutorPrompt({
       recallSet: this.currentRecallSet!,
       targetPoints: this.targetPoints,
-      currentPointIndex: this.currentPointIndex,
+      uncheckedPoints: this.getUncheckedPoints(),
+      currentProbePoint: this.getNextProbePoint(),
     });
 
     this.llmClient.setSystemPrompt(prompt);
@@ -1130,7 +1253,8 @@ export class SessionEngine {
     this.currentSession = null;
     this.currentRecallSet = null;
     this.targetPoints = [];
-    this.currentPointIndex = 0;
+    this.pointChecklist = new Map();
+    this.currentProbeIndex = 0;
     this.messages = [];
     this.currentPointMessageCount = 0;
     this.llmClient.setSystemPrompt(undefined);
@@ -1164,7 +1288,7 @@ export class SessionEngine {
       return;
     }
 
-    const currentPoint = this.targetPoints[this.currentPointIndex];
+    const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
     const messageIndex = this.messages.length - 1;
 
     // Detect if the conversation has entered a new rabbithole
@@ -1224,7 +1348,7 @@ export class SessionEngine {
       return;
     }
 
-    const currentPoint = this.targetPoints[this.currentPointIndex];
+    const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
     const messageIndex = this.messages.length - 1;
 
     // Detect if any active rabbitholes have concluded

@@ -41,15 +41,21 @@ export interface SocraticTutorPromptParams {
 
   /**
    * All recall points targeted in this session. Used to understand the
-   * full scope of material and prepare for smooth transitions.
+   * full scope of material and identify already-recalled points.
    */
   targetPoints: RecallPoint[];
 
   /**
-   * Zero-based index of the current recall point being discussed.
-   * Used to identify the current focus and upcoming points.
+   * Recall points that have NOT been recalled yet, in their original order.
+   * Used to show the tutor which points still need to be probed.
    */
-  currentPointIndex: number;
+  uncheckedPoints: RecallPoint[];
+
+  /**
+   * The next recall point the tutor should probe, or null if all points are recalled.
+   * This is the primary focus for the tutor's questions.
+   */
+  currentProbePoint: RecallPoint | null;
 }
 
 /**
@@ -70,13 +76,14 @@ export interface SocraticTutorPromptParams {
  * const prompt = buildSocraticTutorPrompt({
  *   recallSet: historySet,
  *   targetPoints: [point1, point2, point3],
- *   currentPointIndex: 0,
+ *   uncheckedPoints: [point1, point2, point3],
+ *   currentProbePoint: point1,
  * });
  * client.setSystemPrompt(prompt);
  * ```
  */
 export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): string {
-  const { recallSet, targetPoints, currentPointIndex } = params;
+  const { recallSet, targetPoints, uncheckedPoints, currentProbePoint } = params;
 
   // Handle edge case: empty target points array
   // In this case, we still generate a valid prompt but with limited guidance
@@ -84,12 +91,9 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
     return buildEmptySessionPrompt(recallSet);
   }
 
-  // Clamp index to valid range to prevent out-of-bounds access
-  const safeIndex = Math.max(0, Math.min(currentPointIndex, targetPoints.length - 1));
-  const currentPoint = targetPoints[safeIndex];
-
-  // Gather upcoming points for context (helps with natural transitions)
-  const upcomingPoints = targetPoints.slice(safeIndex + 1);
+  // Identify already-recalled points (in targetPoints but not in uncheckedPoints)
+  const uncheckedIds = new Set(uncheckedPoints.map(p => p.id));
+  const recalledPoints = targetPoints.filter(p => !uncheckedIds.has(p.id));
 
   // Build the complete prompt by combining layers
   const promptSections: string[] = [
@@ -99,11 +103,11 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
     // Section 2: Socratic method guidelines
     buildSocraticMethodSection(),
 
-    // Section 3: Current recall point focus
-    buildCurrentPointSection(currentPoint),
+    // Section 3: Current focus point and unchecked points (checklist-aware)
+    buildCurrentPointSection(currentProbePoint, uncheckedPoints),
 
-    // Section 4: Upcoming points overview (if any)
-    buildUpcomingPointsSection(upcomingPoints),
+    // Section 4: Already recalled points for context
+    buildRecalledPointsSection(recalledPoints),
 
     // Section 5: Important guidelines and constraints
     buildGuidelinesSection(),
@@ -168,20 +172,25 @@ Core principles:
 }
 
 /**
- * Section 3: Current recall point focus
+ * Section 3: Current focus point and unchecked points (checklist-aware)
  *
- * This section provides the AI with the specific content and context
- * of the current recall point. The AI uses this to craft appropriate
- * questions but must not share this information directly.
+ * Shows the current probe point and all other unchecked points. The AI
+ * probes in order but accepts out-of-order recall if the user demonstrates
+ * knowledge of any unchecked point.
  */
-function buildCurrentPointSection(currentPoint: RecallPoint): string {
+function buildCurrentPointSection(currentProbePoint: RecallPoint | null, uncheckedPoints: RecallPoint[]): string {
+  // If all points are recalled, indicate completion
+  if (!currentProbePoint) {
+    return '## Current Focus Point\n\nAll points have been recalled.';
+  }
+
   // Escape any content that might look like prompt injection
-  const safeContent = escapePromptContent(currentPoint.content);
-  const safeContext = escapePromptContent(currentPoint.context);
+  const safeContent = escapePromptContent(currentProbePoint.content);
+  const safeContext = escapePromptContent(currentProbePoint.context);
 
-  return `## Current Recall Point
+  let section = `## Current Focus Point
 
-The learner should recall the following information (DO NOT share this directly):
+Probe this point next. Ask the user to recall this concept (DO NOT share this directly):
 
 <recall_target>
 ${safeContent}
@@ -193,42 +202,47 @@ ${safeContext}
 </supporting_context>` : ''}
 
 Your goal is to guide the learner to articulate this information in their own words through your questions.`;
+
+  // Show other unchecked points (excluding the current probe point)
+  const otherUnchecked = uncheckedPoints.filter(p => p.id !== currentProbePoint.id);
+  if (otherUnchecked.length > 0) {
+    const pointsList = otherUnchecked
+      .map((point, index) => `${index + 1}. ${escapePromptContent(point.content.substring(0, 100))}${point.content.length > 100 ? '...' : ''}`)
+      .join('\n');
+
+    section += `\n\n## Other Unchecked Points
+
+These points have not been recalled yet. If the user demonstrates knowledge of any of these out of order, accept it. Probe them in the order listed if the user doesn't bring them up naturally:
+${pointsList}`;
+  }
+
+  section += `\n\n## Instruction
+
+Probe points in the order listed, but if the user demonstrates recall of ANY unchecked point (even out of order), accept it and move to the next unchecked point. Do not fight the user's natural flow.`;
+
+  return section;
 }
 
 /**
- * Section 4: Upcoming points overview
+ * Section 4: Already recalled points
  *
- * This section informs the AI about subsequent recall points in the session.
- * This allows for natural transitions and helps the AI understand the
- * broader learning goals.
+ * Shows the AI which points have already been recalled. The tutor
+ * should not re-probe these but can reference them if relevant.
  */
-function buildUpcomingPointsSection(upcomingPoints: RecallPoint[]): string {
-  // Don't include this section if there are no upcoming points
-  if (upcomingPoints.length === 0) {
-    return '## Session Progress\n\nThis is the final recall point in the session. After successfully covering this point, conclude the session positively.';
+function buildRecalledPointsSection(recalledPoints: RecallPoint[]): string {
+  // Don't include this section if no points have been recalled yet
+  if (recalledPoints.length === 0) {
+    return '';
   }
 
-  // Limit preview to avoid overwhelming the prompt
-  const previewLimit = 3;
-  const pointsToShow = upcomingPoints.slice(0, previewLimit);
-  const remainingCount = upcomingPoints.length - previewLimit;
-
-  const upcomingList = pointsToShow
+  const recalledList = recalledPoints
     .map((point, index) => `${index + 1}. ${escapePromptContent(point.content.substring(0, 100))}${point.content.length > 100 ? '...' : ''}`)
     .join('\n');
 
-  let section = `## Upcoming Recall Points
+  return `## Already Recalled Points
 
-After completing the current point, you'll guide discussion on these topics:
-${upcomingList}`;
-
-  if (remainingCount > 0) {
-    section += `\n(Plus ${remainingCount} more point${remainingCount === 1 ? '' : 's'})`;
-  }
-
-  section += '\n\nTransition naturally between points when the learner demonstrates adequate recall of the current topic.';
-
-  return section;
+The user has already demonstrated recall of these. Do not re-probe them, but you can reference them if relevant:
+${recalledList}`;
 }
 
 /**

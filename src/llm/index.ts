@@ -23,7 +23,8 @@
  * const tutorPrompt = buildSocraticTutorPrompt({
  *   recallSet,
  *   targetPoints,
- *   currentPointIndex: 0,
+ *   uncheckedPoints: targetPoints,
+ *   currentProbePoint: targetPoints[0],
  * });
  * client.setSystemPrompt(tutorPrompt);
  *

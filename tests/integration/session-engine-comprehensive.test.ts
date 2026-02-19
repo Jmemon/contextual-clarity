@@ -970,8 +970,8 @@ describe('SessionEngine Comprehensive Tests', () => {
         // depending on when the error occurred)
         const stateAfterError = engine.getSessionState();
         expect(stateAfterError).not.toBeNull();
-        // Point index should not have changed due to the error
-        expect(stateAfterError!.currentPointIndex).toBe(stateBeforeError!.currentPointIndex);
+        // Recalled count should not have changed due to the error
+        expect(stateAfterError!.recalledCount).toBe(stateBeforeError!.recalledCount);
       });
 
       it('should allow conversation to continue after LLM recovery', async () => {
@@ -1220,7 +1220,7 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         const state = engine.getSessionState();
         expect(state!.totalPoints).toBe(1);
-        expect(state!.currentPointIndex).toBe(0);
+        expect(state!.recalledCount).toBe(0);
 
         // Complete the single point
         const result = await engine.processUserMessage('I understand!');
@@ -1639,7 +1639,7 @@ describe('SessionEngine Comprehensive Tests', () => {
         await engine.startSession(recallSet);
 
         const state = engine.getSessionState();
-        expect(state!.currentPoint.content).toBe('');
+        expect(state!.currentProbePoint!.content).toBe('');
 
         // Should be able to proceed through the session
         await engine.getOpeningMessage();
@@ -1670,7 +1670,7 @@ describe('SessionEngine Comprehensive Tests', () => {
         await engine.startSession(recallSet);
 
         const state = engine.getSessionState();
-        expect(state!.currentPoint.content.length).toBe(10000);
+        expect(state!.currentProbePoint!.content.length).toBe(10000);
 
         await engine.getOpeningMessage();
         const result = await engine.processUserMessage('I understand!');
@@ -1717,12 +1717,12 @@ describe('SessionEngine Comprehensive Tests', () => {
         // First message - no evaluation yet
         const result1 = await engine.processUserMessage('First message');
         expect(result1.pointAdvanced).toBe(false);
-        expect(result1.currentPointIndex).toBe(0);
+        expect(result1.recalledCount).toBe(0);
 
         // Second message - triggers auto-evaluation, should advance due to high confidence
         const result2 = await engine.processUserMessage('Second message');
         expect(result2.pointAdvanced).toBe(true);
-        expect(result2.currentPointIndex).toBe(1);
+        expect(result2.recalledCount).toBe(1);
       });
 
       it('should not auto-evaluate before reaching threshold', async () => {
@@ -2011,7 +2011,7 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         // Send a message without trigger phrase
         await engine.processUserMessage('Some random message');
-        expect(engine.getSessionState()!.currentPointIndex).toBe(0);
+        expect(engine.getSessionState()!.recalledCount).toBe(0);
 
         // Force evaluation
         const result = await engine.triggerEvaluation();
@@ -2935,6 +2935,7 @@ describe('SessionEngine Comprehensive Tests', () => {
       expect(eventTypes).toContain('assistant_message');
       expect(eventTypes).toContain('user_message');
       expect(eventTypes).toContain('point_evaluated');
+      expect(eventTypes).toContain('point_recalled');
       expect(eventTypes).toContain('point_completed');
       expect(eventTypes).toContain('session_completed');
     });
@@ -2985,6 +2986,13 @@ describe('SessionEngine Comprehensive Tests', () => {
       const assistantMessage = events.find(e => e.type === 'assistant_message');
       expect(assistantMessage).toBeDefined();
       expect((assistantMessage!.data as any).content).toBeDefined();
+
+      // Check point_recalled event
+      const pointRecalled = events.find(e => e.type === 'point_recalled');
+      expect(pointRecalled).toBeDefined();
+      expect((pointRecalled!.data as any).pointId).toBe(recallPoints[0].id);
+      expect((pointRecalled!.data as any).recalledCount).toBe(1);
+      expect((pointRecalled!.data as any).totalPoints).toBe(1);
 
       // Check timestamps
       for (const event of events) {

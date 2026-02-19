@@ -66,7 +66,8 @@ export type ServerMessage =
   | { type: 'assistant_chunk'; content: string }
   | { type: 'assistant_complete'; fullContent: string }
   | { type: 'evaluation_result'; recallPointId: string; outcome: string; feedback: string }
-  | { type: 'point_transition'; nextPointIndex: number; totalPoints: number }
+  | { type: 'point_transition'; recalledCount: number; totalPoints: number; fromPointId: string; toPointId: string; pointsRemaining: number }
+  | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
@@ -145,8 +146,8 @@ export interface UseSessionWebSocketReturn {
   messages: ChatMessage[];
   /** Content of message currently being streamed (empty if none) */
   streamingContent: string;
-  /** Current point index (1-based) */
-  currentPointIndex: number;
+  /** Number of recall points recalled so far */
+  recalledCount: number;
   /** Total number of points in the session */
   totalPoints: number;
   /** Whether waiting for assistant response */
@@ -212,8 +213,8 @@ export function useSessionWebSocket(
   const [streamingContent, setStreamingContent] = useState('');
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
 
-  // Session progress state
-  const [currentPointIndex, setCurrentPointIndex] = useState(0);
+  // Session progress state — tracks recalled count instead of linear index
+  const [recalledCount, setRecalledCount] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
 
   // Refs for WebSocket instance and reconnection tracking
@@ -335,9 +336,15 @@ export function useSessionWebSocket(
           break;
 
         case 'point_transition':
-          setCurrentPointIndex(message.nextPointIndex);
+          setRecalledCount(message.recalledCount);
           setTotalPoints(message.totalPoints);
-          callbacksRef.current.onPointTransition?.(message.nextPointIndex, message.totalPoints);
+          callbacksRef.current.onPointTransition?.(message.recalledCount, message.totalPoints);
+          break;
+
+        case 'point_recalled':
+          // Update local state with recalled progress from server
+          setRecalledCount(message.recalledCount);
+          setTotalPoints(message.totalPoints);
           break;
 
         case 'session_complete':
@@ -552,7 +559,7 @@ export function useSessionWebSocket(
     lastError,
     messages,
     streamingContent,
-    currentPointIndex,
+    recalledCount,
     totalPoints,
     isWaitingForResponse,
     sendUserMessage,

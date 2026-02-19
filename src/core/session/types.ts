@@ -17,6 +17,7 @@
 import type { AnthropicClient } from '../../llm/client';
 import type { FSRSScheduler } from '../fsrs/scheduler';
 import type { RecallEvaluator } from '../scoring/recall-evaluator';
+import type { RecallPoint, RecallSet, Session } from '../models';
 import type {
   RecallPointRepository,
   SessionRepository,
@@ -51,6 +52,7 @@ import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
 export type SessionEventType =
   | 'session_started'      // Session initialized with target recall points
   | 'point_started'        // Started discussing a new recall point
+  | 'point_recalled'       // A specific recall point was marked as recalled
   | 'user_message'         // User sent a message
   | 'assistant_message'    // AI tutor responded
   | 'point_evaluated'      // Recall evaluation completed for current point
@@ -266,11 +268,41 @@ export interface ProcessMessageResult {
   /** Whether the current point was just evaluated and advanced */
   pointAdvanced: boolean;
 
-  /** The current recall point index (0-based) */
-  currentPointIndex: number;
+  /** Number of recall points that have been recalled so far */
+  recalledCount: number;
 
   /** Total number of recall points in the session */
   totalPoints: number;
+
+  /** List of point IDs recalled in this turn (will be populated by T06) */
+  pointsRecalledThisTurn: string[];
+}
+
+/**
+ * Represents the current state of a session for UI display and external consumers.
+ * Returned by SessionEngine.getSessionState().
+ */
+export interface SessionState {
+  /** The currently active session */
+  session: Session;
+  /** The RecallSet being studied */
+  recallSet: RecallSet;
+  /** Checklist of all points and their recall status, keyed by point ID */
+  pointChecklist: Record<string, 'pending' | 'recalled'>;
+  /** Index into targetPoints[] for the next point the tutor should probe */
+  currentProbeIndex: number;
+  /** The next point the tutor should probe, or null if all recalled */
+  currentProbePoint: RecallPoint | null;
+  /** Total number of recall points in this session */
+  totalPoints: number;
+  /** Number of points recalled so far */
+  recalledCount: number;
+  /** Points that have NOT been recalled yet, in original order */
+  uncheckedPoints: RecallPoint[];
+  /** Number of messages in the session so far */
+  messageCount: number;
+  /** Whether all points have been recalled */
+  isComplete: boolean;
 }
 
 /**

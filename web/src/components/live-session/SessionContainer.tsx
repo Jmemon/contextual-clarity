@@ -266,7 +266,7 @@ export function SessionContainer({
     lastError,
     messages,
     streamingContent,
-    currentPointIndex,
+    recalledCount,
     totalPoints,
     isWaitingForResponse,
     sendUserMessage,
@@ -342,7 +342,7 @@ export function SessionContainer({
 
           {/* Session progress */}
           <SessionProgress
-            currentPoint={currentPointIndex}
+            currentPoint={recalledCount}
             totalPoints={totalPoints}
             showBar={false}
             className="min-w-[100px]"
@@ -362,7 +362,7 @@ export function SessionContainer({
       {totalPoints > 0 && (
         <div className="px-6 py-2 bg-clarity-900/30">
           <SessionProgress
-            currentPoint={currentPointIndex}
+            currentPoint={recalledCount}
             totalPoints={totalPoints}
             showBar={true}
           />

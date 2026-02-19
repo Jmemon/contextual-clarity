@@ -113,7 +113,7 @@ export async function runSessionCommand(
   printSessionBanner(recallSet.name, sessionState.totalPoints);
 
   // Step 3: Get and display the opening message from the tutor
-  console.log(formatProgress(sessionState.currentPointIndex, sessionState.totalPoints));
+  console.log(formatProgress(sessionState.recalledCount, sessionState.totalPoints));
   const openingMessage = await engine.getOpeningMessage();
   printBlankLine();
   console.log(formatTutorMessage(openingMessage));
@@ -212,7 +212,7 @@ async function runInteractiveLoop(engine: SessionEngine): Promise<void> {
 
       // Show progress if we advanced to a new point
       if (result.pointAdvanced) {
-        console.log(formatProgress(result.currentPointIndex, result.totalPoints));
+        console.log(formatProgress(result.recalledCount, result.totalPoints));
         printBlankLine();
       }
 
@@ -309,7 +309,7 @@ async function handleSlashCommand(
         }
 
         if (result.pointAdvanced) {
-          console.log(formatProgress(result.currentPointIndex, result.totalPoints));
+          console.log(formatProgress(result.recalledCount, result.totalPoints));
           printBlankLine();
         }
       } catch (error) {
@@ -333,8 +333,8 @@ async function handleSlashCommand(
         printBlankLine();
         console.log(bold('Session Status:'));
         console.log(`  Recall Set: ${state.recallSet.name}`);
-        console.log(`  Progress: ${formatProgress(state.currentPointIndex, state.totalPoints)}`);
-        console.log(`  Current Point: ${dim(state.currentPoint.content.substring(0, 80))}...`);
+        console.log(`  Progress: ${formatProgress(state.recalledCount, state.totalPoints)}`);
+        console.log(`  Current Point: ${dim(state.currentProbePoint ? state.currentProbePoint.content.substring(0, 80) + '...' : 'All points recalled')}`);
         console.log(`  Messages: ${state.messageCount}`);
         printBlankLine();
       } else {

@@ -55,6 +55,7 @@ export type {
   SessionEngineConfig,
   SessionEngineDependencies,
   ProcessMessageResult,
+  SessionState,
 } from './types';
 
 // Constants

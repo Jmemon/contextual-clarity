@@ -288,7 +288,7 @@ export class WebSocketSessionHandler {
         type: 'session_started',
         sessionId: session.id,
         openingMessage,
-        currentPointIndex: sessionState?.currentPointIndex ?? 0,
+        currentPointIndex: sessionState?.recalledCount ?? 0,
         totalPoints: sessionState?.totalPoints ?? session.targetRecallPointIds.length,
       });
 
@@ -399,14 +399,27 @@ export class WebSocketSessionHandler {
       // Stream the real response back to the client
       await this.streamResponse(ws, result.response);
 
+      // Send point_recalled messages for any points recalled this turn
+      if (result.pointsRecalledThisTurn.length > 0) {
+        for (const pointId of result.pointsRecalledThisTurn) {
+          this.send(ws, {
+            type: 'point_recalled',
+            pointId,
+            recalledCount: result.recalledCount,
+            totalPoints: result.totalPoints,
+          });
+        }
+      }
+
       // If point was advanced, send point transition message
       if (result.pointAdvanced && !result.completed) {
+        const state = data.engine.getSessionState();
         this.send(ws, {
           type: 'point_transition',
-          fromPointId: data.session.targetRecallPointIds[result.currentPointIndex - 1] || '',
-          toPointId: data.session.targetRecallPointIds[result.currentPointIndex] || '',
-          pointsRemaining: result.totalPoints - result.currentPointIndex,
-          currentPointIndex: result.currentPointIndex,
+          fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
+          toPointId: state?.currentProbePoint?.id || '',
+          pointsRemaining: result.totalPoints - result.recalledCount,
+          recalledCount: result.recalledCount,
         });
       }
 
@@ -461,14 +474,27 @@ export class WebSocketSessionHandler {
       // Stream the evaluation response (feedback from the tutor)
       await this.streamResponse(ws, result.response);
 
+      // Send point_recalled messages for any points recalled this turn
+      if (result.pointsRecalledThisTurn.length > 0) {
+        for (const pointId of result.pointsRecalledThisTurn) {
+          this.send(ws, {
+            type: 'point_recalled',
+            pointId,
+            recalledCount: result.recalledCount,
+            totalPoints: result.totalPoints,
+          });
+        }
+      }
+
       // If point was advanced, send point transition message
       if (result.pointAdvanced && !result.completed) {
+        const state = data.engine.getSessionState();
         this.send(ws, {
           type: 'point_transition',
-          fromPointId: data.session.targetRecallPointIds[result.currentPointIndex - 1] || '',
-          toPointId: data.session.targetRecallPointIds[result.currentPointIndex] || '',
-          pointsRemaining: result.totalPoints - result.currentPointIndex,
-          currentPointIndex: result.currentPointIndex,
+          fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
+          toPointId: state?.currentProbePoint?.id || '',
+          pointsRemaining: result.totalPoints - result.recalledCount,
+          recalledCount: result.recalledCount,
         });
       }
 
@@ -526,7 +552,7 @@ export class WebSocketSessionHandler {
 
       const summary: SessionSummary = {
         sessionId: data.sessionId,
-        totalPointsReviewed: sessionState?.currentPointIndex ?? 0,
+        totalPointsReviewed: sessionState?.recalledCount ?? 0,
         successfulRecalls: 0, // Abandoned sessions don't count as successful
         recallRate: 0,
         durationMs: Date.now() - data.lastMessageTime,
