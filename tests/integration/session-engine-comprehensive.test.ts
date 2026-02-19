@@ -3260,4 +3260,241 @@ describe('SessionEngine Comprehensive Tests', () => {
       expect(userMessages.length).toBe(51);
     });
   });
+
+  // =========================================================================
+  // 11. Checklist Helper Methods (T01 SC14)
+  // =========================================================================
+
+  describe('Checklist Helper Methods', () => {
+    /**
+     * Helper to create an engine, start a session, and return the engine
+     * along with the recall points for checklist testing.
+     */
+    async function createStartedEngine(pointCount = 3) {
+      const sessionRepo = new SessionRepository(db);
+      const recallPointRepo = new RecallPointRepository(db);
+      const messageRepo = new SessionMessageRepository(db);
+
+      const { recallSet, recallPoints } = await seedTestData(
+        recallSetRepo, recallPointRepo, scheduler, { pointCount }
+      );
+
+      const engine = new SessionEngine({
+        scheduler,
+        evaluator: mockEvaluator as unknown as RecallEvaluator,
+        llmClient: mockLlmClient as any,
+        recallSetRepo,
+        recallPointRepo,
+        sessionRepo,
+        messageRepo,
+      });
+
+      await engine.startSession(recallSet);
+      return { engine, recallPoints };
+    }
+
+    describe('getUncheckedPoints()', () => {
+      it('should return all points as unchecked initially', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        const unchecked = engine.getUncheckedPoints();
+        expect(unchecked.length).toBe(3);
+        // Verify original order preserved
+        expect(unchecked[0].id).toBe(recallPoints[0].id);
+        expect(unchecked[1].id).toBe(recallPoints[1].id);
+        expect(unchecked[2].id).toBe(recallPoints[2].id);
+      });
+
+      it('should exclude recalled points', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[1].id);
+
+        const unchecked = engine.getUncheckedPoints();
+        expect(unchecked.length).toBe(2);
+        expect(unchecked[0].id).toBe(recallPoints[0].id);
+        expect(unchecked[1].id).toBe(recallPoints[2].id);
+      });
+
+      it('should return empty array when all points recalled', async () => {
+        const { engine, recallPoints } = await createStartedEngine(2);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[1].id);
+
+        expect(engine.getUncheckedPoints().length).toBe(0);
+      });
+    });
+
+    describe('getNextProbePoint()', () => {
+      it('should return first point initially', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        const next = engine.getNextProbePoint();
+        expect(next).not.toBeNull();
+        expect(next!.id).toBe(recallPoints[0].id);
+      });
+
+      it('should skip recalled points', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        // Mark first point as recalled — should advance probe to second
+        engine.markPointRecalled(recallPoints[0].id);
+
+        const next = engine.getNextProbePoint();
+        expect(next).not.toBeNull();
+        expect(next!.id).toBe(recallPoints[1].id);
+      });
+
+      it('should return null when all points recalled', async () => {
+        const { engine, recallPoints } = await createStartedEngine(2);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[1].id);
+
+        expect(engine.getNextProbePoint()).toBeNull();
+      });
+
+      it('should wrap around when current probe is at end', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        // Mark first two points as recalled — probe should be at index 2
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[1].id);
+
+        const next = engine.getNextProbePoint();
+        expect(next).not.toBeNull();
+        expect(next!.id).toBe(recallPoints[2].id);
+      });
+    });
+
+    describe('markPointRecalled()', () => {
+      it('should mark a pending point as recalled', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+
+        expect(engine.getRecalledCount()).toBe(1);
+        const unchecked = engine.getUncheckedPoints();
+        expect(unchecked.find(p => p.id === recallPoints[0].id)).toBeUndefined();
+      });
+
+      it('should be idempotent — double recall is a no-op', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[0].id); // second call is no-op
+
+        expect(engine.getRecalledCount()).toBe(1);
+      });
+
+      it('should be a no-op for unknown point IDs', async () => {
+        const { engine } = await createStartedEngine(3);
+
+        engine.markPointRecalled('nonexistent-id');
+
+        expect(engine.getRecalledCount()).toBe(0);
+      });
+
+      it('should emit point_recalled event', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        const events: SessionEvent[] = [];
+        engine.setEventListener((event: SessionEvent) => {
+          events.push(event);
+        });
+
+        engine.markPointRecalled(recallPoints[0].id);
+
+        const recalledEvents = events.filter(e => e.type === 'point_recalled');
+        expect(recalledEvents.length).toBe(1);
+        expect(recalledEvents[0].data.pointId).toBe(recallPoints[0].id);
+        expect(recalledEvents[0].data.recalledCount).toBe(1);
+        expect(recalledEvents[0].data.totalPoints).toBe(3);
+      });
+
+      it('should not emit event for already-recalled point', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+
+        const events: SessionEvent[] = [];
+        engine.setEventListener((event: SessionEvent) => {
+          events.push(event);
+        });
+
+        engine.markPointRecalled(recallPoints[0].id); // second call — no event
+
+        const recalledEvents = events.filter(e => e.type === 'point_recalled');
+        expect(recalledEvents.length).toBe(0);
+      });
+
+      it('should advance probe index if recalled point was current probe', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        // Current probe is point 0
+        expect(engine.getNextProbePoint()!.id).toBe(recallPoints[0].id);
+
+        // Mark point 0 as recalled — probe should advance
+        engine.markPointRecalled(recallPoints[0].id);
+
+        expect(engine.getNextProbePoint()!.id).toBe(recallPoints[1].id);
+      });
+    });
+
+    describe('allPointsRecalled()', () => {
+      it('should return false initially', async () => {
+        const { engine } = await createStartedEngine(3);
+        expect(engine.allPointsRecalled()).toBe(false);
+      });
+
+      it('should return false with partial recall', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[1].id);
+
+        expect(engine.allPointsRecalled()).toBe(false);
+      });
+
+      it('should return true when all points recalled', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[1].id);
+        engine.markPointRecalled(recallPoints[2].id);
+
+        expect(engine.allPointsRecalled()).toBe(true);
+      });
+    });
+
+    describe('getRecalledCount()', () => {
+      it('should return 0 initially', async () => {
+        const { engine } = await createStartedEngine(3);
+        expect(engine.getRecalledCount()).toBe(0);
+      });
+
+      it('should increment as points are recalled', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        expect(engine.getRecalledCount()).toBe(1);
+
+        engine.markPointRecalled(recallPoints[1].id);
+        expect(engine.getRecalledCount()).toBe(2);
+
+        engine.markPointRecalled(recallPoints[2].id);
+        expect(engine.getRecalledCount()).toBe(3);
+      });
+
+      it('should not count duplicates', async () => {
+        const { engine, recallPoints } = await createStartedEngine(3);
+
+        engine.markPointRecalled(recallPoints[0].id);
+        engine.markPointRecalled(recallPoints[0].id); // duplicate — no change
+
+        expect(engine.getRecalledCount()).toBe(1);
+      });
+    });
+  });
 });
