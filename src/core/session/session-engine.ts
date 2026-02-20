@@ -979,14 +979,15 @@ export class SessionEngine {
     evaluation: RecallEvaluation,
     hasNextPoint: boolean
   ): Promise<string> {
-    // Build appropriate feedback prompt based on evaluation and whether there's a next point
+    // Build appropriate prompt based on evaluation and whether there's a next point.
+    // T07: No praise, no congratulatory language — the UI handles positive reinforcement.
     const successPrompt = hasNextPoint
-      ? 'The learner successfully recalled the information. Provide brief positive feedback, then smoothly transition to the next topic by asking an opening question about it.'
-      : 'The learner successfully recalled the final piece of information. Provide brief positive feedback.';
+      ? 'The user recalled this point. Transition to the next topic by asking an opening question about it. Do not congratulate or praise — just move on naturally.'
+      : 'The user recalled the final point. Wrap up briefly — no congratulations, no praise.';
 
     const strugglePrompt = hasNextPoint
-      ? 'The learner struggled with recall. Provide encouraging feedback about what they did remember, briefly reinforce the key point, then transition to the next topic.'
-      : 'The learner struggled with the final recall point. Provide encouraging feedback and briefly reinforce the key information.';
+      ? 'The user struggled with this point. Briefly note the key idea they missed, then move on to the next topic with an opening question. No pity, no excessive encouragement.'
+      : 'The user struggled with the final point. Briefly note the key idea, then wrap up. No pity, no excessive encouragement.';
 
     const feedbackPrompt = evaluation.success ? successPrompt : strugglePrompt;
 
@@ -1015,8 +1016,7 @@ export class SessionEngine {
   /**
    * Generates a session completion message.
    *
-   * Celebrates the user's completion of all recall points and provides
-   * a summary of their performance.
+   * Provides a brief wrap-up when the user finishes all recall points.
    *
    * Phase 2: Now tracks token usage for metrics collection.
    *
@@ -1026,9 +1026,10 @@ export class SessionEngine {
   private async generateCompletionMessage(
     lastEvaluation: RecallEvaluation
   ): Promise<string> {
+    // T07: No warm congratulations, no "learning journey" language — matter-of-fact wrap-up only.
     const feedbackPrompt = lastEvaluation.success
-      ? `The learner has completed all recall points for this session! Provide a warm congratulatory message. Summarize that they've reviewed ${this.targetPoints.length} points. Encourage them to continue their learning journey.`
-      : `The learner has completed all recall points for this session, though they struggled with the last one. Provide encouraging feedback about completing the session. Summarize that they've reviewed ${this.targetPoints.length} points. Encourage continued practice.`;
+      ? `The user has finished all ${this.targetPoints.length} recall points. Provide a brief, matter-of-fact wrap-up. No warm congratulations, no exclamation marks, no "learning journey" language.`
+      : `The user has finished all ${this.targetPoints.length} recall points, though they struggled with the last one. Provide a brief wrap-up noting the key idea they missed. No pity, no excessive encouragement.`;
 
     const response = await this.llmClient.complete(feedbackPrompt, {
       temperature: this.config.tutorTemperature,

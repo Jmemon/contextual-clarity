@@ -5,6 +5,10 @@
  * recall-session facilitator prompt, supplementary guidelines behavior, section
  * ordering, and empty-session edge cases. All module-private functions are tested
  * indirectly through the public API.
+ *
+ * T07: Updated to reflect the tone overhaul — new Socratic approach section,
+ * new guidelines section, removed "Encourage elaboration" / "Celebrate recall",
+ * and added "I RECALL NOTHING" and "HANDLING EVALUATOR OBSERVATIONS" sections.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -157,19 +161,21 @@ describe('buildSocraticTutorPrompt', () => {
   });
 
   describe('section ordering', () => {
-    it('universal agent section appears before Socratic method section', () => {
+    it('universal agent section appears before Socratic approach section', () => {
       const prompt = buildSocraticTutorPrompt(buildDefaultParams());
       const agentIdx = prompt.indexOf('recall session facilitator');
-      const socraticIdx = prompt.indexOf('Your Socratic Approach');
+      // T07: section heading changed from "Your Socratic Approach" to "Your approach"
+      const socraticIdx = prompt.indexOf('## Your approach');
 
       expect(agentIdx).toBeGreaterThan(-1);
       expect(socraticIdx).toBeGreaterThan(-1);
       expect(agentIdx).toBeLessThan(socraticIdx);
     });
 
-    it('Socratic method section appears before current focus point', () => {
+    it('Socratic approach section appears before current focus point', () => {
       const prompt = buildSocraticTutorPrompt(buildDefaultParams());
-      const socraticIdx = prompt.indexOf('Your Socratic Approach');
+      // T07: section heading changed from "Your Socratic Approach" to "Your approach"
+      const socraticIdx = prompt.indexOf('## Your approach');
       const focusIdx = prompt.indexOf('Current Focus Point');
 
       expect(socraticIdx).toBeLessThan(focusIdx);
@@ -182,7 +188,8 @@ describe('buildSocraticTutorPrompt', () => {
         }),
       });
       const prompt = buildSocraticTutorPrompt(params);
-      const guidelinesIdx = prompt.indexOf('## Important Guidelines');
+      // T07: section heading changed from "## Important Guidelines" to "## Guidelines"
+      const guidelinesIdx = prompt.indexOf('## Guidelines');
       const supplementaryIdx = prompt.indexOf('## Supplementary guidelines');
 
       expect(guidelinesIdx).toBeGreaterThan(-1);
@@ -254,6 +261,155 @@ describe('buildSocraticTutorPrompt', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // T07: New Socratic approach section content
+  // ---------------------------------------------------------------------------
+
+  describe('T07: Socratic approach section (new content)', () => {
+    it('contains "Ask, don\'t tell"', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain("Ask, don't tell");
+    });
+
+    it('contains "Direct but warm" tone spec', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('Direct but warm');
+    });
+
+    it('contains the knowledgeable friend coffee shop reference', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('knowledgeable friend at a coffee shop');
+    });
+
+    it('contains "move on" instruction after recall', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('When a point is recalled, move on');
+    });
+
+    it('does NOT contain "Encourage elaboration"', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('Encourage elaboration');
+    });
+
+    it('does NOT contain "Celebrate recall"', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('Celebrate recall');
+    });
+
+    it('does NOT contain "encouraging feedback"', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('encouraging feedback');
+    });
+
+    it('does NOT use the word "learner" in the Socratic approach and tone sections', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      // Only check sections 2 (Socratic approach + tone) and 5 (Guidelines) —
+      // the T07-owned sections. Section 3 (buildCurrentPointSection) is T01's
+      // territory and may still contain "learner".
+      const socraticStart = prompt.indexOf('## Your approach');
+      const currentFocusStart = prompt.indexOf('## Current Focus Point');
+
+      // Extract the approach+tone section (between "## Your approach" and "## Current Focus Point")
+      const approachSection = prompt.slice(socraticStart, currentFocusStart);
+      expect(approachSection).not.toContain('learner');
+    });
+
+    it('does NOT use the word "learner" in the Guidelines section', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      // Extract the Guidelines section (between "## Guidelines" and end or "## Supplementary")
+      const guidelinesStart = prompt.indexOf('## Guidelines');
+      const supplementaryIdx = prompt.indexOf('## Supplementary guidelines');
+      const endIdx = supplementaryIdx > -1 ? supplementaryIdx : prompt.length;
+
+      const guidelinesSection = prompt.slice(guidelinesStart, endIdx);
+      expect(guidelinesSection).not.toContain('learner');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // T07: New guidelines section content
+  // ---------------------------------------------------------------------------
+
+  describe('T07: Guidelines section (new content)', () => {
+    it('contains "1-3 sentences" response length constraint', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('1-3 sentences');
+    });
+
+    it('contains "Don\'t congratulate" rule', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain("Don't congratulate");
+    });
+
+    it('contains "no exclamation marks" rule', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('exclamation marks');
+    });
+
+    it('contains "Don\'t use bullet points" rule', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain("Don't use bullet points");
+    });
+
+    it('contains the "I RECALL NOTHING" handling section', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('HANDLING "I RECALL NOTHING"');
+    });
+
+    it('contains the "HANDLING EVALUATOR OBSERVATIONS" section', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('HANDLING EVALUATOR OBSERVATIONS');
+    });
+
+    it('contains the no meta-commentary rule', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('NEVER respond with meta-commentary');
+    });
+
+    it('has at least 6 DON\'T prohibitions', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      // Count lines starting with "- Don't" in the DON'T block
+      const dontMatches = prompt.match(/- Don't/g);
+      expect(dontMatches).not.toBeNull();
+      expect(dontMatches!.length).toBeGreaterThanOrEqual(6);
+    });
+
+    it('instructs not to reference the evaluator to the user', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).toContain('Never reference the evaluator or the evaluation system to the user');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // T07: Removed content verification
+  // ---------------------------------------------------------------------------
+
+  describe('T07: Removed content no longer present', () => {
+    it('does not contain "Important Guidelines" heading (old heading)', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('## Important Guidelines');
+    });
+
+    it('does not contain "Your Socratic Approach" heading (old heading)', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('## Your Socratic Approach');
+    });
+
+    it('does not contain "Provide encouraging feedback"', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('Provide encouraging feedback');
+    });
+
+    it('does not contain "Adapt your language complexity"', () => {
+      const prompt = buildSocraticTutorPrompt(buildDefaultParams());
+      expect(prompt).not.toContain('Adapt your language complexity');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Integration test
+  // ---------------------------------------------------------------------------
+
   describe('integration: full prompt with all sections', () => {
     it('produces a valid prompt with multiple target points', () => {
       const point1 = makeRecallPoint({ id: 'rp_1', content: 'Point one content' });
@@ -273,15 +429,19 @@ describe('buildSocraticTutorPrompt', () => {
 
       // Universal agent section present
       expect(prompt).toContain('recall session facilitator');
-      // Socratic method present
-      expect(prompt).toContain('Socratic Approach');
+      // T07: New Socratic approach section present
+      expect(prompt).toContain('## Your approach');
+      expect(prompt).toContain("Ask, don't tell");
+      expect(prompt).toContain('Direct but warm');
       // Current point present
       expect(prompt).toContain('Point two content');
       // Recalled points section present (point1 was recalled)
       expect(prompt).toContain('Already Recalled Points');
       expect(prompt).toContain('Point one content');
-      // Guidelines present
-      expect(prompt).toContain('Important Guidelines');
+      // T07: New guidelines section present
+      expect(prompt).toContain('## Guidelines');
+      expect(prompt).toContain('1-3 sentences');
+      expect(prompt).toContain('HANDLING EVALUATOR OBSERVATIONS');
       // Supplementary guidelines present
       expect(prompt).toContain('Use simple language for this set.');
       expect(prompt).toContain('<supplementary_guidelines>');
