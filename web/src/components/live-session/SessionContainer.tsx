@@ -16,9 +16,9 @@
 
 import { useState, useCallback, type HTMLAttributes } from 'react';
 import { Link } from 'react-router-dom';
-import { useSessionWebSocket, type SessionCompleteSummary, type EvaluationResult } from '@/hooks/use-session-websocket';
+import { useSessionWebSocket, type SessionCompleteSummary } from '@/hooks/use-session-websocket';
 import { MessageList } from './MessageList';
-import { MessageInput } from './MessageInput';
+import { VoiceInput } from './VoiceInput';
 import { SessionProgress } from './SessionProgress';
 import { SessionControls } from './SessionControls';
 
@@ -29,7 +29,7 @@ import { SessionControls } from './SessionControls';
 /**
  * Session lifecycle states.
  */
-export type SessionState = 'connecting' | 'active' | 'evaluating' | 'completed';
+export type SessionState = 'connecting' | 'active' | 'completed';
 
 export interface SessionContainerProps extends HTMLAttributes<HTMLDivElement> {
   /** Session ID to connect to */
@@ -230,7 +230,6 @@ export function SessionContainer({
   // Session state management
   const [sessionState, setSessionState] = useState<SessionState>('connecting');
   const [sessionSummary, setSessionSummary] = useState<SessionCompleteSummary | null>(null);
-  const [lastEvaluation, setLastEvaluation] = useState<EvaluationResult | null>(null);
 
   // Timer for session duration display
   const { formattedTime } = useSessionTimer();
@@ -238,11 +237,6 @@ export function SessionContainer({
   // Callbacks for WebSocket events
   const handleSessionStarted = useCallback(() => {
     setSessionState('active');
-  }, []);
-
-  const handleEvaluationResult = useCallback((result: EvaluationResult) => {
-    setLastEvaluation(result);
-    setSessionState('active'); // Return to active after evaluation
   }, []);
 
   const handlePointTransition = useCallback(() => {
@@ -270,30 +264,19 @@ export function SessionContainer({
     totalPoints,
     isWaitingForResponse,
     sendUserMessage,
-    triggerEvaluation,
     endSession,
     connect,
   } = useSessionWebSocket(sessionId, {
     onSessionStarted: handleSessionStarted,
-    onEvaluationResult: handleEvaluationResult,
     onPointTransition: handlePointTransition,
     onSessionComplete: handleSessionComplete,
     onError: handleError,
   });
 
-  /**
-   * Handle triggering evaluation.
-   */
-  const handleTriggerEvaluation = useCallback(() => {
-    setSessionState('evaluating');
-    triggerEvaluation();
-  }, [triggerEvaluation]);
-
   // Determine if controls should be disabled
   const controlsDisabled =
     isWaitingForResponse ||
     connectionState !== 'connected' ||
-    sessionState === 'evaluating' ||
     sessionState === 'completed';
 
   // Show connection error screen if disconnected with error
@@ -371,24 +354,6 @@ export function SessionContainer({
 
       {/* Main content area */}
       <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
-        {/* Evaluation feedback banner */}
-        {lastEvaluation && (
-          <div
-            className={`
-              mb-4 p-4 rounded-xl
-              ${lastEvaluation.outcome === 'success'
-                ? 'bg-green-500/20 border border-green-500/30'
-                : 'bg-amber-500/20 border border-amber-500/30'
-              }
-            `}
-          >
-            <p className={`font-medium ${lastEvaluation.outcome === 'success' ? 'text-green-400' : 'text-amber-400'}`}>
-              {lastEvaluation.outcome === 'success' ? 'Great recall!' : 'Keep practicing'}
-            </p>
-            <p className="text-clarity-200 text-sm mt-1">{lastEvaluation.feedback}</p>
-          </div>
-        )}
-
         {/* Message list */}
         <MessageList
           messages={messages}
@@ -399,26 +364,20 @@ export function SessionContainer({
 
         {/* Input and controls */}
         <div className="border-t border-clarity-700 pt-6 mt-4">
-          {/* Session controls */}
+          {/* Session controls — "I've got it!" removed (T06: continuous evaluation) */}
           <SessionControls
-            onTriggerEvaluation={handleTriggerEvaluation}
             onEndSession={endSession}
             disabled={controlsDisabled}
-            isEvaluating={sessionState === 'evaluating'}
             isSessionComplete={sessionState === 'completed'}
             className="mb-4"
           />
 
-          {/* Message input */}
-          <MessageInput
+          {/* Voice-first input (with text fallback) */}
+          <VoiceInput
             onSend={sendUserMessage}
             disabled={controlsDisabled}
             placeholder="Type your response..."
           />
-
-          <p className="text-clarity-500 text-sm text-center mt-3">
-            Press Enter to send | Click "I've got it!" when you're ready to be evaluated
-          </p>
         </div>
       </main>
     </div>

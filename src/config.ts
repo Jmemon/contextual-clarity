@@ -67,6 +67,11 @@ const configSchema = z.object({
     llmMaxRequests: z.number().int().positive().default(10),
   }),
 
+  // Deepgram API configuration (voice input)
+  deepgram: z.object({
+    apiKey: z.string().optional(),
+  }),
+
   // CORS configuration
   cors: z.object({
     allowedOrigins: z.array(z.string()).default([]),
@@ -128,6 +133,9 @@ function loadFromEnvironment(): z.input<typeof configSchema> {
       windowMs: parseIntOrUndefined(process.env.RATE_LIMIT_WINDOW_MS) ?? 60000,
       maxRequests: parseIntOrUndefined(process.env.RATE_LIMIT_MAX_REQUESTS) ?? 100,
       llmMaxRequests: parseIntOrUndefined(process.env.RATE_LIMIT_LLM_MAX_REQUESTS) ?? 10,
+    },
+    deepgram: {
+      apiKey: process.env.DEEPGRAM_API_KEY,
     },
     cors: {
       allowedOrigins: parseCommaSeparated(process.env.ALLOWED_ORIGINS),
@@ -392,6 +400,16 @@ export function getAnthropicModel(): string {
  */
 export function getAnthropicMaxTokens(): number {
   return config.anthropic.maxTokens;
+}
+
+/**
+ * Returns the Deepgram API key from configuration.
+ * Used by the voice token endpoint to create short-lived project keys.
+ *
+ * @returns The Deepgram API key or undefined if not configured
+ */
+export function getDeepgramApiKey(): string | undefined {
+  return config.deepgram.apiKey;
 }
 
 /**

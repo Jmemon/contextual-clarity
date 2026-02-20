@@ -2,3 +2,4 @@ export { TranscriptionPipeline, HAIKU_MODEL, type TranscriptionPipelineConfig, t
 export { extractTerminology } from './terminology-extractor';
 export { correctTerminology } from './terminology-corrector';
 export { convertNotation } from './notation-converter';
+export { processCorrection } from './correction-processor';

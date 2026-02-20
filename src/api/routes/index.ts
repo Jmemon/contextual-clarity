@@ -36,6 +36,7 @@ import { recallSetsRoutes } from './recall-sets';
 import { dashboardRoutes } from './dashboard';
 import { sessionsRoutes } from './sessions';
 import { resourcesRoutes } from './resources';
+import { voiceRoutes } from './voice';
 
 // Re-export individual route modules for direct access
 export { healthRoutes, healthCheckHandler } from './health';
@@ -43,6 +44,7 @@ export { recallSetsRoutes } from './recall-sets';
 export { dashboardRoutes } from './dashboard';
 export { sessionsRoutes } from './sessions';
 export { resourcesRoutes } from './resources';
+export { voiceRoutes } from './voice';
 
 // ============================================================================
 // Type Definitions
@@ -139,6 +141,7 @@ export function createApiRouter(): Hono {
         { path: '/api/dashboard', description: 'Dashboard data and analytics' },
         { path: '/api/analytics', description: 'Learning analytics and reports' },
         { path: '/api/recall-sets/:id/resources', description: 'Source resources for a recall set' },
+        { path: '/api/voice/token', description: 'Deepgram voice token endpoint' },
         { path: '/health', description: 'Health check endpoint' },
       ],
     };
@@ -165,6 +168,9 @@ export function createApiRouter(): Hono {
 
   // Mount resource routes nested under recall-sets
   router.route('/recall-sets', resourcesRoutes());
+
+  // Mount voice routes (Deepgram token endpoint for voice input)
+  router.route('/voice', voiceRoutes());
 
   // Future: router.route('/analytics', analyticsRoutes());
 

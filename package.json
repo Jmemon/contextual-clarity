@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@deepgram/sdk": "^3.0.0",
     "commander": "14.0.3",
     "drizzle-orm": "^0.38.4",
     "hono": "^4.6.18",
