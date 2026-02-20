@@ -63,13 +63,13 @@ export interface SocraticTutorPromptParams {
  * Builds the system prompt for a Socratic tutor discussion.
  *
  * The generated prompt instructs the AI to:
- * 1. Use the RecallSet's custom discussion persona
+ * 1. Adopt the universal recall-session facilitator identity (domain-agnostic)
  * 2. Guide recall through questioning (not telling)
- * 3. Focus on the current recall point
+ * 3. Focus on the current checklist-aware probe point
  * 4. Use context to inform questions without revealing it
- * 5. Transition naturally to subsequent points
+ * 5. Transition naturally to subsequent unchecked points
  *
- * @param params - The parameters containing RecallSet, target points, and current index
+ * @param params - The parameters containing RecallSet, target points, unchecked points, and current probe point
  * @returns A complete system prompt string for the LLM
  *
  * @example
@@ -104,6 +104,7 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
     buildUniversalAgentSection(),
 
     // Section 2: Socratic method guidelines
+    // Note: Socratic method section's "Celebrate recall" bullet contradicts universal agent's no-praise rule. T07 rewrites this section.
     buildSocraticMethodSection(),
 
     // Section 3: Current focus point and unchecked points (checklist-aware)
