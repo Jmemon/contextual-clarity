@@ -76,12 +76,12 @@ export interface TriggerEvalPayload {
 }
 
 /**
- * Client request to end the session early.
- * The server will gracefully close the session, marking it as abandoned
- * if not all recall points were reviewed.
+ * Client request to leave the session (T08 — replaces end_session).
+ * The server pauses the session (preserving checklist state for later resumption)
+ * rather than abandoning it, so progress is never lost.
  */
-export interface EndSessionPayload {
-  type: 'end_session';
+export interface LeaveSessionPayload {
+  type: 'leave_session';
 }
 
 /**
@@ -100,7 +100,7 @@ export interface PingPayload {
 export type ClientMessage =
   | UserMessagePayload
   | TriggerEvalPayload
-  | EndSessionPayload
+  | LeaveSessionPayload
   | PingPayload;
 
 /**
@@ -109,7 +109,7 @@ export type ClientMessage =
 export const CLIENT_MESSAGE_TYPES = [
   'user_message',
   'trigger_eval',
-  'end_session',
+  'leave_session',
   'ping',
 ] as const;
 
@@ -241,6 +241,36 @@ export interface SessionSummary {
 }
 
 /**
+ * T08: Sent when all recall points have been recalled.
+ * Prompts the UI to show the completion overlay. The session has NOT been finalized yet —
+ * the user can choose to "Continue Discussion" (overlay dismissed, no WS message) or
+ * "Done" (sends leave_session, navigates to dashboard).
+ */
+export interface SessionCompleteOverlayPayload {
+  type: 'session_complete_overlay';
+  /** Number of points recalled in this session */
+  recalledCount: number;
+  /** Total points targeted in the session */
+  totalPoints: number;
+  /** Session ID for reference */
+  sessionId: string;
+}
+
+/**
+ * T08: Sent when the session has been paused (user left via the overlay or sent leave_session).
+ * The session status is now 'paused' and can be resumed later.
+ */
+export interface SessionPausedPayload {
+  type: 'session_paused';
+  /** Session ID of the paused session */
+  sessionId: string;
+  /** Number of points recalled before pausing */
+  recalledCount: number;
+  /** Total points in the session */
+  totalPoints: number;
+}
+
+/**
  * Sent when an error occurs during the session.
  * Contains an error code and message for debugging and user display.
  */
@@ -276,6 +306,8 @@ export type ServerMessage =
   | PointTransitionPayload
   | PointRecalledPayload
   | SessionCompletePayload
+  | SessionCompleteOverlayPayload
+  | SessionPausedPayload
   | ErrorPayload
   | PongPayload;
 

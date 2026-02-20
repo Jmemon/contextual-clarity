@@ -231,6 +231,7 @@ export type NewRecallPointResource = typeof recallPointResources.$inferInsert;
  * - 'in_progress': Session is currently active
  * - 'completed': Session finished normally with all points reviewed
  * - 'abandoned': Session was started but not completed
+ * - 'paused': Session was paused by the user via "Leave Session"; can be resumed
  */
 export const sessions = sqliteTable('sessions', {
   // Unique identifier for the session (UUID format recommended)
@@ -242,7 +243,8 @@ export const sessions = sqliteTable('sessions', {
     .references(() => recallSets.id),
 
   // Current status of the session
-  status: text('status', { enum: ['in_progress', 'completed', 'abandoned'] })
+  // T08: Added 'paused' status — session paused by user, preserves checklist state for resumption
+  status: text('status', { enum: ['in_progress', 'completed', 'abandoned', 'paused'] })
     .notNull()
     .default('in_progress'),
 
@@ -252,11 +254,24 @@ export const sessions = sqliteTable('sessions', {
     .$type<string[]>()
     .notNull(),
 
+  // T08: IDs of recall points that have been recalled so far in this session.
+  // Persisted on each recall so paused sessions can restore checklist state on resume.
+  recalledPointIds: text('recalled_point_ids', { mode: 'json' })
+    .$type<string[]>()
+    .notNull()
+    .default('[]'),
+
   // Timestamp when the session started (milliseconds since epoch)
   startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
 
-  // Timestamp when the session ended (null if still in progress)
+  // Timestamp when the session ended, or null if still in progress or paused.
   endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
+
+  // T08: Timestamp when the session was paused (null if never paused)
+  pausedAt: integer('paused_at', { mode: 'timestamp_ms' }),
+
+  // T08: Timestamp when the session was most recently resumed (null if never resumed)
+  resumedAt: integer('resumed_at', { mode: 'timestamp_ms' }),
 });
 
 /**

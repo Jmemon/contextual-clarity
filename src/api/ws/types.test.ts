@@ -24,7 +24,7 @@ describe('WebSocket Types', () => {
     it('should return true for valid client message types', () => {
       expect(isClientMessageType('user_message')).toBe(true);
       expect(isClientMessageType('trigger_eval')).toBe(true);
-      expect(isClientMessageType('end_session')).toBe(true);
+      expect(isClientMessageType('leave_session')).toBe(true);  // T08: renamed from end_session
       expect(isClientMessageType('ping')).toBe(true);
     });
 
@@ -59,9 +59,10 @@ describe('WebSocket Types', () => {
       expect(result.type).toBe('trigger_eval');
     });
 
-    it('should parse valid end_session', () => {
-      const result = parseClientMessage(JSON.stringify({ type: 'end_session' }));
-      expect(result.type).toBe('end_session');
+    // T08: end_session renamed to leave_session (non-destructive pause)
+    it('should parse valid leave_session', () => {
+      const result = parseClientMessage(JSON.stringify({ type: 'leave_session' }));
+      expect(result.type).toBe('leave_session');
     });
 
     it('should parse valid ping', () => {
@@ -217,7 +218,7 @@ describe('WebSocket Types', () => {
     it('should have all client message types', () => {
       expect(CLIENT_MESSAGE_TYPES).toContain('user_message');
       expect(CLIENT_MESSAGE_TYPES).toContain('trigger_eval');
-      expect(CLIENT_MESSAGE_TYPES).toContain('end_session');
+      expect(CLIENT_MESSAGE_TYPES).toContain('leave_session');  // T08: renamed from end_session
       expect(CLIENT_MESSAGE_TYPES).toContain('ping');
       expect(CLIENT_MESSAGE_TYPES.length).toBe(4);
     });

@@ -41,7 +41,7 @@ function parseSegments(content: string): Segment[] {
       segments.push({ type: 'text', value: content.slice(lastIndex, match.index) });
     }
 
-    const matched = match[1];
+    const matched = match[1]!;
 
     if (matched.startsWith('$$') && matched.endsWith('$$')) {
       // Block LaTeX: strip $$ delimiters

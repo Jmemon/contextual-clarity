@@ -219,6 +219,13 @@ export class SessionEngine {
   private currentModel: string = 'claude-3-5-sonnet-20241022';
 
   /**
+   * T08: Set to true when all points are recalled while the user is in a rabbit hole.
+   * The completion overlay is deferred until the rabbit hole exits via onRabbitHoleExit().
+   * isInRabbitHole() currently returns false (stub), so the overlay fires immediately.
+   */
+  private completionPending: boolean = false;
+
+  /**
    * Creates a new SessionEngine instance.
    *
    * @param deps - Injectable dependencies (repositories, services, etc.)
@@ -334,8 +341,9 @@ export class SessionEngine {
    * ```
    */
   async startSession(recallSet: RecallSet): Promise<Session> {
-    // Check for existing in-progress session to resume
-    const existingSession = await this.sessionRepo.findInProgress(recallSet.id);
+    // T08: Check for any active session (in_progress OR paused) to resume.
+    // Previously only found 'in_progress' sessions; now also resumes paused ones.
+    const existingSession = await this.sessionRepo.findActiveSession(recallSet.id);
     if (existingSession) {
       // Resume the existing session instead of creating a new one
       return this.resumeSession(existingSession, recallSet);
@@ -427,12 +435,32 @@ export class SessionEngine {
     this.targetPoints = points;
     this.messages = existingMessages;
 
-    // TODO (T08): When resuming a paused session, populate recalled state from session.recalledPointIds
+    // T08: Reconstruct checklist from persisted recalledPointIds for paused sessions.
+    // This restores progress without re-evaluating the conversation history.
+    const recalledSet = new Set(session.recalledPointIds ?? []);
     this.pointChecklist = new Map(
-      this.targetPoints.map(p => [p.id, 'pending'])
+      this.targetPoints.map(p => [p.id, recalledSet.has(p.id) ? 'recalled' : 'pending'])
     );
+    this.completionPending = false;
+
+    // Set currentProbeIndex to the first still-pending point
     this.currentProbeIndex = 0;
+    for (let i = 0; i < this.targetPoints.length; i++) {
+      if (this.pointChecklist.get(this.targetPoints[i].id) === 'pending') {
+        this.currentProbeIndex = i;
+        break;
+      }
+    }
     this.currentPointStartIndex = 0;
+
+    // T08: If the session was paused, transition it back to 'in_progress' on resume.
+    if (session.status === 'paused') {
+      await this.sessionRepo.update(session.id, {
+        status: 'in_progress',
+        resumedAt: new Date(),
+      });
+      this.currentSession = { ...session, status: 'in_progress', resumedAt: new Date() };
+    }
 
     // === Phase 2: Initialize metrics collection for resumed session ===
     // Note: When resuming, we start fresh with metrics collection
@@ -561,9 +589,10 @@ export class SessionEngine {
       });
     }
 
-    // If all points are recalled, handle session completion
+    // T08: If all points are recalled, emit overlay event instead of immediately completing.
+    // The session is only finalized when the user leaves via leave_session / "Done" button.
     if (this.allPointsRecalled()) {
-      return this.handleSessionCompletion(evalResult);
+      return this.handleAllPointsRecalled(evalResult);
     }
 
     // Update the LLM prompt to reflect newly recalled points (if any)
@@ -735,30 +764,121 @@ export class SessionEngine {
   }
 
   /**
-   * Handles session completion when all points have been recalled.
-   * Completes the session, generates a completion message, and returns the result.
+   * T08: Handles the moment all points have been recalled.
+   *
+   * Instead of immediately completing the session (which would prevent further discussion),
+   * this emits 'session_complete_overlay' to prompt the UI to show the completion overlay.
+   * The session is only finalized when the user clicks "Done" (which sends leave_session)
+   * or when finalizeSession() is called explicitly.
+   *
+   * Edge case: if the user is currently in a rabbit hole, set completionPending = true
+   * and defer the overlay until onRabbitHoleExit() is called.
    *
    * @param evalResult - The evaluation result from the last evaluateUncheckedPoints() call
-   * @returns ProcessMessageResult indicating session completion
+   * @returns ProcessMessageResult with a continuation response (not marked completed yet)
    */
-  private async handleSessionCompletion(evalResult: ContinuousEvalResult): Promise<ProcessMessageResult> {
-    await this.completeSession();
+  private async handleAllPointsRecalled(evalResult: ContinuousEvalResult): Promise<ProcessMessageResult> {
+    const recalledCount = this.getRecalledCount();
+    const totalPoints = this.targetPoints.length;
 
-    // Build a synthetic evaluation for the completion message
-    const lastEvaluation: RecallEvaluation = {
-      success: true,
-      confidence: 0.85,
-      reasoning: 'All points recalled via continuous evaluation.',
-    };
-    const completionResponse = await this.generateCompletionMessage(lastEvaluation);
+    if (this.isInRabbitHole()) {
+      // Defer the overlay until the rabbit hole exits
+      this.completionPending = true;
+    } else {
+      // Emit the overlay event — frontend will show completion overlay
+      this.emitEvent('session_complete_overlay', {
+        sessionId: this.currentSession!.id,
+        recalledCount,
+        totalPoints,
+      });
+    }
+
+    // Generate a brief continuation response — the user can still keep talking
+    const response = await this.generateTutorResponse(evalResult.feedback || undefined);
 
     return {
-      response: completionResponse,
-      completed: true,
-      recalledCount: this.getRecalledCount(),
-      totalPoints: this.targetPoints.length,
+      response,
+      completed: false, // Session is NOT finalized yet — user must click Done
+      recalledCount,
+      totalPoints,
       pointsRecalledThisTurn: evalResult.recalledPointIds,
     };
+  }
+
+  /**
+   * T08: Called when the user exits a rabbit hole.
+   * If completionPending is true (all points recalled while in rabbit hole),
+   * now emits the session_complete_overlay event that was deferred.
+   */
+  onRabbitHoleExit(): void {
+    if (this.completionPending && this.currentSession) {
+      this.completionPending = false;
+      this.emitEvent('session_complete_overlay', {
+        sessionId: this.currentSession.id,
+        recalledCount: this.getRecalledCount(),
+        totalPoints: this.targetPoints.length,
+      });
+    }
+  }
+
+  /**
+   * T08: Returns true if the user is currently inside a rabbit hole tangent.
+   * This is a stub — T09 will implement proper rabbit hole tracking.
+   * For now, always returns false so overlays fire immediately.
+   */
+  private isInRabbitHole(): boolean {
+    return false;
+  }
+
+  /**
+   * T08: Pauses the current session (user clicked "Leave Session").
+   *
+   * This is the non-destructive alternative to abandonSession(). It:
+   * 1. Persists the current recalledPointIds to the DB
+   * 2. Sets session status to 'paused' with pausedAt timestamp
+   * 3. Emits 'session_paused' event for the WebSocket handler to forward
+   * 4. Resets engine state so the engine is ready for a new session
+   *
+   * @throws Error if no session is active
+   */
+  async pauseSession(): Promise<void> {
+    this.validateActiveSession();
+
+    const sessionId = this.currentSession!.id;
+    const recalledCount = this.getRecalledCount();
+    const totalPoints = this.targetPoints.length;
+
+    // Persist final recalledPointIds before pausing
+    const recalledIds = this.getRecalledPointIds();
+    await this.sessionRepo.updateRecalledPointIds(sessionId, recalledIds);
+
+    // Set status to 'paused'
+    await this.sessionRepo.pause(sessionId);
+
+    // Emit paused event BEFORE resetting state (so we have the data)
+    this.emitEvent('session_paused', {
+      sessionId,
+      recalledCount,
+      totalPoints,
+    });
+
+    // Reset engine state — the session is now paused in the DB
+    this.resetState();
+  }
+
+  /**
+   * T08: Public wrapper that finalizes the session as 'completed'.
+   *
+   * This is used when the overlay logic requires session finalization from outside
+   * the engine (e.g. session-handler could call this if needed in future).
+   * Currently the session is completed automatically via completeSession().
+   *
+   * @throws Error if no session is active
+   */
+  async finalizeSession(): Promise<void> {
+    this.validateActiveSession();
+    await this.completeSession();
+    this.resetState();
   }
 
   // ============================================================================
@@ -808,6 +928,15 @@ export class SessionEngine {
       totalPoints: this.targetPoints.length,
     });
 
+    // T08: Fire-and-forget persist recalledPointIds to DB so paused sessions can resume accurately.
+    // We don't await to avoid blocking the message processing loop.
+    if (this.currentSession) {
+      const recalledIds = this.getRecalledPointIds();
+      this.sessionRepo.updateRecalledPointIds(this.currentSession.id, recalledIds).catch((err) => {
+        console.error('[SessionEngine] Failed to persist recalledPointIds:', err);
+      });
+    }
+
     // Advance probe index if this was the current probe target
     const currentProbePoint = this.targetPoints[this.currentProbeIndex];
     if (currentProbePoint && currentProbePoint.id === pointId) {
@@ -834,6 +963,16 @@ export class SessionEngine {
       if (status === 'recalled') count++;
     }
     return count;
+  }
+
+  /**
+   * Returns the IDs of all recalled points in their original target order.
+   * Used by T08 to persist checklist state to the database.
+   */
+  getRecalledPointIds(): string[] {
+    return this.targetPoints
+      .filter(p => this.pointChecklist.get(p.id) === 'recalled')
+      .map(p => p.id);
   }
 
   /**
@@ -1185,6 +1324,7 @@ export class SessionEngine {
     this.pointChecklist = new Map();
     this.currentProbeIndex = 0;
     this.messages = [];
+    this.completionPending = false; // T08: reset deferred overlay flag
     this.llmClient.setSystemPrompt(undefined);
 
     // === Phase 2: Reset metrics collection state ===

@@ -17,7 +17,7 @@
  *     messages,
  *     streamingContent,
  *     sendUserMessage,
- *     endSession,
+ *     leaveSession,
  *   } = useSessionWebSocket(sessionId, {
  *     onSessionComplete: (summary) => navigate('/sessions'),
  *   });
@@ -174,8 +174,8 @@ export interface UseSessionWebSocketReturn {
   isWaitingForResponse: boolean;
   /** Send a user message */
   sendUserMessage: (content: string) => void;
-  /** End the session early */
-  endSession: () => void;
+  /** T08: Pause the session non-destructively (replaces endSession) */
+  leaveSession: () => void;
   /** Manually connect to WebSocket */
   connect: () => void;
   /** Manually disconnect from WebSocket */
@@ -235,6 +235,8 @@ export function useSessionWebSocket(
     onEvaluationResult,
     onPointTransition,
     onSessionComplete,
+    onCompleteOverlay,
+    onSessionPaused,
     onError,
     autoConnect = true,
   } = options;
@@ -278,6 +280,8 @@ export function useSessionWebSocket(
     onEvaluationResult,
     onPointTransition,
     onSessionComplete,
+    onCompleteOverlay,
+    onSessionPaused,
     onError,
   });
 
@@ -288,9 +292,11 @@ export function useSessionWebSocket(
       onEvaluationResult,
       onPointTransition,
       onSessionComplete,
+      onCompleteOverlay,
+      onSessionPaused,
       onError,
     };
-  }, [onSessionStarted, onEvaluationResult, onPointTransition, onSessionComplete, onError]);
+  }, [onSessionStarted, onEvaluationResult, onPointTransition, onSessionComplete, onCompleteOverlay, onSessionPaused, onError]);
 
   /**
    * Clear any pending reconnection timeout.
@@ -405,6 +411,26 @@ export function useSessionWebSocket(
 
         case 'session_complete':
           callbacksRef.current.onSessionComplete?.(message.summary);
+          break;
+
+        // T08: All recall points have been marked as recalled — show the completion overlay.
+        // The session is NOT finalized yet; the user can choose to continue or leave.
+        case 'session_complete_overlay':
+          callbacksRef.current.onCompleteOverlay?.({
+            sessionId: message.sessionId,
+            recalledCount: message.recalledCount,
+            totalPoints: message.totalPoints,
+          });
+          break;
+
+        // T08: Session has been paused (user clicked "Done" on the overlay or sent leave_session).
+        // Navigate away — the session is persisted and can be resumed later.
+        case 'session_paused':
+          callbacksRef.current.onSessionPaused?.({
+            sessionId: message.sessionId,
+            recalledCount: message.recalledCount,
+            totalPoints: message.totalPoints,
+          });
           break;
 
         case 'error':
@@ -599,10 +625,12 @@ export function useSessionWebSocket(
   );
 
   /**
-   * End the session early.
+   * T08: Pause the session non-destructively (replaces endSession).
+   * Sends 'leave_session' to the server, which persists progress and sets
+   * the session status to 'paused'. The session can be resumed later.
    */
-  const endSession = useCallback(() => {
-    sendMessage({ type: 'end_session' });
+  const leaveSession = useCallback(() => {
+    sendMessage({ type: 'leave_session' });
   }, [sendMessage]);
 
   // Auto-connect on mount if enabled and sessionId is provided
@@ -631,7 +659,7 @@ export function useSessionWebSocket(
     totalPoints,
     isWaitingForResponse,
     sendUserMessage,
-    endSession,
+    leaveSession,
     connect,
     disconnect,
     // T12 single-exchange UI fields

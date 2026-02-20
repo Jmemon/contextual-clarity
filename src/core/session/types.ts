@@ -50,14 +50,16 @@ import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
  * 11. session_completed - All points reviewed
  */
 export type SessionEventType =
-  | 'session_started'      // Session initialized with target recall points
-  | 'point_started'        // Started discussing a new recall point
-  | 'point_recalled'       // A specific recall point was marked as recalled
-  | 'user_message'         // User sent a message
-  | 'assistant_message'    // AI tutor responded
-  | 'point_evaluated'      // Recall evaluation completed for current point
-  | 'point_completed'      // FSRS state updated, moving to next point
-  | 'session_completed';   // All target points reviewed
+  | 'session_started'          // Session initialized with target recall points
+  | 'point_started'            // Started discussing a new recall point
+  | 'point_recalled'           // A specific recall point was marked as recalled
+  | 'user_message'             // User sent a message
+  | 'assistant_message'        // AI tutor responded
+  | 'point_evaluated'          // Recall evaluation completed for current point
+  | 'point_completed'          // FSRS state updated, moving to next point
+  | 'session_completed'        // All target points reviewed (session finalized)
+  | 'session_complete_overlay' // T08: All points recalled — show completion overlay (before finalizing)
+  | 'session_paused';          // T08: Session paused via Leave Session
 
 /**
  * Represents an event that occurred during a session.

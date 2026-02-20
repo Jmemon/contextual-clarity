@@ -398,6 +398,14 @@ class FailableSessionRepository {
     return this.real.findAll();
   }
 
+  // T08: findActiveSession replaces findInProgress (matches in_progress OR paused)
+  async findActiveSession(recallSetId: string) {
+    if (this.failOnFindInProgress) {
+      throw new Error('Simulated database error: findActiveSession failed');
+    }
+    return this.real.findActiveSession(recallSetId);
+  }
+
   async findInProgress(recallSetId: string) {
     if (this.failOnFindInProgress) {
       throw new Error('Simulated database error: findInProgress failed');
@@ -428,6 +436,15 @@ class FailableSessionRepository {
       throw new Error('Simulated database error: abandon failed');
     }
     return this.real.abandon(id);
+  }
+
+  // T08: Pause and updateRecalledPointIds delegate to real repo
+  async pause(id: string) {
+    return this.real.pause(id);
+  }
+
+  async updateRecalledPointIds(id: string, recalledPointIds: string[]) {
+    return this.real.updateRecalledPointIds(id, recalledPointIds);
   }
 
   async delete(id: string) {
@@ -1169,8 +1186,9 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         const result = await engine.processUserMessage('I understand!');
 
-        // Session should complete
-        expect(result.completed).toBe(true);
+        // T08: Session shows overlay (completed: false) instead of immediately finishing.
+        // All recall points are marked recalled but session is not finalized until leave_session.
+        expect(result.completed).toBe(false);
       });
     });
   });
@@ -1233,9 +1251,9 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(state!.totalPoints).toBe(1);
         expect(state!.recalledCount).toBe(0);
 
-        // Complete the single point
+        // Complete the single point — T08: overlay fires, completed is false
         const result = await engine.processUserMessage('I understand!');
-        expect(result.completed).toBe(true);
+        expect(result.completed).toBe(false);
         expect(result.totalPoints).toBe(1);
       });
 
@@ -1654,9 +1672,10 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(state!.currentProbePoint!.content).toBe('');
 
         // Should be able to proceed through the session
+        // T08: completed is false when overlay fires; session not finalized until leave_session
         await engine.getOpeningMessage();
         const result = await engine.processUserMessage('I understand!');
-        expect(result.completed).toBe(true);
+        expect(result.completed).toBe(false);
       });
 
       it('should handle recall point with very long content', async () => {
@@ -1685,8 +1704,9 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(state!.currentProbePoint!.content.length).toBe(10000);
 
         await engine.getOpeningMessage();
+        // T08: completed is false when overlay fires; session not finalized until leave_session
         const result = await engine.processUserMessage('I understand!');
-        expect(result.completed).toBe(true);
+        expect(result.completed).toBe(false);
       });
     });
   });
@@ -2129,6 +2149,10 @@ describe('SessionEngine Comprehensive Tests', () => {
         await engine.getOpeningMessage();
         await engine.processUserMessage('I understand!');
 
+        // T08: Session is not finalized automatically — call finalizeSession() to mark it
+        // as 'completed' so the second engine can start a NEW session (not resume the first).
+        await engine.finalizeSession();
+
         let point = await recallPointRepo.findById(recallPoints[0].id);
         expect(point!.recallHistory).toHaveLength(1);
         expect(point!.recallHistory[0].success).toBe(true);
@@ -2433,9 +2457,10 @@ describe('SessionEngine Comprehensive Tests', () => {
       }
 
       // Switch to high confidence and complete
+      // T08: completed is false when overlay fires; session not finalized until leave_session
       mockEvaluator.setMockResult(true, 0.85, 'Final recall');
       const result = await engine.processUserMessage('Final message');
-      expect(result.completed).toBe(true);
+      expect(result.completed).toBe(false);
 
       // Verify all messages were saved
       const session = engine.getSessionState();
@@ -2902,7 +2927,9 @@ describe('SessionEngine Comprehensive Tests', () => {
       expect(eventTypes).toContain('point_evaluated');
       expect(eventTypes).toContain('point_recalled');
       expect(eventTypes).toContain('point_completed');
-      expect(eventTypes).toContain('session_completed');
+      // T08: session_completed no longer fires automatically — session_complete_overlay fires
+      // instead, and session_completed/session_paused only fires after pauseSession() is called.
+      expect(eventTypes).toContain('session_complete_overlay');
     });
 
     it('should include correct data in each event', async () => {
@@ -3212,9 +3239,10 @@ describe('SessionEngine Comprehensive Tests', () => {
       }
 
       // Switch to high confidence to complete the session
+      // T08: completed is false when overlay fires; session not finalized until leave_session
       mockEvaluator.setMockResult(true, 0.85, 'Final recall');
       const result = await engine.processUserMessage('I understand!');
-      expect(result.completed).toBe(true);
+      expect(result.completed).toBe(false);
 
       // Verify all messages were saved
       const session = engine.getSessionState();

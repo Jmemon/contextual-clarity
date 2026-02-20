@@ -15,12 +15,13 @@
  */
 
 import { useState, useCallback, type HTMLAttributes } from 'react';
-import { Link } from 'react-router-dom';
-import { useSessionWebSocket, type SessionCompleteSummary } from '@/hooks/use-session-websocket';
+import { Link, useNavigate } from 'react-router-dom';
+import { useSessionWebSocket, type SessionCompleteSummary, type CompleteOverlayData } from '@/hooks/use-session-websocket';
 import { SingleExchangeView } from './SingleExchangeView';
 import { VoiceInput } from './VoiceInput';
 import { SessionProgress } from './SessionProgress';
 import { SessionControls } from './SessionControls';
+import { SessionCompleteOverlay } from './SessionCompleteOverlay';
 
 // ============================================================================
 // Types
@@ -28,8 +29,9 @@ import { SessionControls } from './SessionControls';
 
 /**
  * Session lifecycle states.
+ * T08: Added 'paused' — session paused after leave_session.
  */
-export type SessionState = 'connecting' | 'active' | 'completed';
+export type SessionState = 'connecting' | 'active' | 'completed' | 'paused';
 
 export interface SessionContainerProps extends HTMLAttributes<HTMLDivElement> {
   /** Session ID to connect to */
@@ -231,8 +233,15 @@ export function SessionContainer({
   const [sessionState, setSessionState] = useState<SessionState>('connecting');
   const [sessionSummary, setSessionSummary] = useState<SessionCompleteSummary | null>(null);
 
+  // T08: Overlay state — shown when all recall points have been recalled.
+  // The session is still live; the user can choose to continue or leave.
+  const [showCompleteOverlay, setShowCompleteOverlay] = useState(false);
+  const [overlayData, setOverlayData] = useState<CompleteOverlayData | null>(null);
+
   // Timer for session duration display
   const { formattedTime } = useSessionTimer();
+
+  const navigate = useNavigate();
 
   // Callbacks for WebSocket events
   const handleSessionStarted = useCallback(() => {
@@ -250,9 +259,26 @@ export function SessionContainer({
     onSessionComplete?.(summary);
   }, [onSessionComplete]);
 
+  // T08: Show overlay when all points have been recalled.
+  // The session remains live — no WS message is sent here.
+  const handleCompleteOverlay = useCallback((data: CompleteOverlayData) => {
+    setOverlayData(data);
+    setShowCompleteOverlay(true);
+  }, []);
+
+  // T08: User chose "Continue Discussion" — dismiss overlay, no WS message.
+  const handleContinueDiscussion = useCallback(() => {
+    setShowCompleteOverlay(false);
+  }, []);
+
   const handleError = useCallback((code: string, message: string) => {
     console.error(`Session error [${code}]: ${message}`);
   }, []);
+
+  // T08: After leave_session is acknowledged (session_paused), navigate to dashboard.
+  const handleSessionPaused = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
 
   // WebSocket connection.
   // Note: `messages` is intentionally omitted from destructuring here (T12).
@@ -266,7 +292,7 @@ export function SessionContainer({
     totalPoints,
     isWaitingForResponse,
     sendUserMessage,
-    endSession,
+    leaveSession,
     connect,
     // T12: single-exchange UI fields
     latestAssistantMessage,
@@ -276,6 +302,8 @@ export function SessionContainer({
     onSessionStarted: handleSessionStarted,
     onPointTransition: handlePointTransition,
     onSessionComplete: handleSessionComplete,
+    onCompleteOverlay: handleCompleteOverlay,
+    onSessionPaused: handleSessionPaused,
     onError: handleError,
   });
 
@@ -358,6 +386,17 @@ export function SessionContainer({
         </div>
       )}
 
+      {/* T08: Session complete overlay — shown when all recall points recalled.
+           User can continue discussing or leave (which pauses the session). */}
+      {showCompleteOverlay && overlayData && (
+        <SessionCompleteOverlay
+          recalledCount={overlayData.recalledCount}
+          totalPoints={overlayData.totalPoints}
+          onContinue={handleContinueDiscussion}
+          onDone={leaveSession}
+        />
+      )}
+
       {/* Main content area */}
       <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
         {/*
@@ -378,9 +417,10 @@ export function SessionContainer({
 
         {/* Input and controls */}
         <div className="border-t border-clarity-700 pt-6 mt-4">
-          {/* Session controls — "I've got it!" removed (T06: continuous evaluation) */}
+          {/* Session controls — "I've got it!" removed (T06: continuous evaluation).
+              T08: "End Session" renamed to "Leave Session" (non-destructive pause). */}
           <SessionControls
-            onEndSession={endSession}
+            onLeaveSession={leaveSession}
             disabled={controlsDisabled}
             isSessionComplete={sessionState === 'completed'}
             className="mb-4"

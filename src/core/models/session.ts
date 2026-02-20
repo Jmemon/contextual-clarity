@@ -27,8 +27,10 @@
  * - 'completed': All target recall points were reviewed; session finished normally
  * - 'abandoned': Session was stopped before completion; may happen due to time
  *                constraints, technical issues, or user choice
+ * - 'paused': Session was paused by the user via "Leave Session"; checklist state
+ *             is preserved in recalledPointIds and can be resumed later
  */
-export type SessionStatus = 'in_progress' | 'completed' | 'abandoned';
+export type SessionStatus = 'in_progress' | 'completed' | 'abandoned' | 'paused';
 
 /**
  * Role of a message participant in the conversation.
@@ -149,13 +151,32 @@ export interface Session {
   targetRecallPointIds: string[];
 
   /**
+   * IDs of recall points recalled so far in this session.
+   * Persisted incrementally so that paused sessions can restore their
+   * checklist state when resumed.
+   */
+  recalledPointIds: string[];
+
+  /**
    * When the session began.
    */
   startedAt: Date;
 
   /**
-   * When the session ended, or null if still in progress.
+   * When the session ended, or null if still in progress or paused.
    * Set when status changes to 'completed' or 'abandoned'.
    */
   endedAt: Date | null;
+
+  /**
+   * When the session was paused, or null if never paused.
+   * Set when status changes to 'paused'.
+   */
+  pausedAt: Date | null;
+
+  /**
+   * When the session was most recently resumed from paused state, or null if never resumed.
+   * Set when a paused session is resumed (status moves back to 'in_progress').
+   */
+  resumedAt: Date | null;
 }

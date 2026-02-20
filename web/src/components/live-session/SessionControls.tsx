@@ -1,26 +1,27 @@
 /**
- * Session Controls Component for Live Sessions
+ * Session Controls Component for Live Sessions (T08 update)
  *
  * Provides control buttons for managing the live session:
- * - "End Session" button to end the session early
+ * - "Leave Session" button to pause the session (T08 — replaces "End Session")
+ *
+ * T08 changes:
+ * - "End Session" renamed to "Leave Session"
+ * - Removed confirmation dialog — pausing is non-destructive so no confirmation needed
+ * - Prop renamed: onEndSession -> onLeaveSession
  *
  * The "I've got it!" button has been removed (T06) — recall evaluation
  * now happens continuously after every user message.
  *
- * Features:
- * - Disabled states when waiting for response
- * - Confirmation for ending session early
- *
  * @example
  * ```tsx
  * <SessionControls
- *   onEndSession={endSession}
+ *   onLeaveSession={leaveSession}
  *   disabled={isWaitingForResponse}
  * />
  * ```
  */
 
-import { useState, type HTMLAttributes } from 'react';
+import { type HTMLAttributes } from 'react';
 import { Button } from '@/components/ui/Button';
 
 // ============================================================================
@@ -28,8 +29,8 @@ import { Button } from '@/components/ui/Button';
 // ============================================================================
 
 export interface SessionControlsProps extends HTMLAttributes<HTMLDivElement> {
-  /** Callback when "End Session" is clicked (after confirmation) */
-  onEndSession: () => void;
+  /** Callback when "Leave Session" is clicked — pauses session non-destructively */
+  onLeaveSession: () => void;
   /** Whether controls are disabled (e.g., waiting for response) */
   disabled?: boolean;
   /** Whether the session has completed */
@@ -42,38 +43,16 @@ export interface SessionControlsProps extends HTMLAttributes<HTMLDivElement> {
 
 /**
  * Control buttons for live session actions.
- * Includes "End Session" for early exit. Recall evaluation is now continuous (T06).
+ * T08: "Leave Session" pauses the session preserving progress — no confirmation needed.
+ * Recall evaluation is continuous (T06).
  */
 export function SessionControls({
-  onEndSession,
+  onLeaveSession,
   disabled = false,
   isSessionComplete = false,
   className = '',
   ...props
 }: SessionControlsProps) {
-  // State for showing end session confirmation
-  const [showEndConfirm, setShowEndConfirm] = useState(false);
-
-  /**
-   * Handle end session request.
-   * Shows confirmation first if not already shown.
-   */
-  const handleEndSessionClick = () => {
-    if (showEndConfirm) {
-      onEndSession();
-      setShowEndConfirm(false);
-    } else {
-      setShowEndConfirm(true);
-    }
-  };
-
-  /**
-   * Cancel ending session and hide confirmation.
-   */
-  const handleCancelEnd = () => {
-    setShowEndConfirm(false);
-  };
-
   // Don't show controls if session is complete
   if (isSessionComplete) {
     return null;
@@ -81,37 +60,16 @@ export function SessionControls({
 
   return (
     <div className={`flex flex-wrap items-center gap-3 ${className}`} {...props}>
-      {/* End session button/confirmation */}
-      {showEndConfirm ? (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-clarity-300">End session?</span>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={handleEndSessionClick}
-          >
-            Yes, End
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCancelEnd}
-            className="text-clarity-300 hover:text-white hover:bg-clarity-700"
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={handleEndSessionClick}
-          disabled={disabled}
-          className="bg-clarity-700 border-clarity-600 text-clarity-200 hover:bg-clarity-600 hover:text-white"
-        >
-          End Session
-        </Button>
-      )}
+      {/* Leave Session button — pauses session non-destructively (no confirmation dialog) */}
+      <Button
+        variant="secondary"
+        size="md"
+        onClick={onLeaveSession}
+        disabled={disabled}
+        className="bg-clarity-700 border-clarity-600 text-clarity-200 hover:bg-clarity-600 hover:text-white"
+      >
+        Leave Session
+      </Button>
     </div>
   );
 }

@@ -81,8 +81,8 @@ export interface SessionSummary {
   recallRate: number;
   /** Engagement score (0-100) */
   engagementScore: number;
-  /** Session lifecycle status */
-  status: 'completed' | 'abandoned' | 'in_progress';
+  /** Session lifecycle status (T08: added 'paused') */
+  status: 'completed' | 'abandoned' | 'in_progress' | 'paused';
 }
 
 /**
@@ -336,8 +336,8 @@ export interface SessionWithMetrics {
   id: string;
   /** Associated recall set ID */
   recallSetId: string;
-  /** Session lifecycle status */
-  status: 'completed' | 'abandoned' | 'in_progress';
+  /** Session lifecycle status (T08: added 'paused') */
+  status: 'completed' | 'abandoned' | 'in_progress' | 'paused';
   /** IDs of recall points targeted in this session */
   targetRecallPointIds: string[];
   /** When the session started (ISO 8601 string) */
@@ -392,8 +392,8 @@ export interface SessionFilters {
   limit?: number;
   /** Number of items to skip */
   offset?: number;
-  /** Filter by status */
-  status?: 'completed' | 'abandoned' | 'in_progress';
+  /** Filter by status (T08: added 'paused') */
+  status?: 'completed' | 'abandoned' | 'in_progress' | 'paused';
 }
 
 /**

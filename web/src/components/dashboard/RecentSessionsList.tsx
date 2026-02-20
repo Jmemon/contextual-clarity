@@ -103,6 +103,8 @@ function formatDate(dateString: string): string {
 
 /**
  * Returns the appropriate Badge status based on session status.
+ * T08: Added 'paused' — shown as a warning badge so users can easily
+ * identify sessions they can resume.
  */
 function getStatusBadge(status: SessionSummary['status']): { status: 'success' | 'warning' | 'error' | 'info'; label: string } {
   switch (status) {
@@ -112,6 +114,8 @@ function getStatusBadge(status: SessionSummary['status']): { status: 'success' |
       return { status: 'error', label: 'Abandoned' };
     case 'in_progress':
       return { status: 'info', label: 'In Progress' };
+    case 'paused':
+      return { status: 'warning', label: 'Paused' };
     default:
       return { status: 'info', label: status };
   }

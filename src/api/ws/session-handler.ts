@@ -241,8 +241,9 @@ export class WebSocketSessionHandler {
         return;
       }
 
-      // Verify the session is in-progress
-      if (session.status !== 'in_progress') {
+      // T08: Accept both 'in_progress' and 'paused' sessions — paused sessions can be resumed.
+      // The engine's startSession() will call findActiveSession() which handles both statuses.
+      if (session.status !== 'in_progress' && session.status !== 'paused') {
         this.sendError(ws, 'SESSION_NOT_ACTIVE', `Session status is '${session.status}'`);
         ws.close(WS_CLOSE_CODES.INVALID_SESSION, 'Session not active');
         return;
@@ -271,6 +272,28 @@ export class WebSocketSessionHandler {
         recallPointRepo: this.deps.recallPointRepo,
         sessionRepo: this.deps.sessionRepo,
         messageRepo: this.deps.messageRepo,
+      });
+
+      // T08: Wire engine events to forward session_complete_overlay and session_paused
+      // to the WebSocket client so the frontend can show the completion overlay.
+      engine.setEventListener((event) => {
+        if (event.type === 'session_complete_overlay') {
+          const payload = event.data as { sessionId: string; recalledCount: number; totalPoints: number };
+          this.send(ws, {
+            type: 'session_complete_overlay',
+            sessionId: payload.sessionId,
+            recalledCount: payload.recalledCount,
+            totalPoints: payload.totalPoints,
+          });
+        } else if (event.type === 'session_paused') {
+          const payload = event.data as { sessionId: string; recalledCount: number; totalPoints: number };
+          this.send(ws, {
+            type: 'session_paused',
+            sessionId: payload.sessionId,
+            recalledCount: payload.recalledCount,
+            totalPoints: payload.totalPoints,
+          });
+        }
       });
 
       // Start/resume the session in the engine
@@ -349,8 +372,9 @@ export class WebSocketSessionHandler {
         case 'trigger_eval':
           await this.handleTriggerEval(ws);
           break;
-        case 'end_session':
-          await this.handleEndSession(ws);
+        case 'leave_session':
+          // T08: leave_session pauses the session (non-destructive) instead of abandoning it
+          await this.handleLeaveSession(ws);
           break;
         case 'ping':
           this.handlePing(ws);
@@ -468,16 +492,21 @@ export class WebSocketSessionHandler {
   }
 
   /**
-   * Handles a request to end the session early.
-   * Abandons the session via the SessionEngine and sends completion summary.
+   * T08: Handles a request to leave the session (replaces handleEndSession).
+   *
+   * Unlike the old end_session which abandoned the session, leave_session PAUSES it —
+   * preserving checklist state so the user can resume later. This is non-destructive.
+   *
+   * Capture session state BEFORE calling pauseSession() because pauseSession()
+   * calls resetState() which sets currentSession to null.
    *
    * @param ws - The WebSocket connection
    */
-  private async handleEndSession(
+  private async handleLeaveSession(
     ws: ServerWebSocket<WebSocketSessionData>
   ): Promise<void> {
     const data = ws.data;
-    console.log(`[WS] Session end requested for ${data.sessionId}`);
+    console.log(`[WS] Leave session requested for ${data.sessionId}`);
 
     // Validate session exists
     if (!data.session) {
@@ -487,48 +516,19 @@ export class WebSocketSessionHandler {
     }
 
     try {
-      // Abandon the session via the SessionEngine
-      // This marks the session as abandoned in the database
+      // Pause the session via the SessionEngine
+      // This sets status to 'paused', persists recalledPointIds, and emits 'session_paused'
+      // The 'session_paused' WS message is forwarded by the event listener wired in handleOpen().
       if (data.engine) {
-        await data.engine.abandonSession();
+        await data.engine.pauseSession();
       }
-
-      // Get session state for summary (may be null after abandonment)
-      const sessionState = data.engine?.getSessionState();
-
-      const summary: SessionSummary = {
-        sessionId: data.sessionId,
-        totalPointsReviewed: sessionState?.recalledCount ?? 0,
-        successfulRecalls: 0, // Abandoned sessions don't count as successful
-        recallRate: 0,
-        durationMs: Date.now() - data.lastMessageTime,
-        engagementScore: 50, // Lower score for abandoned sessions
-        estimatedCostUsd: 0.01,
-      };
-
-      this.send(ws, {
-        type: 'session_complete',
-        summary,
-      });
     } catch (error) {
-      console.error(`[WS] Error ending session:`, error);
-      // Still send a completion message even if abandonment fails
-      this.send(ws, {
-        type: 'session_complete',
-        summary: {
-          sessionId: data.sessionId,
-          totalPointsReviewed: 0,
-          successfulRecalls: 0,
-          recallRate: 0,
-          durationMs: Date.now() - data.lastMessageTime,
-          engagementScore: 0,
-          estimatedCostUsd: 0,
-        },
-      });
+      console.error(`[WS] Error pausing session:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', 'Failed to pause session');
     }
 
-    // Close the connection
-    ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session ended by user');
+    // Close the connection — client navigates to dashboard
+    ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session paused by user');
   }
 
   /**

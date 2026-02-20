@@ -1020,13 +1020,15 @@ describe('SessionEngine Metrics Integration', () => {
         makeHighConfidenceResult(), // point 2 — recalled immediately
       ]);
 
-      // Act: Send one message which recalls both points and completes the session
+      // Act: Send one message which recalls both points, then finalize explicitly (T08)
       await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       const result = await engine.processUserMessage('I understand everything!');
 
-      // Assert
-      expect(result.completed).toBe(true);
+      // T08: completed is false — overlay fires instead of immediate completion.
+      expect(result.completed).toBe(false);
+      // finalizeSession() triggers metrics persistence
+      await engine.finalizeSession();
       expect(finalizeCalled).toBe(true);
     });
 
@@ -1054,10 +1056,12 @@ describe('SessionEngine Metrics Integration', () => {
         makeHighConfidenceResult(), // point 2
       ]);
 
-      // Act: Complete session in one message
+      // Act: Complete session in one message.
+      // T08: processUserMessage() no longer finalizes the session — call finalizeSession().
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('I understand both concepts!');
+      await engine.finalizeSession(); // T08: triggers completeSession() + metrics persistence
 
       // Assert: Query database directly to verify persistence
       const persistedMetrics = await metricsRepo.findBySessionId(session.id);
@@ -1093,10 +1097,12 @@ describe('SessionEngine Metrics Integration', () => {
         { success: true, confidence: 0.9, reasoning: 'Excellent recall of point 2', keyDemonstratedConcepts: ['B'], missedConcepts: [], suggestedRating: 'easy' },
       ]);
 
-      // Act: Complete session — both points recalled in one message
+      // Act: Complete session — both points recalled in one message.
+      // T08: Must call finalizeSession() to persist metrics/outcomes.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('I recall both concepts perfectly!');
+      await engine.finalizeSession(); // T08: triggers completeSession() + outcome persistence
 
       // Assert: Query database directly to verify recall outcomes
       const outcomes = await outcomeRepo.findBySessionId(session.id);
@@ -1158,10 +1164,12 @@ describe('SessionEngine Metrics Integration', () => {
         makeHighConfidenceResult(), // point 2
       ]);
 
-      // Act: Complete session (rabbithole starts but never returns)
+      // Act: Complete session (rabbithole starts but never returns).
+      // T08: Must call finalizeSession() to persist rabbithole events.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('What about this tangent topic?'); // Triggers rabbithole + both points recalled
+      await engine.finalizeSession(); // T08: closes abandoned rabbitholes + persists events
 
       // Assert: Query database for rabbithole events
       const rabbitholeEvents = await rabbitholeRepo.findBySessionId(session.id);
@@ -1215,18 +1223,19 @@ describe('SessionEngine Metrics Integration', () => {
       await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
 
-      // The session should complete or throw - document current behavior
+      // T08: processUserMessage no longer finalizes session; finalizeSession() does.
+      // The error from the failing metrics repo occurs during finalizeSession().
       let errorThrown = false;
-      let completed = false;
       try {
-        const result = await engine.processUserMessage('I understand both concepts!');
-        completed = result.completed;
+        await engine.processUserMessage('I understand both concepts!');
+        // T08: finalizeSession() is needed to trigger metrics persistence (and thus the error)
+        await engine.finalizeSession();
       } catch {
         errorThrown = true;
       }
 
-      // Document current behavior - session may or may not complete depending on error handling
-      expect(errorThrown || completed).toBe(true);
+      // Document current behavior - error is thrown by failing metrics repo during finalize
+      expect(errorThrown).toBe(true);
     });
 
     it('should handle session with no recall outcomes (empty session)', async () => {
@@ -1296,13 +1305,15 @@ describe('SessionEngine Metrics Integration', () => {
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
 
-      // Act: Complete session - should work without errors
+      // Act: Complete session - should work without errors.
+      // T08: processUserMessage() returns completed: false; finalizeSession() is a no-op
+      // when metricsCollector is null (finalizeAndPersistMetrics skips without collector).
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       const result = await engine.processUserMessage('I understand both concepts!');
 
-      // Assert: Session completes successfully
-      expect(result.completed).toBe(true);
+      // T08: completed is false — overlay fires instead of immediate completion
+      expect(result.completed).toBe(false);
 
       // No metrics should be persisted since collector wasn't provided
       const metrics = await metricsRepo.findBySessionId(session.id);
@@ -1394,10 +1405,11 @@ describe('SessionEngine Metrics Integration', () => {
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
 
-      // Act: Complete session
+      // Act: Complete session — T08: finalizeSession() needed to persist metrics/outcomes.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('I understand both concepts!');
+      await engine.finalizeSession(); // T08: triggers completeSession() + persistence
 
       // Assert: Verify foreign key relationships
 
@@ -1450,10 +1462,11 @@ describe('SessionEngine Metrics Integration', () => {
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
 
-      // Act: Complete session
+      // Act: Complete session — T08: finalizeSession() needed to persist metrics.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('I understand both concepts!');
+      await engine.finalizeSession(); // T08: triggers completeSession() + persistence
 
       const testEndTime = new Date();
 
@@ -1513,11 +1526,13 @@ describe('SessionEngine Metrics Integration', () => {
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
 
-      // Act: Two messages to complete the session
+      // Act: Two messages to complete the session.
+      // T08: finalizeSession() needed to persist metrics and outcomes.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('First point understood!'); // recalls point 1 (0.8), not point 2 (0.5)
-      await engine.processUserMessage('Second point got it!'); // recalls point 2 (0.85) → session completes
+      await engine.processUserMessage('Second point got it!'); // recalls point 2 (0.85) → overlay fires
+      await engine.finalizeSession(); // T08: triggers completeSession() + persistence
 
       // Assert: Verify calculated fields match raw data
 
@@ -1592,10 +1607,12 @@ describe('SessionEngine Metrics Integration', () => {
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
 
-      // Act: Complete session with potential rabbithole
+      // Act: Complete session with potential rabbithole.
+      // T08: finalizeSession() needed to persist metrics/outcomes/rabbitholes.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
       await engine.processUserMessage('What about this tangent? Also I understand everything!'); // May trigger rabbithole + recalls both points
+      await engine.finalizeSession(); // T08: triggers completeSession() + persistence
 
       // Assert: Query ALL Phase 2 tables
 

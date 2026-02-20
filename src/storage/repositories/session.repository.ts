@@ -10,7 +10,7 @@
  * engagement and maintain conversation history.
  */
 
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import type { AppDatabase } from '../db';
 import { sessions } from '../schema';
 import type { Session, SessionStatus } from '@/core/models';
@@ -33,13 +33,19 @@ export interface CreateSessionInput {
 
 /**
  * Input type for updating an existing Session.
- * Most updates should use the specialized complete/abandon methods.
+ * Most updates should use the specialized complete/abandon/pause methods.
  */
 export interface UpdateSessionInput {
   /** Current lifecycle status */
   status?: SessionStatus;
   /** When the session ended */
   endedAt?: Date;
+  /** IDs of recall points recalled so far — persisted incrementally for pause/resume */
+  recalledPointIds?: string[];
+  /** When the session was paused */
+  pausedAt?: Date;
+  /** When the session was most recently resumed */
+  resumedAt?: Date;
 }
 
 /**
@@ -54,9 +60,13 @@ function mapToDomain(row: typeof sessions.$inferSelect): Session {
     recallSetId: row.recallSetId,
     status: row.status,
     targetRecallPointIds: row.targetRecallPointIds,
+    // T08: Include recalledPointIds and pause/resume timestamps
+    recalledPointIds: row.recalledPointIds ?? [],
     // Drizzle's timestamp_ms mode already returns Date objects
     startedAt: row.startedAt,
     endedAt: row.endedAt,
+    pausedAt: row.pausedAt ?? null,
+    resumedAt: row.resumedAt ?? null,
   };
 }
 
@@ -125,33 +135,34 @@ export class SessionRepository
   }
 
   /**
-   * Finds an in-progress session for a specific recall set.
+   * Finds an active (in_progress or paused) session for a specific recall set.
    *
-   * Only one session should be in-progress at a time for each recall set.
-   * This is used to resume interrupted sessions or prevent multiple
-   * concurrent sessions for the same set.
+   * T08: Replaces findInProgress() — now matches both 'in_progress' and 'paused'
+   * sessions so that paused sessions can be resumed without creating a new session.
+   *
+   * Only one active session should exist at a time for each recall set.
    *
    * @param recallSetId - The ID of the recall set to check
-   * @returns The in-progress Session if found, or null if none exists
+   * @returns The active Session if found, or null if none exists
    *
    * @example
    * ```typescript
-   * const inProgress = await repo.findInProgress('rs_abc123');
-   * if (inProgress) {
-   *   console.log('Resuming session:', inProgress.id);
+   * const active = await repo.findActiveSession('rs_abc123');
+   * if (active) {
+   *   console.log('Resuming session:', active.id, 'status:', active.status);
    * } else {
-   *   console.log('No session in progress, starting new one');
+   *   console.log('No active session, starting new one');
    * }
    * ```
    */
-  async findInProgress(recallSetId: string): Promise<Session | null> {
+  async findActiveSession(recallSetId: string): Promise<Session | null> {
     const result = await this.db
       .select()
       .from(sessions)
       .where(
         and(
           eq(sessions.recallSetId, recallSetId),
-          eq(sessions.status, 'in_progress')
+          inArray(sessions.status, ['in_progress', 'paused'])
         )
       )
       .limit(1);
@@ -161,6 +172,14 @@ export class SessionRepository
     }
 
     return mapToDomain(result[0]);
+  }
+
+  /**
+   * @deprecated Use findActiveSession() instead (T08 — also matches 'paused' sessions).
+   * Kept for backwards compatibility; delegates to findActiveSession().
+   */
+  async findInProgress(recallSetId: string): Promise<Session | null> {
+    return this.findActiveSession(recallSetId);
   }
 
   /**
@@ -264,6 +283,53 @@ export class SessionRepository
         status: 'abandoned',
         endedAt: new Date(),
       })
+      .where(eq(sessions.id, id))
+      .returning({ id: sessions.id });
+
+    if (result.length === 0) {
+      throw new Error(`Session with id '${id}' not found`);
+    }
+  }
+
+  /**
+   * Marks a session as paused (T08 — Leave Session).
+   *
+   * Sets the status to 'paused' and records the pausedAt timestamp.
+   * Unlike abandoning, a paused session preserves checklist state so it can
+   * be resumed later via findActiveSession() which returns paused sessions too.
+   *
+   * @param id - The unique identifier of the session to pause
+   * @throws Error if the session does not exist
+   */
+  async pause(id: string): Promise<void> {
+    const result = await this.db
+      .update(sessions)
+      .set({
+        status: 'paused',
+        pausedAt: new Date(),
+      })
+      .where(eq(sessions.id, id))
+      .returning({ id: sessions.id });
+
+    if (result.length === 0) {
+      throw new Error(`Session with id '${id}' not found`);
+    }
+  }
+
+  /**
+   * Persists the current set of recalled point IDs for a session (T08).
+   *
+   * Called incrementally after each point is recalled so that paused sessions
+   * can reconstruct the checklist without re-evaluating conversation history.
+   *
+   * @param id - The unique identifier of the session
+   * @param recalledPointIds - Current array of recalled point IDs
+   * @throws Error if the session does not exist
+   */
+  async updateRecalledPointIds(id: string, recalledPointIds: string[]): Promise<void> {
+    const result = await this.db
+      .update(sessions)
+      .set({ recalledPointIds })
       .where(eq(sessions.id, id))
       .returning({ id: sessions.id });
 

@@ -86,7 +86,7 @@ export {
   // Client -> Server message types
   type UserMessagePayload,
   type TriggerEvalPayload,
-  type EndSessionPayload,
+  type LeaveSessionPayload,
   type PingPayload,
   type ClientMessage,
   type ClientMessageType,
@@ -99,6 +99,8 @@ export {
   type PointTransitionPayload,
   type PointRecalledPayload,
   type SessionCompletePayload,
+  type SessionCompleteOverlayPayload,
+  type SessionPausedPayload,
   type ErrorPayload,
   type PongPayload,
   type ServerMessage,

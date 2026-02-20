@@ -373,16 +373,22 @@ describe('Session Flow E2E', () => {
     expect(updatedPoint1!.recallHistory).toHaveLength(1);
     expect(updatedPoint1!.recallHistory[0].success).toBe(true);
 
-    // Step 7: Second user message — continuous evaluation now recalls point 2
+    // Step 7: Second user message — continuous evaluation now recalls point 2.
+    // T08: When all points are recalled, completed is false (overlay fires; session
+    // is only finalized when user clicks "Done" and sends leave_session).
     const result2 = await engine.processUserMessage('Internal motivation is about autonomy, mastery, and purpose.');
-    expect(result2.completed).toBe(true);
+    expect(result2.completed).toBe(false);
     expect(result2.recalledCount).toBe(2);
 
-    // Step 8: Verify final session state
+    // T08: Session stays 'in_progress' until user leaves via pauseSession().
+    // We call pauseSession() to simulate the user clicking "Done" on the overlay.
+    await engine.pauseSession();
+
+    // Step 8: Verify final session state (paused, not completed — user used Leave Session)
     const finalSession = await sessionRepo.findById(session.id);
     expect(finalSession).not.toBeNull();
-    expect(finalSession!.status).toBe('completed');
-    expect(finalSession!.endedAt).not.toBeNull();
+    expect(finalSession!.status).toBe('paused');
+    // endedAt is not set for paused sessions (only for completed/abandoned)
 
     // Step 9: Verify FSRS state for the second point
     const updatedPoint2 = await recallPointRepo.findById(testRecallPoints[1].id);
@@ -392,11 +398,18 @@ describe('Session Flow E2E', () => {
     expect(updatedPoint2!.recallHistory).toHaveLength(1);
   });
 
-  it('should mark session as completed when all points are recalled', async () => {
+  // T08: "mark session as completed when all points are recalled" behavior changed —
+  // processUserMessage() now returns completed: false and emits session_complete_overlay.
+  // The session is only finalized when the user explicitly calls pauseSession().
+  it('should show overlay (not complete) when all points are recalled', async () => {
     const session = await engine.startSession(testRecallSet);
     expect(session.status).toBe('in_progress');
 
     await engine.getOpeningMessage();
+
+    // Capture events emitted
+    const events: string[] = [];
+    engine.setEventListener((event) => events.push(event.type));
 
     // Default evaluator returns success with 0.85 confidence, which means
     // both points get recalled on the first processUserMessage call.
@@ -404,14 +417,25 @@ describe('Session Flow E2E', () => {
 
     // Both points should be recalled in a single turn
     expect(result.pointsRecalledThisTurn).toHaveLength(2);
-    expect(result.completed).toBe(true);
+    // T08: completed is false — overlay is emitted instead
+    expect(result.completed).toBe(false);
     expect(result.recalledCount).toBe(2);
     expect(result.totalPoints).toBe(2);
 
-    // Verify session status in database
-    const completedSession = await sessionRepo.findById(session.id);
-    expect(completedSession).not.toBeNull();
-    expect(completedSession!.status).toBe('completed');
+    // T08: session_complete_overlay event should have been emitted
+    expect(events).toContain('session_complete_overlay');
+
+    // T08: session stays in_progress until user leaves
+    const inProgressSession = await sessionRepo.findById(session.id);
+    expect(inProgressSession!.status).toBe('in_progress');
+
+    // Simulate user clicking "Done" (leave_session)
+    await engine.pauseSession();
+
+    // Session is now paused
+    const pausedSession = await sessionRepo.findById(session.id);
+    expect(pausedSession).not.toBeNull();
+    expect(pausedSession!.status).toBe('paused');
   });
 
   it('should handle session abandonment correctly', async () => {
@@ -656,7 +680,8 @@ describe('Session Flow E2E', () => {
     expect(result.pointsRecalledThisTurn).toHaveLength(2);
     expect(result.pointsRecalledThisTurn).toContain(testRecallPoints[0].id);
     expect(result.pointsRecalledThisTurn).toContain(testRecallPoints[1].id);
-    expect(result.completed).toBe(true);
+    // T08: completed is false when all points recalled — overlay fires, session not finalized
+    expect(result.completed).toBe(false);
     expect(result.recalledCount).toBe(2);
   });
 });
