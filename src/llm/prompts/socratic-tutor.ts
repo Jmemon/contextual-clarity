@@ -2,27 +2,28 @@
  * Socratic Tutor Prompt Builder
  *
  * This module constructs the system prompt for AI-powered Socratic recall discussions.
- * The Socratic method involves guiding learners to recall and understand concepts
- * through thoughtful questioning rather than direct answers.
+ * A universal recall-session facilitator prompt (domain-agnostic) forms the identity,
+ * while the recall points' content and context fields supply all domain knowledge.
+ * The per-set discussionSystemPrompt is demoted to optional "Supplementary Guidelines"
+ * appended at the end.
  *
  * Key design decisions:
  *
- * 1. **Context separation**: The AI receives the recall point content and context
+ * 1. **Universal agent**: A single domain-agnostic facilitator prompt works across
+ *    all subjects. The recall points themselves carry all domain knowledge.
+ *
+ * 2. **Context separation**: The AI receives the recall point content and context
  *    but is explicitly instructed NOT to share this information directly. Instead,
  *    it uses this knowledge to craft probing questions that lead the learner to
  *    recall the information themselves.
  *
- * 2. **Progressive disclosure**: The prompt includes information about the current
+ * 3. **Progressive disclosure**: The prompt includes information about the current
  *    point being discussed and upcoming points, allowing the AI to naturally
  *    transition between topics when appropriate.
  *
- * 3. **Layered prompts**: The prompt combines the RecallSet's custom discussion
- *    prompt (which sets domain-specific context and persona) with standardized
- *    Socratic method guidelines.
- *
- * 4. **Recall vs. understanding**: The prompt distinguishes between simple recall
- *    (did they remember the fact?) and deeper understanding (do they grasp why
- *    it matters?), encouraging the AI to probe both.
+ * 4. **Supplementary guidelines**: The RecallSet's discussionSystemPrompt is
+ *    optional and appended last. It adds per-set nuance without overriding
+ *    the universal identity.
  */
 
 import type { RecallPoint, RecallSet } from '../../core/models';
@@ -95,10 +96,12 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
   const uncheckedIds = new Set(uncheckedPoints.map(p => p.id));
   const recalledPoints = targetPoints.filter(p => !uncheckedIds.has(p.id));
 
-  // Build the complete prompt by combining layers
+  // Build the complete prompt by combining layers.
+  // Section order: universal agent identity, Socratic method, checklist-aware
+  // points, guidelines, and finally optional per-set supplementary guidelines.
   const promptSections: string[] = [
-    // Section 1: RecallSet's custom discussion prompt (domain-specific persona)
-    buildCustomPromptSection(recallSet),
+    // Section 1: Universal recall-session facilitator identity (domain-agnostic)
+    buildUniversalAgentSection(),
 
     // Section 2: Socratic method guidelines
     buildSocraticMethodSection(),
@@ -111,6 +114,9 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
 
     // Section 5: Important guidelines and constraints
     buildGuidelinesSection(),
+
+    // Section 6: Optional per-set supplementary guidelines (LAST)
+    buildSupplementaryGuidelinesSection(recallSet),
   ];
 
   // Filter out empty sections and join with double newlines for readability
@@ -119,35 +125,54 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
 
 /**
  * Builds a minimal prompt for sessions with no target points.
- * This handles the edge case gracefully while still maintaining
- * the RecallSet's custom persona.
+ * Uses the universal agent framing instead of the per-set persona.
  */
 function buildEmptySessionPrompt(recallSet: RecallSet): string {
-  return `${recallSet.discussionSystemPrompt}
+  return `You are facilitating a recall session for "${recallSet.name}", but there are no specific recall points assigned for this session.
 
-You are in a recall session, but there are no specific recall points assigned for this session.
-Engage in a general discussion about the subject matter covered by this recall set: "${recallSet.name}"
-
-Help the learner explore and reinforce their understanding of the topic through open-ended questions.`;
+Engage in a general discussion about the subject matter. Ask open-ended questions to help the user explore and articulate what they know about the topic.`;
 }
 
 /**
- * Section 1: Custom prompt from the RecallSet
+ * Section 1: Universal recall-session facilitator identity
  *
- * This section incorporates the domain-specific persona and teaching style
- * defined by the user when creating the RecallSet. It sets the overall tone
- * and expertise level for the discussion.
+ * Domain-agnostic agent prompt that works across all subjects. The recall
+ * points' content and context fields (injected by other sections) supply
+ * all the domain knowledge the agent needs.
  */
-function buildCustomPromptSection(recallSet: RecallSet): string {
-  // Include the RecallSet's custom prompt if it exists and isn't just whitespace
-  const customPrompt = recallSet.discussionSystemPrompt.trim();
+function buildUniversalAgentSection(): string {
+  return `You are facilitating a recall session. The user has previously learned the material below and is practicing retrieving it from memory. Your job is to probe their recall through questions — not to teach, explain, or provide the answers.
 
-  if (!customPrompt) {
-    // Fallback to a generic educational persona
-    return `You are a knowledgeable and patient tutor helping a student recall and understand concepts from "${recallSet.name}".`;
+## Your role
+
+- You are a recall session facilitator. You work across any domain — science, history, music, philosophy, engineering, anything.
+- The recall points listed below are your only source of truth for this session. They tell you what the user should be able to recall.
+- You are NOT teaching new material. The user has already learned this. You are helping them practice retrieval.
+- An evaluator system analyzes each user message and provides you with observations about what they have and have not recalled. Use these observations to decide what to probe next and how to nudge them toward precision.
+- The UI handles all positive reinforcement (checkmarks, sounds, progress indicators). Do not generate congratulatory text, celebration, or praise. When a point is recalled, move on to the next unchecked point.`;
+}
+
+/**
+ * Section 6 (LAST): Optional per-set supplementary guidelines
+ *
+ * Wraps the RecallSet's discussionSystemPrompt in a clearly labeled section.
+ * Returns empty string when the prompt is empty or whitespace-only, causing
+ * the section to be omitted from the final prompt entirely.
+ */
+function buildSupplementaryGuidelinesSection(recallSet: RecallSet): string {
+  const guidelines = recallSet.discussionSystemPrompt.trim();
+
+  if (!guidelines) {
+    return '';
   }
 
-  return customPrompt;
+  return `## Supplementary guidelines for this recall set
+
+The following guidelines were provided for this specific recall set. Follow them in addition to (not instead of) the universal instructions above:
+
+<supplementary_guidelines>
+${guidelines}
+</supplementary_guidelines>`;
 }
 
 /**
