@@ -210,8 +210,8 @@ async function runInteractiveLoop(engine: SessionEngine): Promise<void> {
         return;
       }
 
-      // Show progress if we advanced to a new point
-      if (result.pointAdvanced) {
+      // Show progress if any points were recalled this turn
+      if (result.pointsRecalledThisTurn.length > 0) {
         console.log(formatProgress(result.recalledCount, result.totalPoints));
         printBlankLine();
       }
@@ -308,7 +308,7 @@ async function handleSlashCommand(
           return 'quit';
         }
 
-        if (result.pointAdvanced) {
+        if (result.pointsRecalledThisTurn.length > 0) {
           console.log(formatProgress(result.recalledCount, result.totalPoints));
           printBlankLine();
         }

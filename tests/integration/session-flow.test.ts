@@ -8,6 +8,10 @@
  * 4. Complete the session
  * 5. Verify FSRS state was correctly updated
  *
+ * T06 update: The evaluator now runs continuously after every user message
+ * against ALL unchecked points. Tests use a configurable mock evaluator to
+ * control which points are "recalled" on each call.
+ *
  * The tests use mocked LLM responses for determinism and fast execution.
  * The focus is on verifying the integration between all system components:
  * - Database layer (repositories)
@@ -135,81 +139,92 @@ class MockAnthropicClient {
 /**
  * Mock RecallEvaluator for deterministic testing.
  *
- * This mock always returns a successful evaluation with high confidence,
- * allowing us to test the complete session flow without LLM dependencies.
+ * Supports per-point result sequences so tests can control exactly which points
+ * get recalled and when. Each call to evaluate() pops the next result for that
+ * point ID from the configured queue.
  */
 class MockRecallEvaluator {
-  private mockSuccess: boolean = true;
-  private mockConfidence: number = 0.85;
-  private mockReasoning: string = 'User demonstrated clear understanding of the concept';
+  private defaultSuccess: boolean = true;
+  private defaultConfidence: number = 0.85;
+  private defaultReasoning: string = 'User demonstrated clear understanding of the concept';
+
+  // Per-point result queue: keyed by point ID
+  private pointResultQueues: Map<string, RecallEvaluation[]> = new Map();
+  // Global result queue (used when no per-point queue is set)
+  private globalResultQueue: RecallEvaluation[] = [];
 
   /**
-   * Sets the mock evaluation result for subsequent calls.
+   * Sets the default mock evaluation result for subsequent calls.
    */
   setMockResult(success: boolean, confidence: number, reasoning: string): void {
-    this.mockSuccess = success;
-    this.mockConfidence = confidence;
-    this.mockReasoning = reasoning;
+    this.defaultSuccess = success;
+    this.defaultConfidence = confidence;
+    this.defaultReasoning = reasoning;
+  }
+
+  /**
+   * Sets a queue of results for a specific point ID.
+   * Each evaluate() call for this point pops the next result.
+   */
+  setPointResults(pointId: string, results: RecallEvaluation[]): void {
+    this.pointResultQueues.set(pointId, [...results]);
+  }
+
+  /**
+   * Sets a global result queue (used when per-point queue is empty/unset).
+   */
+  setGlobalResults(results: RecallEvaluation[]): void {
+    this.globalResultQueue = [...results];
   }
 
   /**
    * Returns a mock evaluation based on configured values.
+   * T06: Called for each unchecked point on every processUserMessage().
    */
   async evaluate(
-    _recallPoint: RecallPoint,
+    recallPoint: RecallPoint,
     _conversationMessages: unknown[]
   ): Promise<RecallEvaluation> {
+    // Check per-point queue first
+    const pointQueue = this.pointResultQueues.get(recallPoint.id);
+    if (pointQueue && pointQueue.length > 0) {
+      return pointQueue.shift()!;
+    }
+
+    // Then check global queue
+    if (this.globalResultQueue.length > 0) {
+      return this.globalResultQueue.shift()!;
+    }
+
+    // Fall back to default
     return {
-      success: this.mockSuccess,
-      confidence: this.mockConfidence,
-      reasoning: this.mockReasoning,
+      success: this.defaultSuccess,
+      confidence: this.defaultConfidence,
+      reasoning: this.defaultReasoning,
     };
   }
 }
 
 /**
  * Creates an in-memory database with migrations applied.
- *
- * This function creates a fresh SQLite database in memory, applies all
- * migrations from the drizzle folder, and returns a configured database instance.
- *
- * @returns Object containing the database instance and raw SQLite connection
  */
 function createTestDatabase(): { db: AppDatabase; sqlite: Database } {
-  // Create in-memory SQLite database
   const sqlite = new Database(':memory:');
-
-  // Enable foreign key constraints (disabled by default in SQLite)
   sqlite.run('PRAGMA foreign_keys = ON');
-
-  // Create Drizzle ORM wrapper with schema
   const db = drizzle(sqlite, { schema });
-
-  // Apply migrations from the drizzle folder
-  // Path is relative to the project root
   const migrationsFolder = resolve(import.meta.dir, '../../drizzle');
   migrate(db, { migrationsFolder });
-
   return { db, sqlite };
 }
 
 /**
  * Seeds the database with test data.
- *
- * Creates a recall set and recall points with FSRS states that are due for review.
- * This simulates a real user scenario where points are ready for a session.
- *
- * @param recallSetRepo - Repository for recall set operations
- * @param recallPointRepo - Repository for recall point operations
- * @param scheduler - FSRS scheduler for creating initial states
- * @returns Object containing the created recall set and points
  */
 async function seedTestData(
   recallSetRepo: RecallSetRepository,
   recallPointRepo: RecallPointRepository,
   scheduler: FSRSScheduler
 ): Promise<{ recallSet: RecallSet; recallPoints: RecallPoint[] }> {
-  // Create a test recall set
   const recallSet = await recallSetRepo.create({
     id: 'rs_test_motivation',
     name: 'Test Motivation Set',
@@ -219,7 +234,6 @@ async function seedTestData(
       'You are helping the user internalize concepts about motivation and action.',
   });
 
-  // Create recall points with initial FSRS state (due immediately)
   const now = new Date();
   const initialState = scheduler.createInitialState(now);
 
@@ -250,7 +264,6 @@ async function seedTestData(
 }
 
 describe('Session Flow E2E', () => {
-  // Database and repository instances
   let db: AppDatabase;
   let sqlite: Database;
   let recallSetRepo: RecallSetRepository;
@@ -258,39 +271,32 @@ describe('Session Flow E2E', () => {
   let sessionRepo: SessionRepository;
   let messageRepo: SessionMessageRepository;
 
-  // Core services
   let scheduler: FSRSScheduler;
   let mockLlmClient: MockAnthropicClient;
   let mockEvaluator: MockRecallEvaluator;
   let engine: SessionEngine;
 
-  // Test data
   let testRecallSet: RecallSet;
   let testRecallPoints: RecallPoint[];
 
   beforeEach(async () => {
-    // Create fresh in-memory database with migrations
     const testDb = createTestDatabase();
     db = testDb.db;
     sqlite = testDb.sqlite;
 
-    // Initialize repositories
     recallSetRepo = new RecallSetRepository(db);
     recallPointRepo = new RecallPointRepository(db);
     sessionRepo = new SessionRepository(db);
     messageRepo = new SessionMessageRepository(db);
 
-    // Initialize services
     scheduler = new FSRSScheduler();
     mockLlmClient = new MockAnthropicClient();
     mockEvaluator = new MockRecallEvaluator();
 
-    // Seed test data
     const seedData = await seedTestData(recallSetRepo, recallPointRepo, scheduler);
     testRecallSet = seedData.recallSet;
     testRecallPoints = seedData.recallPoints;
 
-    // Create session engine with mocked dependencies
     engine = new SessionEngine(
       {
         scheduler,
@@ -302,9 +308,6 @@ describe('Session Flow E2E', () => {
         messageRepo,
       },
       {
-        // Use smaller message limits for faster tests
-        maxMessagesPerPoint: 5,
-        autoEvaluateAfter: 3,
         tutorTemperature: 0.7,
         tutorMaxTokens: 512,
       }
@@ -312,7 +315,6 @@ describe('Session Flow E2E', () => {
   });
 
   afterEach(() => {
-    // Close the SQLite database connection
     if (sqlite) {
       sqlite.close();
     }
@@ -345,44 +347,36 @@ describe('Session Flow E2E', () => {
     expect(messagesAfterOpening).toHaveLength(1);
     expect(messagesAfterOpening[0].role).toBe('assistant');
 
-    // Step 4: Simulate user response and process it
-    const userResponse1 = 'Action creates motivation, not the other way around. Starting is the hardest part.';
-    await engine.processUserMessage(userResponse1);
+    // Step 4: Configure evaluator to recall one point at a time.
+    // First call: point 1 succeeds, point 2 fails
+    // Second call: point 2 succeeds
+    mockEvaluator.setPointResults(testRecallPoints[0].id, [
+      { success: true, confidence: 0.85, reasoning: 'Recalled action creates motivation' },
+    ]);
+    mockEvaluator.setPointResults(testRecallPoints[1].id, [
+      { success: false, confidence: 0.2, reasoning: 'Not yet recalled' },
+      { success: true, confidence: 0.85, reasoning: 'Now recalled internal motivation' },
+    ]);
 
-    // Verify user message was saved
-    const messagesAfterUser1 = await messageRepo.findBySessionId(session.id);
-    expect(messagesAfterUser1.length).toBeGreaterThan(1);
-    expect(messagesAfterUser1.some((m) => m.role === 'user')).toBe(true);
-
-    // Step 5: Trigger evaluation by processing more messages or trigger phrase
-    // Since we need to complete the point, we'll use the trigger phrase
-    const userResponse2 = 'I understand, that makes sense now!';
-    const result2 = await engine.processUserMessage(userResponse2);
-
-    // This should trigger evaluation and advance to next point
-    expect(result2.pointAdvanced).toBe(true);
-    expect(result2.completed).toBe(false); // Still have another point
+    // Step 5: First user message — continuous evaluation recalls point 1 only
+    const result1 = await engine.processUserMessage('Action creates motivation, not the other way around.');
+    expect(result1.pointsRecalledThisTurn).toContain(testRecallPoints[0].id);
+    expect(result1.completed).toBe(false);
+    expect(result1.recalledCount).toBe(1);
 
     // Step 6: Verify FSRS state was updated for the first point
     const updatedPoint1 = await recallPointRepo.findById(testRecallPoints[0].id);
     expect(updatedPoint1).not.toBeNull();
-    expect(updatedPoint1!.fsrsState.reps).toBe(1); // Should have 1 rep now
-    expect(updatedPoint1!.fsrsState.state).not.toBe('new'); // State should transition
-    expect(updatedPoint1!.fsrsState.lastReview).not.toBeNull(); // Last review should be set
-
-    // Verify recall history was updated
+    expect(updatedPoint1!.fsrsState.reps).toBe(1);
+    expect(updatedPoint1!.fsrsState.state).not.toBe('new');
+    expect(updatedPoint1!.fsrsState.lastReview).not.toBeNull();
     expect(updatedPoint1!.recallHistory).toHaveLength(1);
     expect(updatedPoint1!.recallHistory[0].success).toBe(true);
 
-    // Step 7: Complete the second point
-    const userResponse3 = 'Internal motivation is about autonomy, mastery, and purpose.';
-    await engine.processUserMessage(userResponse3);
-
-    const userResponse4 = "I've got it, let's move on!";
-    const result4 = await engine.processUserMessage(userResponse4);
-
-    // This should complete the session
-    expect(result4.completed).toBe(true);
+    // Step 7: Second user message — continuous evaluation now recalls point 2
+    const result2 = await engine.processUserMessage('Internal motivation is about autonomy, mastery, and purpose.');
+    expect(result2.completed).toBe(true);
+    expect(result2.recalledCount).toBe(2);
 
     // Step 8: Verify final session state
     const finalSession = await sessionRepo.findById(session.id);
@@ -398,28 +392,21 @@ describe('Session Flow E2E', () => {
     expect(updatedPoint2!.recallHistory).toHaveLength(1);
   });
 
-  it('should mark session as completed when all points are reviewed', async () => {
-    // Start session
+  it('should mark session as completed when all points are recalled', async () => {
     const session = await engine.startSession(testRecallSet);
     expect(session.status).toBe('in_progress');
 
-    // Get opening and process first point quickly
     await engine.getOpeningMessage();
-    await engine.processUserMessage('I remember: action creates motivation!');
-    const result1 = await engine.processUserMessage("Got it, I understand!");
 
-    // First point should be evaluated, advancing to second
-    expect(result1.pointAdvanced).toBe(true);
-    expect(result1.recalledCount).toBe(1);
+    // Default evaluator returns success with 0.85 confidence, which means
+    // both points get recalled on the first processUserMessage call.
+    const result = await engine.processUserMessage('I remember everything!');
 
-    // Process second point
-    await engine.processUserMessage('Internal motivation is about autonomy, mastery, and purpose.');
-    const finalResult = await engine.processUserMessage("I get it now!");
-
-    // Session should be completed
-    expect(finalResult.completed).toBe(true);
-    expect(finalResult.recalledCount).toBe(2);
-    expect(finalResult.totalPoints).toBe(2);
+    // Both points should be recalled in a single turn
+    expect(result.pointsRecalledThisTurn).toHaveLength(2);
+    expect(result.completed).toBe(true);
+    expect(result.recalledCount).toBe(2);
+    expect(result.totalPoints).toBe(2);
 
     // Verify session status in database
     const completedSession = await sessionRepo.findById(session.id);
@@ -428,14 +415,13 @@ describe('Session Flow E2E', () => {
   });
 
   it('should handle session abandonment correctly', async () => {
-    // Start session
     const session = await engine.startSession(testRecallSet);
     expect(session.status).toBe('in_progress');
 
-    // Get opening message
     await engine.getOpeningMessage();
 
-    // Process some messages
+    // Configure evaluator to not recall anything (below 0.6 threshold)
+    mockEvaluator.setMockResult(false, 0.2, 'User has not recalled');
     await engine.processUserMessage('Hmm, I need to think about this...');
 
     // Abandon the session
@@ -448,14 +434,15 @@ describe('Session Flow E2E', () => {
     expect(abandonedSession!.endedAt).not.toBeNull();
 
     // FSRS state should NOT be updated for abandoned sessions
-    // (Points were not fully reviewed)
     const point1 = await recallPointRepo.findById(testRecallPoints[0].id);
     expect(point1!.fsrsState.reps).toBe(0);
     expect(point1!.fsrsState.state).toBe('new');
   });
 
   it('should resume an existing in-progress session', async () => {
-    // Start first session
+    // Configure evaluator to not recall anything so session stays in-progress
+    mockEvaluator.setMockResult(false, 0.2, 'Not recalled yet');
+
     const session1 = await engine.startSession(testRecallSet);
     await engine.getOpeningMessage();
     await engine.processUserMessage('Some initial thoughts...');
@@ -472,8 +459,6 @@ describe('Session Flow E2E', () => {
         messageRepo,
       },
       {
-        maxMessagesPerPoint: 5,
-        autoEvaluateAfter: 3,
         tutorTemperature: 0.7,
         tutorMaxTokens: 512,
       }
@@ -498,25 +483,24 @@ describe('Session Flow E2E', () => {
     // Test high confidence success -> should result in longer interval
     mockEvaluator.setMockResult(true, 0.95, 'Excellent recall with high confidence');
     await engine.processUserMessage('Action creates motivation!');
-    await engine.processUserMessage("I understand completely!");
 
     const pointAfterEasy = await recallPointRepo.findById(testRecallPoints[0].id);
     const intervalAfterHighConfidence = pointAfterEasy!.fsrsState.due.getTime() - Date.now();
 
-    // Reset and test with lower confidence
+    // Reset and test with lower confidence (but still >= 0.6 threshold)
     const { db: newDb, sqlite: newSqlite } = createTestDatabase();
     const newRecallSetRepo = new RecallSetRepository(newDb);
     const newRecallPointRepo = new RecallPointRepository(newDb);
     const newSessionRepo = new SessionRepository(newDb);
     const newMessageRepo = new SessionMessageRepository(newDb);
 
-    // Seed fresh data
     const newSeedData = await seedTestData(newRecallSetRepo, newRecallPointRepo, scheduler);
 
+    const newMockEvaluator = new MockRecallEvaluator();
     const newEngine = new SessionEngine(
       {
         scheduler,
-        evaluator: mockEvaluator as unknown as RecallEvaluator,
+        evaluator: newMockEvaluator as unknown as RecallEvaluator,
         llmClient: mockLlmClient as any,
         recallSetRepo: newRecallSetRepo,
         recallPointRepo: newRecallPointRepo,
@@ -524,8 +508,6 @@ describe('Session Flow E2E', () => {
         messageRepo: newMessageRepo,
       },
       {
-        maxMessagesPerPoint: 5,
-        autoEvaluateAfter: 3,
         tutorTemperature: 0.7,
         tutorMaxTokens: 512,
       }
@@ -534,36 +516,35 @@ describe('Session Flow E2E', () => {
     await newEngine.startSession(newSeedData.recallSet);
     await newEngine.getOpeningMessage();
 
-    // Test lower confidence success -> should result in shorter interval
-    mockEvaluator.setMockResult(true, 0.55, 'Recalled with difficulty');
+    // Test lower confidence success (0.65 is >= 0.6 threshold, maps to 'hard' rating)
+    newMockEvaluator.setMockResult(true, 0.65, 'Recalled with difficulty');
     await newEngine.processUserMessage('I think action creates motivation?');
-    await newEngine.processUserMessage("I kind of understand...");
 
     const pointAfterHard = await newRecallPointRepo.findById(newSeedData.recallPoints[0].id);
     const intervalAfterLowConfidence = pointAfterHard!.fsrsState.due.getTime() - Date.now();
 
     // High confidence should result in equal or longer interval than low confidence
-    // (Easy or Good vs Hard rating)
     expect(intervalAfterHighConfidence).toBeGreaterThanOrEqual(intervalAfterLowConfidence);
 
-    // Cleanup
     newSqlite.close();
   });
 
   it('should persist all session messages correctly', async () => {
-    // Start session
     const session = await engine.startSession(testRecallSet);
     await engine.getOpeningMessage();
+
+    // Configure evaluator to not recall so we get multiple conversation turns
+    mockEvaluator.setMockResult(false, 0.2, 'Not yet recalled');
 
     // Exchange several messages
     await engine.processUserMessage('First user message');
     await engine.processUserMessage('Second user message');
-    await engine.processUserMessage('I understand now!');
+    await engine.processUserMessage('Third user message');
 
     // Get all messages
     const messages = await messageRepo.findBySessionId(session.id);
 
-    // Should have: opening + 3 user messages + 3 assistant responses + transition
+    // Should have: opening (1 assistant) + 3 * (1 user + 1 assistant) = 7
     expect(messages.length).toBeGreaterThan(4);
 
     // Verify message structure
@@ -582,43 +563,39 @@ describe('Session Flow E2E', () => {
   });
 
   it('should handle failure evaluations correctly', async () => {
-    // Configure evaluator to return failure
-    mockEvaluator.setMockResult(false, 0.85, 'User did not recall the information');
+    // Configure evaluator to return failure (below 0.6 threshold)
+    mockEvaluator.setMockResult(false, 0.4, 'User did not recall the information');
 
-    // Start session
     await engine.startSession(testRecallSet);
     await engine.getOpeningMessage();
 
-    // Process messages - use a trigger phrase to force evaluation
-    // "I understand" is a trigger phrase in EVALUATION_TRIGGER_PHRASES
-    await engine.processUserMessage('I think motivation comes first?');
-    const result = await engine.processUserMessage('I think I understand now');
+    // Process messages — continuous evaluator runs but nothing is recalled
+    const result1 = await engine.processUserMessage('I think motivation comes first?');
+    expect(result1.pointsRecalledThisTurn).toHaveLength(0);
+    expect(result1.completed).toBe(false);
 
-    // Point should still advance even on failure (evaluator returned false)
-    expect(result.pointAdvanced).toBe(true);
+    const result2 = await engine.processUserMessage('I think I understand now');
+    expect(result2.pointsRecalledThisTurn).toHaveLength(0);
+    expect(result2.completed).toBe(false);
 
-    // Verify FSRS was updated with failure
+    // FSRS should NOT be updated since no points were recalled
     const point = await recallPointRepo.findById(testRecallPoints[0].id);
-    expect(point!.recallHistory[0].success).toBe(false);
-
-    // Due date should be sooner than for a successful recall
-    // (harder/forgot ratings result in shorter intervals)
-    expect(point!.fsrsState.reps).toBe(1);
+    expect(point!.recallHistory).toHaveLength(0);
+    expect(point!.fsrsState.reps).toBe(0);
   });
 
   it('should emit session events to registered listeners', async () => {
     const events: Array<{ type: string; data: unknown }> = [];
 
-    // Register event listener
     engine.setEventListener((event) => {
       events.push({ type: event.type, data: event.data });
     });
 
-    // Start session and complete a point
     await engine.startSession(testRecallSet);
     await engine.getOpeningMessage();
+
+    // Default evaluator succeeds, so both points recalled on first message
     await engine.processUserMessage('Action creates motivation!');
-    await engine.processUserMessage('I understand!');
 
     // Verify events were emitted
     const eventTypes = events.map((e) => e.type);
@@ -635,7 +612,6 @@ describe('Session Flow E2E', () => {
     // Before session starts, state should be null
     expect(engine.getSessionState()).toBeNull();
 
-    // Start session
     await engine.startSession(testRecallSet);
     await engine.getOpeningMessage();
 
@@ -651,21 +627,36 @@ describe('Session Flow E2E', () => {
   });
 
   it('should find due points correctly', async () => {
-    // All test points should be due immediately
     const duePoints = await recallPointRepo.findDuePoints(testRecallSet.id);
     expect(duePoints).toHaveLength(2);
 
     // Update one point to be due in the future
-    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // Tomorrow
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const futureState: FSRSState = {
       ...testRecallPoints[0].fsrsState,
       due: futureDate,
     };
     await recallPointRepo.updateFSRSState(testRecallPoints[0].id, futureState);
 
-    // Now only one point should be due
     const duePointsAfterUpdate = await recallPointRepo.findDuePoints(testRecallSet.id);
     expect(duePointsAfterUpdate).toHaveLength(1);
     expect(duePointsAfterUpdate[0].id).toBe(testRecallPoints[1].id);
+  });
+
+  it('should detect multi-point recall in a single message', async () => {
+    // Default evaluator returns success for all points
+    await engine.startSession(testRecallSet);
+    await engine.getOpeningMessage();
+
+    // A single user message should recall both points at once
+    const result = await engine.processUserMessage(
+      'Action creates motivation, and internal motivation (autonomy, mastery, purpose) is more sustainable.'
+    );
+
+    expect(result.pointsRecalledThisTurn).toHaveLength(2);
+    expect(result.pointsRecalledThisTurn).toContain(testRecallPoints[0].id);
+    expect(result.pointsRecalledThisTurn).toContain(testRecallPoints[1].id);
+    expect(result.completed).toBe(true);
+    expect(result.recalledCount).toBe(2);
   });
 });

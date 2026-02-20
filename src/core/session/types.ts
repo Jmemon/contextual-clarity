@@ -105,26 +105,6 @@ export interface SessionEvent {
  */
 export interface SessionEngineConfig {
   /**
-   * Maximum number of message exchanges per recall point.
-   * After this limit, evaluation is triggered automatically.
-   * Prevents excessively long discussions that might indicate
-   * the point needs to be broken down or clarified.
-   *
-   * Default: 10 messages
-   */
-  maxMessagesPerPoint: number;
-
-  /**
-   * Number of message exchanges after which to auto-evaluate.
-   * This triggers periodic evaluation checks to identify when
-   * the user has demonstrated recall, even if they don't
-   * explicitly indicate completion.
-   *
-   * Default: 6 messages
-   */
-  autoEvaluateAfter: number;
-
-  /**
    * Temperature setting for the LLM during tutoring conversations.
    * Higher values (0.7-0.9) encourage more creative, varied responses.
    * Lower values (0.3-0.5) produce more consistent, focused responses.
@@ -150,8 +130,6 @@ export interface SessionEngineConfig {
  * that encourages active recall while preventing frustration.
  */
 export const DEFAULT_SESSION_CONFIG: SessionEngineConfig = {
-  maxMessagesPerPoint: 10,
-  autoEvaluateAfter: 6,
   tutorTemperature: 0.7,
   tutorMaxTokens: 512,
 };
@@ -265,16 +243,13 @@ export interface ProcessMessageResult {
   /** Whether the session has completed (all points reviewed) */
   completed: boolean;
 
-  /** Whether the current point was just evaluated and advanced */
-  pointAdvanced: boolean;
-
   /** Number of recall points that have been recalled so far */
   recalledCount: number;
 
   /** Total number of recall points in the session */
   totalPoints: number;
 
-  /** List of point IDs recalled in this turn (will be populated by T06) */
+  /** List of point IDs recalled in this turn by the continuous evaluator */
   pointsRecalledThisTurn: string[];
 }
 
@@ -305,28 +280,3 @@ export interface SessionState {
   isComplete: boolean;
 }
 
-/**
- * Phrases that might indicate the user is ready to move on.
- *
- * These are checked (case-insensitive) to trigger evaluation.
- * The evaluation may still determine the user hasn't fully
- * demonstrated recall, in which case discussion continues.
- */
-export const EVALUATION_TRIGGER_PHRASES = [
-  'i think i understand',
-  'i understand',
-  'got it',
-  'i get it',
-  'makes sense',
-  'that makes sense',
-  'next topic',
-  'next point',
-  'move on',
-  "let's move on",
-  'next',
-  'i remember',
-  'i recall',
-  'oh right',
-  'oh yeah',
-  'of course',
-];

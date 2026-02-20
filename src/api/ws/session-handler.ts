@@ -409,18 +409,18 @@ export class WebSocketSessionHandler {
             totalPoints: result.totalPoints,
           });
         }
-      }
 
-      // If point was advanced, send point transition message
-      if (result.pointAdvanced && !result.completed) {
-        const state = data.engine.getSessionState();
-        this.send(ws, {
-          type: 'point_transition',
-          fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
-          toPointId: state?.currentProbePoint?.id || '',
-          pointsRemaining: result.totalPoints - result.recalledCount,
-          recalledCount: result.recalledCount,
-        });
+        // Send point transition if points were recalled but session isn't complete
+        if (!result.completed) {
+          const state = data.engine.getSessionState();
+          this.send(ws, {
+            type: 'point_transition',
+            fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
+            toPointId: state?.currentProbePoint?.id || '',
+            pointsRemaining: result.totalPoints - result.recalledCount,
+            recalledCount: result.recalledCount,
+          });
+        }
       }
 
       // If session completed, send completion summary
@@ -452,6 +452,7 @@ export class WebSocketSessionHandler {
   /**
    * Handles a manual evaluation trigger request.
    * Forces evaluation of the current recall point using the SessionEngine.
+   * Kept for backward compatibility — T13 will remove the trigger_eval WS type.
    *
    * @param ws - The WebSocket connection
    */
@@ -468,7 +469,7 @@ export class WebSocketSessionHandler {
     }
 
     try {
-      // Trigger real evaluation through the SessionEngine
+      // Trigger evaluation through the SessionEngine
       const result = await data.engine.triggerEvaluation();
 
       // Stream the evaluation response (feedback from the tutor)
@@ -484,18 +485,18 @@ export class WebSocketSessionHandler {
             totalPoints: result.totalPoints,
           });
         }
-      }
 
-      // If point was advanced, send point transition message
-      if (result.pointAdvanced && !result.completed) {
-        const state = data.engine.getSessionState();
-        this.send(ws, {
-          type: 'point_transition',
-          fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
-          toPointId: state?.currentProbePoint?.id || '',
-          pointsRemaining: result.totalPoints - result.recalledCount,
-          recalledCount: result.recalledCount,
-        });
+        // Send point transition if points were recalled but session isn't complete
+        if (!result.completed) {
+          const state = data.engine.getSessionState();
+          this.send(ws, {
+            type: 'point_transition',
+            fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
+            toPointId: state?.currentProbePoint?.id || '',
+            pointsRemaining: result.totalPoints - result.recalledCount,
+            recalledCount: result.recalledCount,
+          });
+        }
       }
 
       // If session completed, send completion summary

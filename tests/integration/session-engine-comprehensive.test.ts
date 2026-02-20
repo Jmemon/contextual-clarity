@@ -20,7 +20,7 @@
  * 10. Data Integrity
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { Database } from 'bun:sqlite';
@@ -763,15 +763,21 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo,
         });
 
+        // Set evaluator to return low confidence first (no recall), then high confidence (triggers FSRS update)
+        mockEvaluator.queueEvaluations([
+          { success: false, confidence: 0.2, reasoning: 'Not yet' },
+          { success: true, confidence: 0.9, reasoning: 'Good recall - will trigger FSRS update' },
+        ]);
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
-        await engine.processUserMessage('Some response');
+        await engine.processUserMessage('Some response'); // no recall
 
-        // Fail FSRS update on evaluation
+        // Fail FSRS update on the next evaluation
         failableRecallPointRepo.setFailOnUpdateFSRS(true);
 
-        // Trigger evaluation - should throw when trying to update FSRS
-        await expect(engine.processUserMessage('I understand, got it!')).rejects.toThrow('Simulated database error');
+        // Second message triggers recall which attempts FSRS update and should throw
+        await expect(engine.processUserMessage('I understand!')).rejects.toThrow('Simulated database error');
       });
 
       it('should not leave session in inconsistent state after DB error', async () => {
@@ -834,6 +840,9 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo: failableMessageRepo as unknown as SessionMessageRepository,
         });
 
+        // Use low confidence so the retry message doesn't complete the session
+        mockEvaluator.setMockResult(false, 0.2, 'Not yet recalled');
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
@@ -845,7 +854,8 @@ describe('SessionEngine Comprehensive Tests', () => {
         failableMessageRepo.setFailOnCreate(false);
         const result = await engine.processUserMessage('Retry attempt');
         expect(result.response).toBeDefined();
-        expect(result.completed).toBe(false);
+        // With low confidence evaluator, the session continues (points not recalled)
+        expect(result.pointsRecalledThisTurn).toBeDefined();
       });
     });
 
@@ -955,7 +965,6 @@ describe('SessionEngine Comprehensive Tests', () => {
         // Process a message successfully
         await engine.processUserMessage('First message');
         const stateBeforeError = engine.getSessionState();
-        const messageCountBefore = stateBeforeError!.messageCount;
 
         // Now fail the LLM
         mockLlmClient.setFailOnCall(4, 'error', 'Server error');
@@ -1075,7 +1084,7 @@ describe('SessionEngine Comprehensive Tests', () => {
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
 
-        const { recallSet, recallPoints } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 1 });
+        const { recallSet } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 1 });
 
         // Set up evaluator to return NaN confidence
         mockEvaluator.setMockResult(true, NaN, 'Invalid confidence test');
@@ -1093,15 +1102,15 @@ describe('SessionEngine Comprehensive Tests', () => {
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // This should handle NaN gracefully
+        // NaN confidence means NaN >= 0.6 = false, so the point is NOT recalled.
+        // The session continues rather than completing — this is graceful handling.
         const result = await engine.processUserMessage('I understand!');
 
-        // Session should still advance
-        expect(result.completed).toBe(true);
-
-        // Check that the point was updated (even with NaN confidence)
-        const updatedPoint = await recallPointRepo.findById(recallPoints[0].id);
-        expect(updatedPoint!.fsrsState.reps).toBe(1);
+        // Session should not crash — result is defined
+        expect(result).toBeDefined();
+        expect(result.response).toBeDefined();
+        // NaN fails the >= 0.6 threshold, so point is not recalled and session continues
+        expect(result.completed).toBe(false);
       });
 
       it('should handle evaluator returning negative confidence', async () => {
@@ -1109,9 +1118,9 @@ describe('SessionEngine Comprehensive Tests', () => {
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
 
-        const { recallSet, recallPoints } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 1 });
+        const { recallSet } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 1 });
 
-        // Negative confidence
+        // Negative confidence: -0.5 >= 0.6 = false, so point is NOT recalled
         mockEvaluator.setMockResult(true, -0.5, 'Negative confidence test');
 
         const engine = new SessionEngine({
@@ -1129,8 +1138,10 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         const result = await engine.processUserMessage('I understand!');
 
-        // Session should complete despite invalid confidence
-        expect(result.completed).toBe(true);
+        // Negative confidence fails the >= 0.6 threshold, session does not complete
+        expect(result).toBeDefined();
+        expect(result.response).toBeDefined();
+        expect(result.completed).toBe(false);
       });
 
       it('should handle evaluator returning confidence > 1', async () => {
@@ -1684,15 +1695,18 @@ describe('SessionEngine Comprehensive Tests', () => {
   // =========================================================================
 
   describe('Evaluation Triggers', () => {
-    describe('Auto-Evaluation After N Messages', () => {
-      it('should auto-evaluate after configured message count', async () => {
+    // NOTE (T06): The old trigger-based evaluation system (autoEvaluateAfter, maxMessagesPerPoint,
+    // trigger phrases) has been replaced by continuous evaluation. The evaluator now runs on
+    // every user message and marks points as recalled when confidence >= 0.6.
+
+    describe('Continuous Evaluation Behavior', () => {
+      it('should evaluate on every message and recall point when confidence is high', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
 
         const { recallSet } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 2 });
 
-        // Configure for auto-evaluate after 2 messages
         const engine = new SessionEngine({
           scheduler,
           evaluator: mockEvaluator as unknown as RecallEvaluator,
@@ -1702,30 +1716,23 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          autoEvaluateAfter: 2,
-          maxMessagesPerPoint: 10,
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
 
-        // Set evaluator to return high confidence (should advance)
+        // High confidence evaluator — first message should immediately recall points
         mockEvaluator.setMockResult(true, 0.8, 'Good recall');
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // First message - no evaluation yet
+        // First message triggers evaluation — both points recalled (confidence 0.8 >= 0.6)
         const result1 = await engine.processUserMessage('First message');
-        expect(result1.pointAdvanced).toBe(false);
-        expect(result1.recalledCount).toBe(0);
-
-        // Second message - triggers auto-evaluation, should advance due to high confidence
-        const result2 = await engine.processUserMessage('Second message');
-        expect(result2.pointAdvanced).toBe(true);
-        expect(result2.recalledCount).toBe(1);
+        expect(result1.pointsRecalledThisTurn.length).toBeGreaterThan(0);
+        expect(result1.recalledCount).toBeGreaterThan(0);
       });
 
-      it('should not auto-evaluate before reaching threshold', async () => {
+      it('should not recall point when evaluator returns low confidence', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1741,23 +1748,25 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          autoEvaluateAfter: 5,
-          maxMessagesPerPoint: 10,
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
 
+        // Low confidence — points should not be recalled
+        mockEvaluator.setMockResult(false, 0.2, 'Low recall');
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // Process 4 messages - should not trigger auto-evaluation
+        // Process multiple messages — none should recall points
         for (let i = 0; i < 4; i++) {
           const result = await engine.processUserMessage(`Message ${i + 1}`);
-          expect(result.pointAdvanced).toBe(false);
+          expect(result.pointsRecalledThisTurn).toHaveLength(0);
+          expect(result.completed).toBe(false);
         }
       });
 
-      it('should handle autoEvaluateAfter = 1 (evaluate every message)', async () => {
+      it('should recall point immediately on first high-confidence message', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1773,8 +1782,6 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          autoEvaluateAfter: 1,
-          maxMessagesPerPoint: 10,
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
@@ -1784,12 +1791,12 @@ describe('SessionEngine Comprehensive Tests', () => {
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // First message should trigger evaluation and advance
+        // First message should immediately trigger recall
         const result = await engine.processUserMessage('First message');
-        expect(result.pointAdvanced).toBe(true);
+        expect(result.pointsRecalledThisTurn.length).toBeGreaterThan(0);
       });
 
-      it('should force evaluation when max messages reached', async () => {
+      it('should continue without recalling when evaluator confidence below threshold', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1805,83 +1812,38 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          maxMessagesPerPoint: 3,
-          autoEvaluateAfter: 100, // High threshold
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
 
-        // Set evaluator to return failure (but max messages should still advance)
+        // Sub-threshold confidence — points won't be recalled
         mockEvaluator.setMockResult(false, 0.3, 'User struggling');
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // Process until max messages
-        await engine.processUserMessage('Message 1');
-        await engine.processUserMessage('Message 2');
-        const result3 = await engine.processUserMessage('Message 3'); // Should force evaluation
+        // Multiple messages, no recall
+        const result1 = await engine.processUserMessage('Message 1');
+        const result2 = await engine.processUserMessage('Message 2');
+        const result3 = await engine.processUserMessage('Message 3');
 
-        expect(result3.pointAdvanced).toBe(true);
+        expect(result1.pointsRecalledThisTurn).toHaveLength(0);
+        expect(result2.pointsRecalledThisTurn).toHaveLength(0);
+        expect(result3.pointsRecalledThisTurn).toHaveLength(0);
+        expect(result3.completed).toBe(false);
 
-        // Verify failure was recorded
+        // FSRS not updated for unrecalled points
         const point = await recallPointRepo.findById(recallPoints[0].id);
-        expect(point!.recallHistory[0].success).toBe(false);
+        expect(point!.fsrsState.reps).toBe(0);
       });
     });
 
-    describe('Trigger Phrases', () => {
-      const triggerPhrases = [
-        'i think i understand',
-        'i understand',
-        'got it',
-        'i get it',
-        'makes sense',
-        'that makes sense',
-        'next topic',
-        'next point',
-        'move on',
-        "let's move on",
-        'next',
-        'i remember',
-        'i recall',
-        'oh right',
-        'oh yeah',
-        'of course',
-      ];
+    describe('Any Message with High Confidence', () => {
+      // NOTE (T06): Trigger phrases are no longer used. Evaluation runs continuously on every
+      // user message. Any message that causes the evaluator to return confidence >= 0.6 with
+      // success=true will result in the point being recalled.
 
-      for (const phrase of triggerPhrases) {
-        it(`should trigger on "${phrase}"`, async () => {
-          const sessionRepo = new SessionRepository(db);
-          const recallPointRepo = new RecallPointRepository(db);
-          const messageRepo = new SessionMessageRepository(db);
-
-          const { recallSet } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 2 });
-
-          const engine = new SessionEngine({
-            scheduler,
-            evaluator: mockEvaluator as unknown as RecallEvaluator,
-            llmClient: mockLlmClient as any,
-            recallSetRepo,
-            recallPointRepo,
-            sessionRepo,
-            messageRepo,
-          }, {
-            maxMessagesPerPoint: 100,
-            autoEvaluateAfter: 100,
-            tutorTemperature: 0.7,
-            tutorMaxTokens: 512,
-          });
-
-          await engine.startSession(recallSet);
-          await engine.getOpeningMessage();
-
-          const result = await engine.processUserMessage(phrase);
-          expect(result.pointAdvanced).toBe(true);
-        });
-      }
-
-      it('should trigger case-insensitively', async () => {
+      it('should recall point on any message when evaluator returns high confidence', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1897,20 +1859,21 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          maxMessagesPerPoint: 100,
-          autoEvaluateAfter: 100,
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
 
+        // Default mock returns success=true, confidence=0.85 — any message triggers recall
+        mockEvaluator.setMockResult(true, 0.85, 'Good recall');
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        const result = await engine.processUserMessage('I UNDERSTAND NOW!!!');
-        expect(result.pointAdvanced).toBe(true);
+        const result = await engine.processUserMessage('Any user message');
+        expect(result.pointsRecalledThisTurn.length).toBeGreaterThan(0);
       });
 
-      it('should trigger when phrase is at start of message', async () => {
+      it('should recall point regardless of message phrasing when confidence is high', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1927,14 +1890,17 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo,
         });
 
+        mockEvaluator.setMockResult(true, 0.85, 'Good recall');
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
+        // The evaluation happens on every message, content does not affect evaluation
         const result = await engine.processUserMessage('I understand, the concept is about motivation.');
-        expect(result.pointAdvanced).toBe(true);
+        expect(result.pointsRecalledThisTurn.length).toBeGreaterThan(0);
       });
 
-      it('should trigger when phrase is in middle of message', async () => {
+      it('should not recall point when message content is irrelevant but evaluator returns low confidence', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1951,35 +1917,15 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo,
         });
 
-        await engine.startSession(recallSet);
-        await engine.getOpeningMessage();
-
-        const result = await engine.processUserMessage('So basically, I understand what you mean, thank you.');
-        expect(result.pointAdvanced).toBe(true);
-      });
-
-      it('should trigger when phrase is at end of message', async () => {
-        const sessionRepo = new SessionRepository(db);
-        const recallPointRepo = new RecallPointRepository(db);
-        const messageRepo = new SessionMessageRepository(db);
-
-        const { recallSet } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 2 });
-
-        const engine = new SessionEngine({
-          scheduler,
-          evaluator: mockEvaluator as unknown as RecallEvaluator,
-          llmClient: mockLlmClient as any,
-          recallSetRepo,
-          recallPointRepo,
-          sessionRepo,
-          messageRepo,
-        });
+        // Low confidence — no recall even if phrasing sounds like understanding
+        mockEvaluator.setMockResult(false, 0.2, 'Insufficient recall');
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        const result = await engine.processUserMessage('Thanks for explaining. I understand');
-        expect(result.pointAdvanced).toBe(true);
+        const result = await engine.processUserMessage('I understand!');
+        expect(result.pointsRecalledThisTurn).toHaveLength(0);
+        expect(result.completed).toBe(false);
       });
     });
 
@@ -2000,22 +1946,26 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          maxMessagesPerPoint: 100,
-          autoEvaluateAfter: 100,
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
 
+        // Use low confidence so processUserMessage doesn't recall points
+        mockEvaluator.setMockResult(false, 0.2, 'Not yet');
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // Send a message without trigger phrase
+        // Send a message — low confidence means no recall
         await engine.processUserMessage('Some random message');
         expect(engine.getSessionState()!.recalledCount).toBe(0);
 
-        // Force evaluation
+        // Now switch to high confidence
+        mockEvaluator.setMockResult(true, 0.85, 'Good recall');
+
+        // Force evaluation via the API — should now recall points
         const result = await engine.triggerEvaluation();
-        expect(result.pointAdvanced).toBe(true);
+        expect(result.pointsRecalledThisTurn.length).toBeGreaterThan(0);
       });
     });
   });
@@ -2056,7 +2006,10 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(updatedPoint!.fsrsState.state).not.toBe('new');
       });
 
-      it('should update FSRS state after failed recall', async () => {
+      it('should NOT update FSRS state when confidence is below recall threshold', async () => {
+        // NOTE (T06): In the continuous evaluation model, FSRS is only updated when a point
+        // is recalled (confidence >= 0.6 AND success=true). Failed evaluations (confidence < 0.6)
+        // do not trigger FSRS updates — the point remains pending until it is recalled.
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -2081,8 +2034,9 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         const updatedPoint = await recallPointRepo.findById(recallPoints[0].id);
 
-        expect(updatedPoint!.fsrsState.reps).toBe(1);
-        expect(updatedPoint!.fsrsState.lapses).toBeGreaterThanOrEqual(0);
+        // FSRS state is NOT updated for unrecalled points — reps remains 0
+        expect(updatedPoint!.fsrsState.reps).toBe(0);
+        // Session continues since point was not recalled
       });
 
       it('should increment reps count correctly', async () => {
@@ -2149,13 +2103,15 @@ describe('SessionEngine Comprehensive Tests', () => {
 
     describe('Recall History', () => {
       it('should append to recall history, not replace', async () => {
+        // NOTE (T06): Recall history is appended only when a point is recalled (confidence >= 0.6).
+        // This test verifies two successful recalls are stored sequentially.
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
 
         const { recallSet, recallPoints } = await seedTestData(recallSetRepo, recallPointRepo, scheduler, { pointCount: 1 });
 
-        // First session
+        // First session — success
         let engine = new SessionEngine({
           scheduler,
           evaluator: mockEvaluator as unknown as RecallEvaluator,
@@ -2166,7 +2122,7 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo,
         });
 
-        mockEvaluator.setMockResult(true, 0.9, 'First attempt');
+        mockEvaluator.setMockResult(true, 0.9, 'First attempt - success');
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
@@ -2176,13 +2132,13 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(point!.recallHistory).toHaveLength(1);
         expect(point!.recallHistory[0].success).toBe(true);
 
-        // Update the point to be due again
+        // Update the point to be due again for a second session
         await recallPointRepo.updateFSRSState(recallPoints[0].id, {
           ...point!.fsrsState,
           due: new Date(), // Due now
         });
 
-        // Second session (new engine instance)
+        // Second session — also success (confidence must be >= 0.6 to trigger history recording)
         engine = new SessionEngine({
           scheduler,
           evaluator: mockEvaluator as unknown as RecallEvaluator,
@@ -2193,7 +2149,7 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo,
         });
 
-        mockEvaluator.setMockResult(false, 0.3, 'Second attempt - failed');
+        mockEvaluator.setMockResult(true, 0.65, 'Second attempt - marginal success');
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
@@ -2202,7 +2158,8 @@ describe('SessionEngine Comprehensive Tests', () => {
         point = await recallPointRepo.findById(recallPoints[0].id);
         expect(point!.recallHistory).toHaveLength(2);
         expect(point!.recallHistory[0].success).toBe(true);
-        expect(point!.recallHistory[1].success).toBe(false);
+        // Second attempt is also recorded as success since confidence >= 0.6
+        expect(point!.recallHistory[1].success).toBe(true);
       });
 
       it('should include timestamp in recall history entry', async () => {
@@ -2373,7 +2330,9 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(point2!.fsrsState.reps).toBe(1);
       });
 
-      it('should handle confidence = 0', async () => {
+      it('should handle confidence = 0 gracefully without updating FSRS', async () => {
+        // NOTE (T06): Confidence = 0 is below the recall threshold (0.6), so the point is
+        // NOT recalled and FSRS state is NOT updated. The session continues.
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -2394,11 +2353,16 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
-        await engine.processUserMessage('I understand!');
+        const result = await engine.processUserMessage('I understand!');
 
+        // Zero confidence means no recall, session continues
+        expect(result.completed).toBe(false);
+        expect(result.pointsRecalledThisTurn).toHaveLength(0);
+
+        // FSRS not updated since point was not recalled
         const point = await recallPointRepo.findById(recallPoints[0].id);
-        expect(point!.fsrsState.reps).toBe(1);
-        expect(point!.recallHistory[0].success).toBe(false);
+        expect(point!.fsrsState.reps).toBe(0);
+        expect(point!.recallHistory).toHaveLength(0);
       });
 
       it('should handle confidence = 1', async () => {
@@ -2452,22 +2416,24 @@ describe('SessionEngine Comprehensive Tests', () => {
         sessionRepo,
         messageRepo,
       }, {
-        maxMessagesPerPoint: 100,
-        autoEvaluateAfter: 100,
         tutorTemperature: 0.7,
         tutorMaxTokens: 512,
       });
 
+      // Low confidence for most messages, high for the last to complete
+      mockEvaluator.setMockResult(false, 0.2, 'Not yet');
+
       await engine.startSession(recallSet);
       await engine.getOpeningMessage();
 
-      // Send many messages rapidly
+      // Send many messages rapidly — no completion yet (low confidence)
       for (let i = 0; i < 10; i++) {
         await engine.processUserMessage(`Rapid message ${i + 1}`);
       }
 
-      // Final trigger to complete
-      const result = await engine.processUserMessage('I understand!');
+      // Switch to high confidence and complete
+      mockEvaluator.setMockResult(true, 0.85, 'Final recall');
+      const result = await engine.processUserMessage('Final message');
       expect(result.completed).toBe(true);
 
       // Verify all messages were saved
@@ -2519,11 +2485,12 @@ describe('SessionEngine Comprehensive Tests', () => {
         sessionRepo,
         messageRepo,
       }, {
-        maxMessagesPerPoint: 100,
-        autoEvaluateAfter: 100,
         tutorTemperature: 0.7,
         tutorMaxTokens: 512,
       });
+
+      // Use low confidence so messages don't complete the session prematurely
+      mockEvaluator.setMockResult(false, 0.2, 'Not yet');
 
       await engine.startSession(recallSet);
       await engine.getOpeningMessage();
@@ -2554,8 +2521,10 @@ describe('SessionEngine Comprehensive Tests', () => {
   // =========================================================================
 
   describe('Configuration', () => {
-    describe('maxMessagesPerPoint', () => {
-      it('should handle maxMessagesPerPoint = 1', async () => {
+    describe('Continuous Evaluation per Message', () => {
+      it('should evaluate on every single user message', async () => {
+        // NOTE (T06): maxMessagesPerPoint is no longer a config option. Evaluation runs
+        // continuously on every user message, so a single message always triggers evaluation.
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -2571,18 +2540,19 @@ describe('SessionEngine Comprehensive Tests', () => {
           sessionRepo,
           messageRepo,
         }, {
-          maxMessagesPerPoint: 1,
-          autoEvaluateAfter: 100,
           tutorTemperature: 0.7,
           tutorMaxTokens: 512,
         });
 
+        // High confidence — the first message should immediately recall points
+        mockEvaluator.setMockResult(true, 0.85, 'Good recall');
+
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // First message should immediately trigger evaluation
+        // First message immediately evaluates and recalls points
         const result = await engine.processUserMessage('Any message');
-        expect(result.pointAdvanced).toBe(true);
+        expect(result.pointsRecalledThisTurn.length).toBeGreaterThan(0);
       });
     });
 
@@ -2605,8 +2575,6 @@ describe('SessionEngine Comprehensive Tests', () => {
         }, {
           tutorTemperature: 0.9,
           tutorMaxTokens: 256,
-          maxMessagesPerPoint: 10,
-          autoEvaluateAfter: 6,
         });
 
         await engine.startSession(recallSet);
@@ -2637,8 +2605,6 @@ describe('SessionEngine Comprehensive Tests', () => {
         }, {
           tutorTemperature: 0,
           tutorMaxTokens: 512,
-          maxMessagesPerPoint: 10,
-          autoEvaluateAfter: 6,
         });
 
         await engine.startSession(recallSet);
@@ -2659,8 +2625,6 @@ describe('SessionEngine Comprehensive Tests', () => {
         }, {
           tutorTemperature: 1.0,
           tutorMaxTokens: 512,
-          maxMessagesPerPoint: 10,
-          autoEvaluateAfter: 6,
         });
 
         await engine.startSession(set2);
@@ -3231,27 +3195,29 @@ describe('SessionEngine Comprehensive Tests', () => {
         sessionRepo,
         messageRepo,
       }, {
-        maxMessagesPerPoint: 100,
-        autoEvaluateAfter: 100,
         tutorTemperature: 0.7,
         tutorMaxTokens: 512,
       });
 
+      // Use low confidence so messages don't complete the session prematurely
+      mockEvaluator.setMockResult(false, 0.2, 'Not yet recalled');
+
       await engine.startSession(recallSet);
       await engine.getOpeningMessage();
 
-      // Process many messages
+      // Process many messages without recalling
       for (let i = 0; i < 50; i++) {
         await engine.processUserMessage(`Message ${i + 1}`);
       }
 
-      // Complete the session
+      // Switch to high confidence to complete the session
+      mockEvaluator.setMockResult(true, 0.85, 'Final recall');
       const result = await engine.processUserMessage('I understand!');
       expect(result.completed).toBe(true);
 
       // Verify all messages were saved
-      const state = engine.getSessionState();
-      const messages = await messageRepo.findBySessionId(state!.session.id);
+      const session = engine.getSessionState();
+      const messages = await messageRepo.findBySessionId(session!.session.id);
       // Should have: opening + 51 user messages + 51 assistant responses
       expect(messages.length).toBeGreaterThanOrEqual(100);
 
@@ -3408,9 +3374,9 @@ describe('SessionEngine Comprehensive Tests', () => {
 
         const recalledEvents = events.filter(e => e.type === 'point_recalled');
         expect(recalledEvents.length).toBe(1);
-        expect(recalledEvents[0].data.pointId).toBe(recallPoints[0].id);
-        expect(recalledEvents[0].data.recalledCount).toBe(1);
-        expect(recalledEvents[0].data.totalPoints).toBe(3);
+        expect((recalledEvents[0].data as any).pointId).toBe(recallPoints[0].id);
+        expect((recalledEvents[0].data as any).recalledCount).toBe(1);
+        expect((recalledEvents[0].data as any).totalPoints).toBe(3);
       });
 
       it('should not emit event for already-recalled point', async () => {

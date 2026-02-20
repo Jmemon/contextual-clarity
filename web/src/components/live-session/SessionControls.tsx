@@ -2,18 +2,18 @@
  * Session Controls Component for Live Sessions
  *
  * Provides control buttons for managing the live session:
- * - "I've got it" button to trigger recall evaluation
  * - "End Session" button to end the session early
  *
+ * The "I've got it!" button has been removed (T06) — recall evaluation
+ * now happens continuously after every user message.
+ *
  * Features:
- * - Loading states for async operations
  * - Disabled states when waiting for response
  * - Confirmation for ending session early
  *
  * @example
  * ```tsx
  * <SessionControls
- *   onTriggerEvaluation={triggerEvaluation}
  *   onEndSession={endSession}
  *   disabled={isWaitingForResponse}
  * />
@@ -28,14 +28,10 @@ import { Button } from '@/components/ui/Button';
 // ============================================================================
 
 export interface SessionControlsProps extends HTMLAttributes<HTMLDivElement> {
-  /** Callback when "I've got it" is clicked */
-  onTriggerEvaluation: () => void;
   /** Callback when "End Session" is clicked (after confirmation) */
   onEndSession: () => void;
   /** Whether controls are disabled (e.g., waiting for response) */
   disabled?: boolean;
-  /** Whether evaluation is in progress */
-  isEvaluating?: boolean;
   /** Whether the session has completed */
   isSessionComplete?: boolean;
 }
@@ -46,28 +42,17 @@ export interface SessionControlsProps extends HTMLAttributes<HTMLDivElement> {
 
 /**
  * Control buttons for live session actions.
- * Includes "I've got it" for triggering evaluation and "End Session" for early exit.
+ * Includes "End Session" for early exit. Recall evaluation is now continuous (T06).
  */
 export function SessionControls({
-  onTriggerEvaluation,
   onEndSession,
   disabled = false,
-  isEvaluating = false,
   isSessionComplete = false,
   className = '',
   ...props
 }: SessionControlsProps) {
   // State for showing end session confirmation
   const [showEndConfirm, setShowEndConfirm] = useState(false);
-
-  /**
-   * Handle "I've got it" click.
-   */
-  const handleTriggerEvaluation = () => {
-    if (!disabled && !isEvaluating) {
-      onTriggerEvaluation();
-    }
-  };
 
   /**
    * Handle end session request.
@@ -96,19 +81,6 @@ export function SessionControls({
 
   return (
     <div className={`flex flex-wrap items-center gap-3 ${className}`} {...props}>
-      {/* "I've got it" button - main action */}
-      <Button
-        data-testid="trigger-evaluation-btn"
-        variant="primary"
-        size="md"
-        onClick={handleTriggerEvaluation}
-        disabled={disabled || isEvaluating}
-        isLoading={isEvaluating}
-        className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
-      >
-        {isEvaluating ? 'Evaluating...' : "I've got it!"}
-      </Button>
-
       {/* End session button/confirmation */}
       {showEndConfirm ? (
         <div className="flex items-center gap-2">

@@ -61,5 +61,4 @@ export type {
 // Constants
 export {
   DEFAULT_SESSION_CONFIG,
-  EVALUATION_TRIGGER_PHRASES,
 } from './types';

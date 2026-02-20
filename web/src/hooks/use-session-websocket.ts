@@ -154,8 +154,6 @@ export interface UseSessionWebSocketReturn {
   isWaitingForResponse: boolean;
   /** Send a user message */
   sendUserMessage: (content: string) => void;
-  /** Trigger evaluation ("I've got it" button) */
-  triggerEvaluation: () => void;
   /** End the session early */
   endSession: () => void;
   /** Manually connect to WebSocket */
@@ -528,14 +526,6 @@ export function useSessionWebSocket(
   );
 
   /**
-   * Trigger evaluation ("I've got it" button).
-   */
-  const triggerEvaluation = useCallback(() => {
-    sendMessage({ type: 'trigger_eval' });
-    setIsWaitingForResponse(true);
-  }, [sendMessage]);
-
-  /**
    * End the session early.
    */
   const endSession = useCallback(() => {
@@ -563,7 +553,6 @@ export function useSessionWebSocket(
     totalPoints,
     isWaitingForResponse,
     sendUserMessage,
-    triggerEvaluation,
     endSession,
     connect,
     disconnect,

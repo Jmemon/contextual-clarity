@@ -9,8 +9,8 @@
  * 2. **Conversation Management**: Tracks messages, maintains context, coordinates
  *    between user input and AI tutor responses.
  *
- * 3. **Recall Evaluation**: Monitors conversation for evaluation triggers, assesses
- *    recall success using LLM-powered evaluation.
+ * 3. **Recall Evaluation**: Continuously evaluates all unchecked recall points after
+ *    every user message using LLM-powered evaluation.
  *
  * 4. **Progress Tracking**: Advances through recall points, updates FSRS scheduling
  *    state based on evaluation results.
@@ -23,10 +23,10 @@
  * startSession() -> getOpeningMessage() -> [processUserMessage() loop] -> completion
  *                                               |
  *                                               v
- *                                    [automatic evaluation when triggered]
+ *                                    [continuous evaluation of all unchecked points]
  *                                               |
  *                                               v
- *                                    [advance to next point or complete]
+ *                                    [mark recalled points, inject feedback, or complete]
  * ```
  *
  * @example
@@ -71,7 +71,6 @@ import {
   type SessionEvent,
   type SessionState,
   DEFAULT_SESSION_CONFIG,
-  EVALUATION_TRIGGER_PHRASES,
 } from './types';
 import type { SessionMetricsCollector } from './metrics-collector';
 import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
@@ -185,9 +184,6 @@ export class SessionEngine {
 
   /** Messages in the current session, loaded from DB and kept in sync */
   private messages: SessionMessage[] = [];
-
-  /** Count of messages exchanged for the current recall point */
-  private currentPointMessageCount: number = 0;
 
   /** Optional event listener for session events */
   private eventListener?: (event: SessionEvent) => void;
@@ -362,7 +358,6 @@ export class SessionEngine {
     );
     this.currentProbeIndex = 0;
     this.messages = [];
-    this.currentPointMessageCount = 0;
     this.currentPointStartIndex = 0;
 
     // === Phase 2: Initialize metrics collection for the new session ===
@@ -427,7 +422,6 @@ export class SessionEngine {
       this.targetPoints.map(p => [p.id, 'pending'])
     );
     this.currentProbeIndex = 0;
-    this.currentPointMessageCount = existingMessages.length;
     this.currentPointStartIndex = 0;
 
     // === Phase 2: Initialize metrics collection for resumed session ===
@@ -516,66 +510,59 @@ export class SessionEngine {
    *
    * This is the main interaction loop method. It:
    * 1. Saves the user message
-   * 2. Checks for evaluation triggers (phrases or message count)
-   * 3. Either evaluates and advances, or generates a follow-up response
+   * 2. Runs continuous evaluation against all unchecked points
+   * 3. For each recalled point, records the outcome and marks it recalled
+   * 4. If all points recalled, completes the session
+   * 5. Otherwise generates a tutor response with evaluator feedback injected
+   *
+   * The continuous evaluator runs after every user message — no trigger phrases
+   * or message-count thresholds are needed.
    *
    * @param content - The user's message content
    * @returns Result containing the response and session status
    * @throws Error if no session is active
-   *
-   * @example
-   * ```typescript
-   * const result = await engine.processUserMessage(userInput);
-   * console.log('Tutor:', result.response);
-   *
-   * if (result.pointAdvanced) {
-   *   console.log(`Recalled ${result.recalledCount} of ${result.totalPoints}`);
-   * }
-   *
-   * if (result.completed) {
-   *   console.log('Session complete!');
-   * }
-   * ```
    */
   async processUserMessage(content: string): Promise<ProcessMessageResult> {
     this.validateActiveSession();
 
     // Save the user message
     await this.saveMessage('user', content);
-    this.currentPointMessageCount++;
 
     // Emit user message event
     this.emitEvent('user_message', {
       content,
-      messageCount: this.currentPointMessageCount,
     });
 
     // === Phase 2: Detect rabbitholes after user message ===
     // Check if the user's message indicates a conversational tangent
     await this.detectAndRecordRabbithole();
 
-    // Check if we should trigger evaluation
-    const shouldEvaluate =
-      this.shouldTriggerEvaluation(content) ||
-      this.currentPointMessageCount >= this.config.maxMessagesPerPoint;
+    // === T06: Continuous evaluation — evaluate ALL unchecked points after every user message ===
+    const evalResult = await this.evaluateUncheckedPoints();
 
-    // If evaluation is triggered, evaluate and potentially advance
-    if (shouldEvaluate) {
-      return this.evaluateAndAdvance();
+    // Mark each recalled point and record FSRS outcome
+    for (const pointId of evalResult.recalledPointIds) {
+      this.markPointRecalled(pointId);
+      const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
+      await this.recordRecallOutcome(pointId, {
+        success: true,
+        confidence,
+        reasoning: `Continuous evaluation detected recall with confidence ${confidence}`,
+      });
     }
 
-    // Check for auto-evaluation threshold
-    if (this.currentPointMessageCount >= this.config.autoEvaluateAfter) {
-      // Do a "soft" evaluation check - only advance if clearly successful
-      const evaluation = await this.evaluateCurrentPoint();
-      if (evaluation.success && evaluation.confidence >= 0.7) {
-        return this.advanceToNextPoint(evaluation);
-      }
-      // Otherwise, continue the conversation
+    // If all points are recalled, handle session completion
+    if (this.allPointsRecalled()) {
+      return this.handleSessionCompletion(evalResult);
     }
 
-    // Generate a follow-up response from the tutor
-    const response = await this.generateTutorResponse();
+    // Update the LLM prompt to reflect newly recalled points (if any)
+    if (evalResult.recalledPointIds.length > 0) {
+      this.updateLLMPrompt();
+    }
+
+    // Generate a follow-up response from the tutor, injecting evaluator feedback
+    const response = await this.generateTutorResponse(evalResult.feedback || undefined);
 
     // === Phase 2: Check for rabbithole returns after assistant response ===
     // Check if any active rabbitholes have concluded (returned to main topic)
@@ -584,33 +571,54 @@ export class SessionEngine {
     return {
       response,
       completed: false,
-      pointAdvanced: false,
       recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
-      pointsRecalledThisTurn: [],
+      pointsRecalledThisTurn: evalResult.recalledPointIds,
     };
   }
 
   /**
    * Manually triggers evaluation and advancement.
    *
-   * Use this when you want to force an evaluation, regardless of
-   * trigger phrases or message count.
+   * Kept for backward compatibility with WS protocol (T13 will remove the WS trigger_eval type).
+   * Uses the same continuous evaluation logic as processUserMessage.
    *
    * @returns Result containing the response and session status
    * @throws Error if no session is active
-   *
-   * @example
-   * ```typescript
-   * // User explicitly requests to move on
-   * if (userRequestedNext) {
-   *   const result = await engine.triggerEvaluation();
-   * }
-   * ```
    */
   async triggerEvaluation(): Promise<ProcessMessageResult> {
     this.validateActiveSession();
-    return this.evaluateAndAdvance();
+
+    // Run the same continuous evaluation as processUserMessage
+    const evalResult = await this.evaluateUncheckedPoints();
+
+    for (const pointId of evalResult.recalledPointIds) {
+      this.markPointRecalled(pointId);
+      const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
+      await this.recordRecallOutcome(pointId, {
+        success: true,
+        confidence,
+        reasoning: `Manual trigger evaluation detected recall with confidence ${confidence}`,
+      });
+    }
+
+    if (this.allPointsRecalled()) {
+      return this.handleSessionCompletion(evalResult);
+    }
+
+    if (evalResult.recalledPointIds.length > 0) {
+      this.updateLLMPrompt();
+    }
+
+    const response = await this.generateTutorResponse(evalResult.feedback || undefined);
+
+    return {
+      response,
+      completed: false,
+      recalledCount: this.getRecalledCount(),
+      totalPoints: this.targetPoints.length,
+      pointsRecalledThisTurn: evalResult.recalledPointIds,
+    };
   }
 
   /**
@@ -665,184 +673,140 @@ export class SessionEngine {
     };
   }
 
-  /**
-   * Checks if the user message contains evaluation trigger phrases.
-   *
-   * These phrases indicate the user believes they understand the material
-   * and are ready to move on. The actual evaluation may still determine
-   * they need more practice.
-   *
-   * @param userMessage - The user's message to check
-   * @returns true if the message contains trigger phrases
-   */
-  private shouldTriggerEvaluation(userMessage: string): boolean {
-    const lowerMessage = userMessage.toLowerCase();
-
-    return EVALUATION_TRIGGER_PHRASES.some((phrase) =>
-      lowerMessage.includes(phrase)
-    );
-  }
+  // ============================================================================
+  // T06: Continuous Evaluation Methods
+  // ============================================================================
 
   /**
-   * Evaluates the current recall point and advances to the next.
-   *
-   * This method:
-   * 1. Evaluates the user's recall using the LLM evaluator
-   * 2. Determines the appropriate FSRS rating based on evaluation
-   * 3. Updates the recall point's FSRS state
-   * 4. Advances to the next point or completes the session
-   *
-   * @returns Result with response and session status
+   * Aggregated result from running continuous evaluation against all unchecked points.
+   * This is a local interface — not exported.
    */
-  private async evaluateAndAdvance(): Promise<ProcessMessageResult> {
-    // Evaluate the current recall
-    const evaluation = await this.evaluateCurrentPoint();
-
-    // Get the current probe point for the evaluation event
-    const probePoint = this.getNextProbePoint();
-    // Emit evaluation event
-    this.emitEvent('point_evaluated', {
-      pointId: probePoint?.id ?? '',
-      success: evaluation.success,
-      confidence: evaluation.confidence,
-      reasoning: evaluation.reasoning,
-    });
-
-    return this.advanceToNextPoint(evaluation);
-  }
+  // (ContinuousEvalResult is defined inline below as a return type)
 
   /**
-   * Evaluates whether the user has demonstrated recall of the current point.
+   * Evaluates all unchecked recall points against the current conversation.
    *
-   * Uses the RecallEvaluator to analyze the conversation and determine
-   * if the user successfully recalled the target information.
+   * Iterates over every unchecked point and calls the existing evaluator API.
+   * Points with confidence >= 0.6 are marked as recalled. Points with confidence
+   * >= 0.3 but < 0.6 produce feedback for the tutor (near-miss observation).
    *
-   * Phase 2: When metrics collection is enabled, uses enhanced evaluation
-   * to capture detailed concept analysis and suggested FSRS rating.
+   * Uses evaluateEnhanced() when metrics are enabled, otherwise basic evaluate().
    *
-   * @returns The evaluation result with success, confidence, and reasoning
+   * @returns Aggregated result with recalled point IDs, confidence map, and feedback string
    */
-  private async evaluateCurrentPoint(): Promise<RecallEvaluation> {
-    const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
+  private async evaluateUncheckedPoints(): Promise<{
+    recalledPointIds: string[];
+    confidencePerPoint: Map<string, number>;
+    feedback: string;
+  }> {
+    const unchecked = this.getUncheckedPoints();
+    const recalledPointIds: string[] = [];
+    const confidencePerPoint = new Map<string, number>();
+    const feedbackParts: string[] = [];
 
-    // === Phase 2: Use enhanced evaluation when metrics are enabled ===
-    // Enhanced evaluation provides concept-level analysis and rating suggestions
-    if (this.metricsEnabled) {
-      const enhancedEvaluation = await this.evaluator.evaluateEnhanced(
-        currentPoint,
-        this.messages,
-        {
-          attemptNumber: currentPoint.fsrsState?.reps ?? 1,
-          previousSuccesses: currentPoint.fsrsState?.reps ?? 0,
-          topic: this.currentRecallSet?.name ?? 'Unknown',
-        }
-      );
+    for (const point of unchecked) {
+      let evaluation: RecallEvaluation;
 
-      // Record the recall outcome in the metrics collector
-      if (this.metricsCollector) {
-        const messageEndIndex = this.messages.length - 1;
-        this.metricsCollector.recordRecallOutcome(
-          currentPoint.id,
-          enhancedEvaluation,
-          this.currentPointStartIndex,
-          messageEndIndex
+      // Use enhanced evaluation when metrics are enabled for richer data
+      if (this.metricsEnabled) {
+        const enhancedEvaluation = await this.evaluator.evaluateEnhanced(
+          point,
+          this.messages,
+          {
+            attemptNumber: point.fsrsState?.reps ?? 1,
+            previousSuccesses: point.fsrsState?.reps ?? 0,
+            topic: this.currentRecallSet?.name ?? 'Unknown',
+          }
         );
+
+        // Record in metrics collector
+        if (this.metricsCollector) {
+          const messageEndIndex = this.messages.length - 1;
+          this.metricsCollector.recordRecallOutcome(
+            point.id,
+            enhancedEvaluation,
+            this.currentPointStartIndex,
+            messageEndIndex
+          );
+        }
+
+        evaluation = enhancedEvaluation;
+      } else {
+        evaluation = await this.evaluator.evaluate(point, this.messages);
       }
 
-      return enhancedEvaluation;
+      confidencePerPoint.set(point.id, evaluation.confidence);
+
+      // Emit evaluation event for each point
+      this.emitEvent('point_evaluated', {
+        pointId: point.id,
+        success: evaluation.success,
+        confidence: evaluation.confidence,
+        reasoning: evaluation.reasoning,
+      });
+
+      // Confidence >= 0.6: point is recalled
+      if (evaluation.success && evaluation.confidence >= 0.6) {
+        recalledPointIds.push(point.id);
+
+        // Emit point_completed event with FSRS data
+        const rating = this.evaluationToRating(evaluation);
+        const newState = this.scheduler.schedule(point.fsrsState, rating);
+        this.emitEvent('point_completed', {
+          pointId: point.id,
+          rating,
+          newDueDate: newState.due,
+          success: evaluation.success,
+        });
+
+        feedbackParts.push(
+          `The user demonstrated recall of "${point.content.substring(0, 60)}..." (confidence: ${evaluation.confidence.toFixed(2)}).`
+        );
+      } else if (evaluation.confidence >= 0.3) {
+        // Near-miss: provide feedback to help the tutor guide the user
+        feedbackParts.push(
+          `The user is close to recalling "${point.content.substring(0, 60)}..." but hasn't fully demonstrated it yet (confidence: ${evaluation.confidence.toFixed(2)}). ${evaluation.reasoning}`
+        );
+      }
+      // Below 0.3: no feedback — point is not close to being recalled
     }
 
-    // Fallback: Use basic evaluation when metrics collection is disabled
-    const evaluation = await this.evaluator.evaluate(
-      currentPoint,
-      this.messages
-    );
-
-    return evaluation;
+    return {
+      recalledPointIds,
+      confidencePerPoint,
+      feedback: feedbackParts.join(' '),
+    };
   }
 
   /**
-   * Advances to the next recall point or completes the session.
-   * @deprecated TODO (T06): Remove this method. Responsibilities split into:
-   * - FSRS update + recall history -> recordRecallOutcome()
-   * - Index advancement -> advanceProbeIndex()
-   * - Session completion check -> allPointsRecalled()
+   * Handles session completion when all points have been recalled.
+   * Completes the session, generates a completion message, and returns the result.
    *
-   * @param evaluation - The evaluation result from the current point
-   * @returns Result with response and session status
+   * @param evalResult - The evaluation result from the last evaluateUncheckedPoints() call
+   * @returns ProcessMessageResult indicating session completion
    */
-  private async advanceToNextPoint(
-    evaluation: RecallEvaluation
-  ): Promise<ProcessMessageResult> {
-    const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
+  private async handleSessionCompletion(evalResult: {
+    recalledPointIds: string[];
+    confidencePerPoint: Map<string, number>;
+    feedback: string;
+  }): Promise<ProcessMessageResult> {
+    await this.completeSession();
 
-    // Record recall outcome (FSRS update + recall history persistence)
-    await this.recordRecallOutcome(currentPoint.id, evaluation);
+    // Build a synthetic evaluation for the completion message
+    const lastEvaluation: RecallEvaluation = {
+      success: true,
+      confidence: 0.85,
+      reasoning: 'All points recalled via continuous evaluation.',
+    };
+    const completionResponse = await this.generateCompletionMessage(lastEvaluation);
 
-    // Mark the point as recalled in the checklist
-    this.markPointRecalled(currentPoint.id);
-
-    // Emit point completed event
-    const rating = this.evaluationToRating(evaluation);
-    const newState = this.scheduler.schedule(currentPoint.fsrsState, rating);
-    this.emitEvent('point_completed', {
-      pointId: currentPoint.id,
-      rating,
-      newDueDate: newState.due,
-      success: evaluation.success,
-    });
-
-    // Check if there are more unchecked points
-    const hasMorePoints = !this.allPointsRecalled();
-
-    if (hasMorePoints) {
-      this.currentPointMessageCount = 0;
-
-      // === Phase 2: Track the starting message index for the next recall point ===
-      // This is used to determine the message range when recording recall outcomes
-      this.currentPointStartIndex = this.messages.length;
-
-      // Update the LLM prompt for the new point
-      this.updateLLMPrompt();
-
-      // Generate transition message and opening for next point
-      const transitionResponse = await this.generateTransitionMessage(
-        evaluation,
-        true
-      );
-
-      // Emit point started event for the new probe point
-      const nextProbe = this.getNextProbePoint();
-      this.emitEvent('point_started', {
-        pointIndex: this.currentProbeIndex,
-        pointId: nextProbe?.id ?? '',
-        totalPoints: this.targetPoints.length,
-      });
-
-      return {
-        response: transitionResponse,
-        completed: false,
-        pointAdvanced: true,
-        recalledCount: this.getRecalledCount(),
-        totalPoints: this.targetPoints.length,
-        pointsRecalledThisTurn: [currentPoint.id],
-      };
-    } else {
-      // Session complete - all points recalled
-      await this.completeSession();
-
-      // Generate completion message
-      const completionResponse = await this.generateCompletionMessage(evaluation);
-
-      return {
-        response: completionResponse,
-        completed: true,
-        pointAdvanced: true,
-        recalledCount: this.getRecalledCount(),
-        totalPoints: this.targetPoints.length,
-        pointsRecalledThisTurn: [currentPoint.id],
-      };
-    }
+    return {
+      response: completionResponse,
+      completed: true,
+      recalledCount: this.getRecalledCount(),
+      totalPoints: this.targetPoints.length,
+      pointsRecalledThisTurn: evalResult.recalledPointIds,
+    };
   }
 
   // ============================================================================
@@ -1003,15 +967,27 @@ export class SessionEngine {
    * Generates a tutor response for the current conversation.
    *
    * Builds the conversation history from session messages and requests
-   * a follow-up response from the LLM.
+   * a follow-up response from the LLM. When evaluatorFeedback is provided,
+   * it is injected as an ephemeral assistant message at the start of
+   * conversation history — NOT persisted to this.messages or DB.
+   * The feedback is prefixed with an instruction telling the tutor not to
+   * reference it directly.
    *
-   * Phase 2: Now tracks token usage for metrics collection.
-   *
+   * @param evaluatorFeedback - Optional feedback from the continuous evaluator
    * @returns The tutor's response
    */
-  private async generateTutorResponse(): Promise<string> {
+  private async generateTutorResponse(evaluatorFeedback?: string): Promise<string> {
     // Build conversation history for the LLM
     const conversationHistory = this.buildConversationHistory();
+
+    // T06: Inject evaluator feedback as an ephemeral assistant message at the start.
+    // This shapes the tutor's next response invisibly — NOT saved to messages or DB.
+    if (evaluatorFeedback) {
+      conversationHistory.unshift({
+        role: 'assistant',
+        content: `[Internal observation — do not reference or quote directly to the user]: ${evaluatorFeedback}`,
+      });
+    }
 
     // Generate response
     const response = await this.llmClient.complete(conversationHistory, {
@@ -1256,7 +1232,6 @@ export class SessionEngine {
     this.pointChecklist = new Map();
     this.currentProbeIndex = 0;
     this.messages = [];
-    this.currentPointMessageCount = 0;
     this.llmClient.setSystemPrompt(undefined);
 
     // === Phase 2: Reset metrics collection state ===
