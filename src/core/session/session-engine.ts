@@ -60,6 +60,16 @@ import type {
   Session,
   SessionMessage,
 } from '../models';
+
+/**
+ * Aggregated result of evaluating all unchecked points against the latest user message.
+ * Internal to session-engine.ts — not exported.
+ */
+interface ContinuousEvalResult {
+  recalledPointIds: string[];
+  confidencePerPoint: Map<string, number>;
+  feedback: string;
+}
 import type { RecallEvaluation } from '../scoring/types';
 import type { RecallRating } from '../fsrs/types';
 import type { LLMMessage } from '../../llm/types';
@@ -578,50 +588,6 @@ export class SessionEngine {
   }
 
   /**
-   * Manually triggers evaluation and advancement.
-   *
-   * Kept for backward compatibility with WS protocol (T13 will remove the WS trigger_eval type).
-   * Uses the same continuous evaluation logic as processUserMessage.
-   *
-   * @returns Result containing the response and session status
-   * @throws Error if no session is active
-   */
-  async triggerEvaluation(): Promise<ProcessMessageResult> {
-    this.validateActiveSession();
-
-    // Run the same continuous evaluation as processUserMessage
-    const evalResult = await this.evaluateUncheckedPoints();
-
-    for (const pointId of evalResult.recalledPointIds) {
-      this.markPointRecalled(pointId);
-      const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
-      await this.recordRecallOutcome(pointId, {
-        success: true,
-        confidence,
-        reasoning: `Manual trigger evaluation detected recall with confidence ${confidence}`,
-      });
-    }
-
-    if (this.allPointsRecalled()) {
-      return this.handleSessionCompletion(evalResult);
-    }
-
-    if (evalResult.recalledPointIds.length > 0) {
-      this.updateLLMPrompt();
-    }
-
-    const response = await this.generateTutorResponse(evalResult.feedback || undefined);
-
-    return {
-      response,
-      completed: false,
-      recalledCount: this.getRecalledCount(),
-      totalPoints: this.targetPoints.length,
-      pointsRecalledThisTurn: evalResult.recalledPointIds,
-    };
-  }
-
-  /**
    * Abandons the current session.
    *
    * Marks the session as abandoned and clears engine state.
@@ -678,12 +644,6 @@ export class SessionEngine {
   // ============================================================================
 
   /**
-   * Aggregated result from running continuous evaluation against all unchecked points.
-   * This is a local interface — not exported.
-   */
-  // (ContinuousEvalResult is defined inline below as a return type)
-
-  /**
    * Evaluates all unchecked recall points against the current conversation.
    *
    * Iterates over every unchecked point and calls the existing evaluator API.
@@ -694,11 +654,7 @@ export class SessionEngine {
    *
    * @returns Aggregated result with recalled point IDs, confidence map, and feedback string
    */
-  private async evaluateUncheckedPoints(): Promise<{
-    recalledPointIds: string[];
-    confidencePerPoint: Map<string, number>;
-    feedback: string;
-  }> {
+  private async evaluateUncheckedPoints(): Promise<ContinuousEvalResult> {
     const unchecked = this.getUncheckedPoints();
     const recalledPointIds: string[] = [];
     const confidencePerPoint = new Map<string, number>();
@@ -785,11 +741,7 @@ export class SessionEngine {
    * @param evalResult - The evaluation result from the last evaluateUncheckedPoints() call
    * @returns ProcessMessageResult indicating session completion
    */
-  private async handleSessionCompletion(evalResult: {
-    recalledPointIds: string[];
-    confidencePerPoint: Map<string, number>;
-    feedback: string;
-  }): Promise<ProcessMessageResult> {
+  private async handleSessionCompletion(evalResult: ContinuousEvalResult): Promise<ProcessMessageResult> {
     await this.completeSession();
 
     // Build a synthetic evaluation for the completion message

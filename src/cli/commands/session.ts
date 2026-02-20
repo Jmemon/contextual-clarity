@@ -294,28 +294,9 @@ async function handleSlashCommand(
 
     case '/eval':
     case '/evaluate':
-      // Manually trigger evaluation of the current recall point
-      console.log(dim('\nTriggering evaluation...'));
-      try {
-        const result = await engine.triggerEvaluation();
-        printBlankLine();
-        console.log(formatTutorMessage(result.response));
-        printBlankLine();
-
-        if (result.completed) {
-          printSessionComplete(result.totalPoints);
-          rl.close();
-          return 'quit';
-        }
-
-        if (result.pointsRecalledThisTurn.length > 0) {
-          console.log(formatProgress(result.recalledCount, result.totalPoints));
-          printBlankLine();
-        }
-      } catch (error) {
-        console.log(red('Error during evaluation:'));
-        console.log(dim(error instanceof Error ? error.message : 'Unknown error'));
-      }
+      // T06: evaluation now runs continuously after every user message.
+      // The /eval command is now informational only — no manual trigger needed.
+      console.log(dim('\nEvaluation runs automatically after each message. Just keep typing!'));
       return undefined;
 
     case '/help':

@@ -17,7 +17,6 @@
  *     messages,
  *     streamingContent,
  *     sendUserMessage,
- *     triggerEvaluation,
  *     endSession,
  *   } = useSessionWebSocket(sessionId, {
  *     onSessionComplete: (summary) => navigate('/sessions'),

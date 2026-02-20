@@ -139,8 +139,11 @@ async function main(): Promise<void> {
       // Create the FSRS scheduler for spaced repetition calculations
       const scheduler = new FSRSScheduler();
 
-      // Create the recall evaluator for assessing user recall
-      const evaluator = new RecallEvaluator(llmClient);
+      // Create a dedicated LLM client for the evaluator (separate instance per spec requirement)
+      const evaluatorClient = new AnthropicClient();
+
+      // Create the recall evaluator with its own dedicated client (not sharing with tutor)
+      const evaluator = new RecallEvaluator(evaluatorClient);
 
       // Create the session engine with all dependencies injected
       // This is the central orchestrator for recall sessions

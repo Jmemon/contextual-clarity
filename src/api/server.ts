@@ -421,11 +421,14 @@ function createWsDependencies(): WebSocketHandlerDependencies {
   // Create the LLM client for AI-powered tutoring
   const llmClient = new AnthropicClient();
 
+  // Create a dedicated LLM client for the evaluator (separate instance per spec requirement)
+  const evaluatorClient = new AnthropicClient();
+
   // Create the FSRS scheduler for spaced repetition
   const scheduler = new FSRSScheduler();
 
-  // Create the recall evaluator for assessing recall success
-  const evaluator = new RecallEvaluator(llmClient);
+  // Create the recall evaluator with its own dedicated client (not sharing with tutor)
+  const evaluator = new RecallEvaluator(evaluatorClient);
 
   // Return all dependencies needed for real SessionEngine-powered WebSocket handling
   return {

@@ -451,8 +451,10 @@ export class WebSocketSessionHandler {
 
   /**
    * Handles a manual evaluation trigger request.
-   * Forces evaluation of the current recall point using the SessionEngine.
-   * Kept for backward compatibility — T13 will remove the trigger_eval WS type.
+   *
+   * T06 removes triggerEvaluation() from SessionEngine — evaluation now happens
+   * automatically after every user message via continuous evaluation.
+   * This handler is now a no-op. T13 will remove the trigger_eval WS type entirely.
    *
    * @param ws - The WebSocket connection
    */
@@ -460,66 +462,9 @@ export class WebSocketSessionHandler {
     ws: ServerWebSocket<WebSocketSessionData>
   ): Promise<void> {
     const data = ws.data;
-    console.log(`[WS] Manual evaluation triggered for session ${data.sessionId}`);
-
-    // Validate session is initialized and engine is available
-    if (!data.initialized || !data.session || !data.engine) {
-      this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
-      return;
-    }
-
-    try {
-      // Trigger evaluation through the SessionEngine
-      const result = await data.engine.triggerEvaluation();
-
-      // Stream the evaluation response (feedback from the tutor)
-      await this.streamResponse(ws, result.response);
-
-      // Send point_recalled messages for any points recalled this turn
-      if (result.pointsRecalledThisTurn.length > 0) {
-        for (const pointId of result.pointsRecalledThisTurn) {
-          this.send(ws, {
-            type: 'point_recalled',
-            pointId,
-            recalledCount: result.recalledCount,
-            totalPoints: result.totalPoints,
-          });
-        }
-
-        // Send point transition if points were recalled but session isn't complete
-        if (!result.completed) {
-          const state = data.engine.getSessionState();
-          this.send(ws, {
-            type: 'point_transition',
-            fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
-            toPointId: state?.currentProbePoint?.id || '',
-            pointsRemaining: result.totalPoints - result.recalledCount,
-            recalledCount: result.recalledCount,
-          });
-        }
-      }
-
-      // If session completed, send completion summary
-      if (result.completed) {
-        const summary: SessionSummary = {
-          sessionId: data.sessionId,
-          totalPointsReviewed: result.totalPoints,
-          successfulRecalls: result.totalPoints,
-          recallRate: 1.0,
-          durationMs: Date.now() - data.lastMessageTime,
-          engagementScore: 80,
-          estimatedCostUsd: 0.05,
-        };
-
-        this.send(ws, {
-          type: 'session_complete',
-          summary,
-        });
-      }
-    } catch (error) {
-      console.error(`[WS] Error during manual evaluation:`, error);
-      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Unknown error');
-    }
+    console.log(`[WS] trigger_eval received for session ${data.sessionId} — no-op (evaluation is continuous)`);
+    // No-op: evaluation runs automatically after every processUserMessage() call.
+    // T13 will remove this WS message type entirely.
   }
 
   /**

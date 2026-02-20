@@ -1606,7 +1606,7 @@ describe('SessionEngine Comprehensive Tests', () => {
         expect(engine.getSessionState()).toBeNull();
       });
 
-      it('should throw when calling triggerEvaluation before startSession', async () => {
+      it('should throw when calling processUserMessage before startSession', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1621,7 +1621,8 @@ describe('SessionEngine Comprehensive Tests', () => {
           messageRepo,
         });
 
-        await expect(engine.triggerEvaluation()).rejects.toThrow('No active session');
+        // T06: triggerEvaluation() was removed; evaluation is now continuous via processUserMessage()
+        await expect(engine.processUserMessage('test')).rejects.toThrow('No active session');
       });
     });
 
@@ -1929,8 +1930,8 @@ describe('SessionEngine Comprehensive Tests', () => {
       });
     });
 
-    describe('Manual Evaluation', () => {
-      it('should allow forcing evaluation via triggerEvaluation API', async () => {
+    describe('Continuous Evaluation', () => {
+      it('should recall points automatically via processUserMessage (T06 continuous evaluation)', async () => {
         const sessionRepo = new SessionRepository(db);
         const recallPointRepo = new RecallPointRepository(db);
         const messageRepo = new SessionMessageRepository(db);
@@ -1950,21 +1951,21 @@ describe('SessionEngine Comprehensive Tests', () => {
           tutorMaxTokens: 512,
         });
 
-        // Use low confidence so processUserMessage doesn't recall points
+        // Use low confidence so first message doesn't recall points
         mockEvaluator.setMockResult(false, 0.2, 'Not yet');
 
         await engine.startSession(recallSet);
         await engine.getOpeningMessage();
 
-        // Send a message — low confidence means no recall
+        // Send a message with low confidence — no recall expected
         await engine.processUserMessage('Some random message');
         expect(engine.getSessionState()!.recalledCount).toBe(0);
 
-        // Now switch to high confidence
+        // T06: evaluation is now continuous — switch to high confidence and send next message
         mockEvaluator.setMockResult(true, 0.85, 'Good recall');
 
-        // Force evaluation via the API — should now recall points
-        const result = await engine.triggerEvaluation();
+        // processUserMessage automatically evaluates all unchecked points after each message
+        const result = await engine.processUserMessage('I fully recall it now');
         expect(result.pointsRecalledThisTurn.length).toBeGreaterThan(0);
       });
     });
