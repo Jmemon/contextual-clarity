@@ -33,6 +33,18 @@ export default {
           900: '#0c4a6e',
         },
       },
+
+      // Animations for the single-exchange UI (T12).
+      // Used by SingleExchangeView when new AI messages appear.
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 300ms ease-out',
+      },
     },
   },
 

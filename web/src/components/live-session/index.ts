@@ -39,6 +39,10 @@ export type { SessionContainerProps, SessionState } from './SessionContainer';
 export { MessageList } from './MessageList';
 export type { MessageListProps } from './MessageList';
 
+// Single-exchange view (T12) — replaces MessageList in live sessions
+export { SingleExchangeView } from './SingleExchangeView';
+export type { SingleExchangeViewProps, ExchangePhase } from './SingleExchangeView';
+
 export { StreamingMessage } from './StreamingMessage';
 export type { StreamingMessageProps } from './StreamingMessage';
 

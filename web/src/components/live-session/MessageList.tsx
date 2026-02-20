@@ -1,4 +1,11 @@
 /**
+ * @deprecated (T12) — MessageList is no longer used in the live session UI.
+ * It has been replaced by SingleExchangeView, which shows only one exchange at
+ * a time to force genuine recall. MessageList is preserved here for session
+ * replay (where displaying the full conversation history is appropriate).
+ * Do NOT delete this file until session replay has been updated or confirmed
+ * to not rely on it.
+ *
  * Message List Component for Live Sessions
  *
  * Displays a scrollable list of chat messages in the live session interface.

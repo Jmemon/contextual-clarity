@@ -17,7 +17,7 @@
 import { useState, useCallback, type HTMLAttributes } from 'react';
 import { Link } from 'react-router-dom';
 import { useSessionWebSocket, type SessionCompleteSummary } from '@/hooks/use-session-websocket';
-import { MessageList } from './MessageList';
+import { SingleExchangeView } from './SingleExchangeView';
 import { VoiceInput } from './VoiceInput';
 import { SessionProgress } from './SessionProgress';
 import { SessionControls } from './SessionControls';
@@ -254,11 +254,13 @@ export function SessionContainer({
     console.error(`Session error [${code}]: ${message}`);
   }, []);
 
-  // WebSocket connection
+  // WebSocket connection.
+  // Note: `messages` is intentionally omitted from destructuring here (T12).
+  // The full conversation history is maintained inside the hook and written to
+  // the database; SessionContainer no longer renders it directly.
   const {
     connectionState,
     lastError,
-    messages,
     streamingContent,
     recalledCount,
     totalPoints,
@@ -266,6 +268,10 @@ export function SessionContainer({
     sendUserMessage,
     endSession,
     connect,
+    // T12: single-exchange UI fields
+    latestAssistantMessage,
+    lastSentUserMessage,
+    isOpeningMessage,
   } = useSessionWebSocket(sessionId, {
     onSessionStarted: handleSessionStarted,
     onPointTransition: handlePointTransition,
@@ -354,11 +360,19 @@ export function SessionContainer({
 
       {/* Main content area */}
       <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
-        {/* Message list */}
-        <MessageList
-          messages={messages}
-          streamingContent={streamingContent}
-          isThinking={isWaitingForResponse && !streamingContent}
+        {/*
+          T12: Single-exchange view replaces the scrolling MessageList.
+          Only one AI turn is visible at a time — no history shown to the user.
+          The full conversation is still in `messages` (maintained by the hook)
+          for the evaluator and database; this is purely a visual change.
+        */}
+        <SingleExchangeView
+          currentAssistantMessage={latestAssistantMessage}
+          isStreaming={!!streamingContent}
+          streamingContent={streamingContent || ''}
+          userMessageSent={lastSentUserMessage}
+          isLoading={isWaitingForResponse && !streamingContent}
+          isOpeningMessage={isOpeningMessage}
           className="flex-1"
         />
 

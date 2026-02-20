@@ -34,6 +34,9 @@
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
+// NOTE: T08 modifies this file in parallel (renaming endSession→leaveSession).
+// T12 changes are: new state vars (latestAssistantMessage, lastSentUserMessage,
+// isOpeningMessage), updated return type, and updated event handlers.
 
 // ============================================================================
 // Types
@@ -54,7 +57,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'rec
 export type ClientMessage =
   | { type: 'user_message'; content: string }
   | { type: 'trigger_eval' }
-  | { type: 'end_session' }
+  | { type: 'leave_session' }  // T08: replaces 'end_session' — pauses session instead of abandoning
   | { type: 'ping' };
 
 /**
@@ -68,6 +71,8 @@ export type ServerMessage =
   | { type: 'point_transition'; recalledCount: number; totalPoints: number; fromPointId: string; toPointId: string; pointsRemaining: number }
   | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
+  | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number }
+  | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
 
@@ -116,6 +121,18 @@ export interface EvaluationResult {
 }
 
 /**
+ * Overlay data received when all points have been recalled (T08).
+ */
+export interface CompleteOverlayData {
+  /** Session ID */
+  sessionId: string;
+  /** Number of points recalled */
+  recalledCount: number;
+  /** Total points in session */
+  totalPoints: number;
+}
+
+/**
  * Configuration options for the WebSocket hook.
  */
 export interface UseSessionWebSocketOptions {
@@ -125,8 +142,12 @@ export interface UseSessionWebSocketOptions {
   onEvaluationResult?: (result: EvaluationResult) => void;
   /** Callback when transitioning to next recall point */
   onPointTransition?: (nextIndex: number, total: number) => void;
-  /** Callback when session completes */
+  /** Callback when session completes (finalized as 'completed') */
   onSessionComplete?: (summary: SessionCompleteSummary) => void;
+  /** T08: Callback when all points recalled — triggers completion overlay in UI */
+  onCompleteOverlay?: (data: CompleteOverlayData) => void;
+  /** T08: Callback when session is paused after leave_session */
+  onSessionPaused?: (data: CompleteOverlayData) => void;
   /** Callback when an error occurs */
   onError?: (code: string, message: string) => void;
   /** Whether to auto-connect on mount (default: true) */
@@ -141,7 +162,7 @@ export interface UseSessionWebSocketReturn {
   connectionState: ConnectionState;
   /** Last error that occurred */
   lastError: { code: string; message: string } | null;
-  /** All chat messages (user and assistant) */
+  /** All chat messages (user and assistant) — full history kept for evaluator/DB */
   messages: ChatMessage[];
   /** Content of message currently being streamed (empty if none) */
   streamingContent: string;
@@ -159,6 +180,23 @@ export interface UseSessionWebSocketReturn {
   connect: () => void;
   /** Manually disconnect from WebSocket */
   disconnect: () => void;
+
+  // ---- T12: Single-Exchange UI fields ----
+  /**
+   * The most recently completed AI message text (from assistant_complete or
+   * session_started). Used by SingleExchangeView to display the current AI turn.
+   */
+  latestAssistantMessage: string;
+  /**
+   * The user message that was just sent. Set on send; cleared ~500ms later.
+   * SingleExchangeView uses this for the brief "user_sent" flash phase.
+   */
+  lastSentUserMessage: string | null;
+  /**
+   * True while the very first (opening) AI message is being shown.
+   * Lets SingleExchangeView skip the fade-in animation for the first message.
+   */
+  isOpeningMessage: boolean;
 }
 
 // ============================================================================
@@ -213,6 +251,19 @@ export function useSessionWebSocket(
   // Session progress state — tracks recalled count instead of linear index
   const [recalledCount, setRecalledCount] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
+
+  // T12: Single-exchange UI state.
+  // latestAssistantMessage holds only the most recent completed AI text; the
+  // full history is still in `messages` for the evaluator.
+  const [latestAssistantMessage, setLatestAssistantMessage] = useState('');
+  // lastSentUserMessage is briefly set when the user sends a message so
+  // SingleExchangeView can display the user_sent flash phase.
+  const [lastSentUserMessage, setLastSentUserMessage] = useState<string | null>(null);
+  // isOpeningMessage is true while the first AI message is shown so the view
+  // can skip the fade-in animation on initial render.
+  const [isOpeningMessage, setIsOpeningMessage] = useState(true);
+  // Ref to hold the active clear-timeout so it can be cancelled on rapid sends.
+  const lastSentClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs for WebSocket instance and reconnection tracking
   const wsRef = useRef<WebSocket | null>(null);
@@ -291,7 +342,7 @@ export function useSessionWebSocket(
 
       switch (message.type) {
         case 'session_started':
-          // Add the opening message as an assistant message
+          // Add the opening message as an assistant message (full history)
           setMessages([
             {
               id: generateMessageId(),
@@ -301,6 +352,10 @@ export function useSessionWebSocket(
             },
           ]);
           setIsWaitingForResponse(false);
+          // T12: Track the latest AI text and mark this as the opening message
+          // so SingleExchangeView skips the fade-in animation.
+          setLatestAssistantMessage(message.openingMessage);
+          setIsOpeningMessage(true);
           callbacksRef.current.onSessionStarted?.(message.sessionId, message.openingMessage);
           break;
 
@@ -310,7 +365,7 @@ export function useSessionWebSocket(
           break;
 
         case 'assistant_complete':
-          // Finalize the assistant message
+          // Finalize the assistant message (full history)
           setMessages((prev) => [
             ...prev,
             {
@@ -322,6 +377,10 @@ export function useSessionWebSocket(
           ]);
           setStreamingContent('');
           setIsWaitingForResponse(false);
+          // T12: Update the single-exchange display text and clear opening flag
+          // so subsequent messages use the fade-in animation.
+          setLatestAssistantMessage(message.fullContent);
+          setIsOpeningMessage(false);
           break;
 
         case 'evaluation_result':
@@ -501,12 +560,16 @@ export function useSessionWebSocket(
 
   /**
    * Send a user message to the session.
+   *
+   * T12: Also sets lastSentUserMessage briefly (500ms) so SingleExchangeView
+   * can display the user_sent flash phase. Cancels any pending clear timeout
+   * on rapid successive sends.
    */
   const sendUserMessage = useCallback(
     (content: string) => {
       if (!content.trim()) return;
 
-      // Add user message to the list
+      // Add user message to the full history list
       setMessages((prev) => [
         ...prev,
         {
@@ -520,6 +583,17 @@ export function useSessionWebSocket(
       // Send to server
       sendMessage({ type: 'user_message', content: content.trim() });
       setIsWaitingForResponse(true);
+
+      // T12: Set the flash message and auto-clear after 500ms.
+      // Cancel any previous pending clear so rapid sends don't clear too early.
+      if (lastSentClearTimeoutRef.current) {
+        clearTimeout(lastSentClearTimeoutRef.current);
+      }
+      setLastSentUserMessage(content.trim());
+      lastSentClearTimeoutRef.current = setTimeout(() => {
+        setLastSentUserMessage(null);
+        lastSentClearTimeoutRef.current = null;
+      }, 500);
     },
     [sendMessage]
   );
@@ -537,10 +611,15 @@ export function useSessionWebSocket(
       connect();
     }
 
-    // Cleanup on unmount
+    // Cleanup on unmount — also clear the lastSent timeout to avoid state
+    // updates after the component has been destroyed.
     return () => {
       disconnect();
+      if (lastSentClearTimeoutRef.current) {
+        clearTimeout(lastSentClearTimeoutRef.current);
+      }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, autoConnect, connect, disconnect]);
 
   return {
@@ -555,6 +634,10 @@ export function useSessionWebSocket(
     endSession,
     connect,
     disconnect,
+    // T12 single-exchange UI fields
+    latestAssistantMessage,
+    lastSentUserMessage,
+    isOpeningMessage,
   };
 }
 
