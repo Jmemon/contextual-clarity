@@ -142,16 +142,13 @@ export function createApiRouter(): Hono {
         { path: '/api/analytics', description: 'Learning analytics and reports' },
         { path: '/api/recall-sets/:id/resources', description: 'Source resources for a recall set' },
         { path: '/api/voice/token', description: 'Deepgram voice token endpoint' },
+        { path: '/api/voice/correct', description: 'Apply spoken correction instruction to transcribed text' },
         { path: '/health', description: 'Health check endpoint' },
       ],
     };
 
     return success(c, apiInfo);
   });
-
-  // -------------------------------------------------------------------------
-  // Route Module Mounts
-  // -------------------------------------------------------------------------
 
   // -------------------------------------------------------------------------
   // Route Module Mounts

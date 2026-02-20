@@ -113,11 +113,30 @@ export function VoiceInput({
     onFinalTranscription: (text) => {
       onProcessTranscription?.(text);
     },
-    onProcessCorrection: (_currentText, correctionInstruction) => {
-      // The correction instruction is spoken; the parent should process it
-      // For now, just replace the text with the correction instruction
-      // In production this would call the correction-processor endpoint
-      onProcessTranscription?.(correctionInstruction);
+    /**
+     * Called when a correction recording finishes.  POSTs to the backend
+     * correction endpoint which runs the instruction through Claude Haiku and
+     * returns the corrected text.  On success the textarea is updated in place;
+     * on failure the original text is kept so the user can try again.
+     */
+    onProcessCorrection: async (currentText, correctionInstruction) => {
+      try {
+        const response = await fetch('/api/voice/correct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentText, correctionInstruction }),
+        });
+
+        const data = await response.json() as { success?: boolean; data?: { correctedText?: string } };
+
+        if (data.success && data.data?.correctedText) {
+          setTranscribedText(data.data.correctedText);
+        }
+        // If the call fails, the original transcribedText is unchanged and the
+        // user can manually edit or try correcting again.
+      } catch {
+        // Network error — silently leave the existing text intact
+      }
     },
   });
 

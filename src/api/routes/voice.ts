@@ -14,13 +14,18 @@ import { Hono } from 'hono';
 import { success, error } from '../utils/response';
 import { getDeepgramApiKey } from '../../config';
 import { createDeepgramClient } from '../../core/voice';
+import { processCorrection } from '../../core/transcription/correction-processor';
 
 // =============================================================================
 // Route Definitions
 // =============================================================================
 
 /**
- * Creates the voice router with the token endpoint.
+ * Creates the voice router with all voice-related endpoints.
+ *
+ * Endpoints:
+ * - POST /voice/token  - Create a short-lived Deepgram token
+ * - POST /voice/correct - Apply a spoken correction instruction to existing text
  *
  * @returns Hono router instance with voice routes
  */
@@ -102,6 +107,46 @@ export function voiceRoutes(): Hono {
         'Failed to create voice token',
         500
       );
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /voice/correct - Apply a spoken correction instruction to text
+  // -------------------------------------------------------------------------
+
+  /**
+   * Accepts the current transcription text and a spoken correction instruction,
+   * then uses the correction processor (claude-haiku) to produce the corrected
+   * text.  This keeps the LLM call server-side so API keys are never exposed.
+   *
+   * Request body: { currentText: string, correctionInstruction: string }
+   * Response:     { correctedText: string }
+   */
+  router.post('/correct', async (c) => {
+    let body: { currentText?: unknown; correctionInstruction?: unknown };
+
+    try {
+      body = await c.req.json<{ currentText?: unknown; correctionInstruction?: unknown }>();
+    } catch {
+      return error(c, 'INVALID_REQUEST', 'Request body must be valid JSON', 400);
+    }
+
+    const { currentText, correctionInstruction } = body;
+
+    if (typeof currentText !== 'string' || !currentText.trim()) {
+      return error(c, 'INVALID_REQUEST', 'currentText is required and must be a non-empty string', 400);
+    }
+
+    if (typeof correctionInstruction !== 'string' || !correctionInstruction.trim()) {
+      return error(c, 'INVALID_REQUEST', 'correctionInstruction is required and must be a non-empty string', 400);
+    }
+
+    try {
+      const correctedText = await processCorrection(currentText, correctionInstruction);
+      return success(c, { correctedText });
+    } catch (err) {
+      console.error('Error processing voice correction:', err);
+      return error(c, 'INTERNAL_ERROR', 'Failed to process correction', 500);
     }
   });
 

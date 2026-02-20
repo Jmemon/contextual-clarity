@@ -59,6 +59,16 @@ export interface UseVoiceInputReturn {
 /** Audio chunk interval in ms — how often MediaRecorder sends data */
 const CHUNK_INTERVAL_MS = 250;
 
+/**
+ * Determine the best supported MIME type for MediaRecorder.
+ * Falls back through webm (with opus), plain webm, mp4, and finally ''
+ * (browser default) to support Safari/iOS which does not support webm.
+ */
+function getMimeType(): string {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', ''];
+  return candidates.find((type) => type === '' || MediaRecorder.isTypeSupported(type)) ?? '';
+}
+
 /** Waveform bar count for visualization */
 const WAVEFORM_BARS = 32;
 
@@ -238,13 +248,6 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
       accumulatedTextRef.current = '';
       setInterimText('');
 
-      // Set state based on mode
-      if (mode === 'initial') {
-        setState('recording');
-      } else {
-        setState('correction');
-      }
-
       // WebSocket message handler — uses refs to avoid stale closures
       ws.onmessage = (event) => {
         try {
@@ -320,8 +323,17 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
         }, { once: true });
       });
 
-      // Start MediaRecorder — capture audio in 250ms chunks
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      // WebSocket is confirmed open — now it is safe to reflect this in UI state
+      if (mode === 'initial') {
+        setState('recording');
+      } else {
+        setState('correction');
+      }
+
+      // Start MediaRecorder — capture audio in 250ms chunks using the best
+      // supported MIME type for this browser (Safari/iOS may not support webm)
+      const mimeType = getMimeType();
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
