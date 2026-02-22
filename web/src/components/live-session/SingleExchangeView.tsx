@@ -198,15 +198,15 @@ export function SingleExchangeView({
       {/* Phase: user_sent — brief flash of the user's message               */}
       {/* ------------------------------------------------------------------ */}
       {phase === 'user_sent' && visibleUserMessage && (
+        // animate-user-flash: slides the message up 16px and fades it out over
+        // 400ms, providing a clear visual signal that the message was sent
+        // before the loading/streaming phase takes over.
         <div
           key={`user-${visibleUserMessage}`}
-          style={{
-            // Slide upward and fade out over 400ms.
-            // The opacity fade kicks in at 200ms so the message is clearly
-            // visible for a moment before disappearing.
-            animation: 'user-flash 400ms ease-out forwards',
-          }}
+          className="animate-user-flash"
         >
+          {/* "You" role label — matches the spec for the user_sent phase */}
+          <p className="text-blue-300 text-xs font-medium mb-3 uppercase tracking-wide">You</p>
           <FormattedText
             content={visibleUserMessage}
             className="text-lg leading-relaxed text-blue-100"
@@ -257,32 +257,13 @@ export function SingleExchangeView({
             <FormattedText content={streamingContent} />
             {/* Blinking cursor to signal live streaming */}
             <span
-              className="inline-block w-0.5 h-5 bg-white ml-0.5 align-middle"
-              style={{ animation: 'cursor-blink 1s step-end infinite' }}
+              className="inline-block w-0.5 h-5 bg-white ml-0.5 align-middle animate-cursor-blink"
               aria-hidden="true"
             />
           </div>
         </div>
       )}
 
-      {/*
-        Keyframe definitions injected via a <style> tag rather than Tailwind
-        so they can reference exact timing without a plugin:
-        - user-flash: user message slides up 8px and fades, matching the spec
-          (200ms opacity fade, 400ms total).
-        - cursor-blink: standard blinking-cursor effect for the streaming phase.
-      */}
-      <style>{`
-        @keyframes user-flash {
-          0%   { opacity: 1;   transform: translateY(0); }
-          50%  { opacity: 1;   transform: translateY(-4px); }
-          100% { opacity: 0;   transform: translateY(-8px); }
-        }
-        @keyframes cursor-blink {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0; }
-        }
-      `}</style>
     </div>
   );
 }

@@ -35,15 +35,31 @@ export default {
       },
 
       // Animations for the single-exchange UI (T12).
-      // Used by SingleExchangeView when new AI messages appear.
+      // Used by SingleExchangeView for AI message fade-in, user message exit,
+      // and the blinking cursor during AI streaming.
       keyframes: {
         'fade-in': {
           '0%': { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // User message briefly flashes then slides up 16px and fades out (400ms).
+        // The 50% keyframe holds position so the message is clearly readable
+        // before the exit animation begins.
+        'user-flash': {
+          '0%': { opacity: '1', transform: 'translateY(0)' },
+          '50%': { opacity: '0.7', transform: 'translateY(0)' },
+          '100%': { opacity: '0', transform: 'translateY(-16px)' },
+        },
+        // Standard blinking-cursor effect used during AI streaming phase.
+        'cursor-blink': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 300ms ease-out',
+        'user-flash': 'user-flash 400ms ease-out forwards',
+        'cursor-blink': 'cursor-blink 1s ease-in-out infinite',
       },
     },
   },
