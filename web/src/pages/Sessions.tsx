@@ -174,10 +174,10 @@ export function Sessions() {
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Page Header - responsive typography */}
       <header className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1 sm:mb-2">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">
           Session History
         </h1>
-        <p className="text-sm sm:text-base text-gray-600">
+        <p className="text-sm sm:text-base text-slate-400">
           Review your past study sessions and track your learning progress.
         </p>
       </header>
@@ -209,7 +209,7 @@ export function Sessions() {
           {sessionsData && sessionsData.pagination.total > 0 && (
             <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               {/* Results Summary */}
-              <p className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">
+              <p className="text-xs sm:text-sm text-slate-400 text-center sm:text-left">
                 Showing{' '}
                 <span className="font-medium">
                   {(filters.offset ?? 0) + 1}
@@ -231,7 +231,7 @@ export function Sessions() {
               {/* Page Navigation Buttons - full width on mobile */}
               <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
                 {/* Page Indicator */}
-                <span className="text-xs sm:text-sm text-gray-600">
+                <span className="text-xs sm:text-sm text-slate-400">
                   Page {currentPage} of {totalPages}
                 </span>
 
@@ -264,7 +264,7 @@ export function Sessions() {
           {sessionsData &&
             sessionsData.pagination.total === 0 &&
             (filters.recallSetId || filters.startDate || filters.endDate) && (
-              <p className="mt-4 text-center text-sm text-gray-500">
+              <p className="mt-4 text-center text-sm text-slate-400">
                 No sessions match your current filters. Try adjusting your
                 search criteria.
               </p>

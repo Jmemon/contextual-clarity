@@ -123,7 +123,7 @@ export function SessionFilters({
     internalEndDate !== '';
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
+    <div className="bg-slate-800/60 rounded-lg border border-slate-700/50 p-3 sm:p-4 mb-4 sm:mb-6">
       {/* Filter controls grid - responsive layout */}
       {/* Stacks fully on mobile, 2 cols on tablet, 4 cols on desktop */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

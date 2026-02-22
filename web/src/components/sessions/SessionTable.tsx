@@ -141,18 +141,18 @@ function formatSuccessRate(rate: number | undefined): string {
  */
 function getSuccessRateColor(rate: number | undefined): string {
   if (rate === undefined || rate === null) {
-    return 'text-gray-500';
+    return 'text-slate-400';
   }
 
   const percentage = rate * 100;
 
   if (percentage >= 80) {
-    return 'text-green-600 font-medium';
+    return 'text-emerald-400 font-medium';
   }
   if (percentage >= 60) {
-    return 'text-amber-600 font-medium';
+    return 'text-amber-400 font-medium';
   }
-  return 'text-red-600 font-medium';
+  return 'text-red-400 font-medium';
 }
 
 /**
@@ -193,7 +193,7 @@ export function SessionTable({ sessions, recallSets = [] }: SessionTableProps) {
   // Handle empty state - no sessions to display
   if (sessions.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="rounded-lg border border-slate-700/50">
         <EmptyState
           icon={<DefaultEmptyIcon />}
           title="No sessions found"
@@ -204,7 +204,7 @@ export function SessionTable({ sessions, recallSets = [] }: SessionTableProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div className="rounded-lg border border-slate-700/50 overflow-hidden">
       <Table>
         {/* Table Header with column labels */}
         <TableHeader>
@@ -230,7 +230,7 @@ export function SessionTable({ sessions, recallSets = [] }: SessionTableProps) {
               <TableRow key={session.id}>
                 {/* Date/Time Column - formatted start time */}
                 <TableCell>
-                  <span className="text-gray-900">
+                  <span className="text-white">
                     {formatDateTime(session.startedAt)}
                   </span>
                 </TableCell>
@@ -240,25 +240,25 @@ export function SessionTable({ sessions, recallSets = [] }: SessionTableProps) {
                   {recallSet ? (
                     <Link
                       to={`/recall-sets/${session.recallSetId}`}
-                      className="text-clarity-600 hover:text-clarity-800 hover:underline"
+                      className="text-clarity-400 hover:text-clarity-300 hover:underline"
                     >
                       {recallSet.name}
                     </Link>
                   ) : (
-                    <span className="text-gray-500">Unknown Set</span>
+                    <span className="text-slate-400">Unknown Set</span>
                   )}
                 </TableCell>
 
                 {/* Duration Column - formatted duration */}
                 <TableCell>
-                  <span className="text-gray-600">
+                  <span className="text-slate-400">
                     {formatDuration(session.metrics?.durationMs)}
                   </span>
                 </TableCell>
 
                 {/* Points Covered Column - number of recall points attempted */}
                 <TableCell>
-                  <span className="text-gray-600">
+                  <span className="text-slate-400">
                     {session.metrics?.recallPointsAttempted ?? '-'}
                   </span>
                 </TableCell>
@@ -279,7 +279,7 @@ export function SessionTable({ sessions, recallSets = [] }: SessionTableProps) {
                 <TableCell>
                   <Link
                     to={`/sessions/${session.id}`}
-                    className="text-clarity-600 hover:text-clarity-800 text-sm font-medium"
+                    className="text-clarity-400 hover:text-clarity-300 text-sm font-medium"
                   >
                     View &rarr;
                   </Link>

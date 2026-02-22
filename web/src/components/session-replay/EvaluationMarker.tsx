@@ -134,10 +134,10 @@ export function EvaluationMarker({
       <span
         className={`text-lg flex-shrink-0 ${
           outcome === 'success'
-            ? 'text-green-600'
+            ? 'text-emerald-400'
             : outcome === 'fail'
-            ? 'text-red-600'
-            : 'text-yellow-600'
+            ? 'text-red-400'
+            : 'text-yellow-400'
         }`}
         aria-hidden="true"
       >
@@ -151,13 +151,13 @@ export function EvaluationMarker({
           <Badge status={config.status}>{config.label}</Badge>
           {/* Show confidence if available */}
           {confidence !== undefined && (
-            <span className="text-xs text-gray-500">{formatConfidence(confidence)}</span>
+            <span className="text-xs text-slate-400">{formatConfidence(confidence)}</span>
           )}
         </div>
 
         {/* Recall point content - truncated if too long */}
         {recallPointContent && (
-          <p className="text-sm text-gray-600 truncate" title={recallPointContent}>
+          <p className="text-sm text-slate-400 truncate" title={recallPointContent}>
             <span className="font-medium">Tested:</span> {recallPointContent}
           </p>
         )}

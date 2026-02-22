@@ -63,8 +63,8 @@ export function RabbitholeMarker({
         border
         ${
           isReturn
-            ? 'bg-purple-50 border-purple-200 text-purple-700'
-            : 'bg-orange-50 border-orange-200 text-orange-700'
+            ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+            : 'bg-orange-500/10 border-orange-500/30 text-orange-400'
         }
       `}
     >
@@ -90,7 +90,7 @@ export function RabbitholeMarker({
             px-1.5 py-0.5
             text-xs
             rounded
-            ${isReturn ? 'bg-purple-200 text-purple-800' : 'bg-orange-200 text-orange-800'}
+            ${isReturn ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'}
           `}
           title={`Depth level ${depth}`}
         >

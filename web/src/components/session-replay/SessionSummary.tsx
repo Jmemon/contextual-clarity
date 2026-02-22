@@ -173,7 +173,7 @@ export function SessionSummary({
     <Card className="mb-6">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-800">Session Summary</h2>
+          <h2 className="text-xl font-semibold text-white">Session Summary</h2>
           <Badge status={statusConfig.badgeStatus}>{statusConfig.label}</Badge>
         </div>
       </CardHeader>
@@ -183,24 +183,24 @@ export function SessionSummary({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {/* Date/Time */}
           <div>
-            <p className="text-sm text-gray-500 mb-1">Date &amp; Time</p>
-            <p className="text-lg font-medium text-gray-800">{formatDateTime(startedAt)}</p>
+            <p className="text-sm text-slate-500 mb-1">Date &amp; Time</p>
+            <p className="text-lg font-medium text-white">{formatDateTime(startedAt)}</p>
           </div>
 
           {/* Duration */}
           <div>
-            <p className="text-sm text-gray-500 mb-1">Duration</p>
-            <p className="text-lg font-medium text-gray-800">
+            <p className="text-sm text-slate-500 mb-1">Duration</p>
+            <p className="text-lg font-medium text-white">
               {durationMs > 0 ? formatDuration(durationMs) : '--'}
             </p>
           </div>
 
           {/* Recall Set (with link) */}
           <div>
-            <p className="text-sm text-gray-500 mb-1">Recall Set</p>
+            <p className="text-sm text-slate-500 mb-1">Recall Set</p>
             <Link
               to={`/recall-sets/${recallSetId}`}
-              className="text-lg font-medium text-clarity-600 hover:text-clarity-800 hover:underline transition-colors"
+              className="text-lg font-medium text-clarity-400 hover:text-clarity-300 hover:underline transition-colors"
             >
               {recallSetName}
             </Link>
@@ -208,16 +208,16 @@ export function SessionSummary({
 
           {/* Success Rate */}
           <div>
-            <p className="text-sm text-gray-500 mb-1">Success Rate</p>
+            <p className="text-sm text-slate-500 mb-1">Success Rate</p>
             <p
               className={`text-lg font-medium ${
                 metrics?.recallRate !== undefined
                   ? metrics.recallRate >= 0.7
-                    ? 'text-green-600'
+                    ? 'text-emerald-400'
                     : metrics.recallRate >= 0.4
-                    ? 'text-yellow-600'
-                    : 'text-red-600'
-                  : 'text-gray-800'
+                    ? 'text-yellow-400'
+                    : 'text-red-400'
+                  : 'text-white'
               }`}
             >
               {metrics?.recallRate !== undefined ? formatPercent(metrics.recallRate) : '--'}
@@ -227,22 +227,22 @@ export function SessionSummary({
 
         {/* Secondary stats (only shown if metrics available) */}
         {metrics && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="mt-6 pt-6 border-t border-slate-700/50">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {/* Points Covered */}
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
                   Points Covered
                 </p>
-                <p className="text-base font-semibold text-gray-700">
+                <p className="text-base font-semibold text-slate-300">
                   {metrics.recallPointsAttempted}
                 </p>
               </div>
 
               {/* Successful */}
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Successful</p>
-                <p className="text-base font-semibold text-green-600">
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Successful</p>
+                <p className="text-base font-semibold text-emerald-400">
                   {metrics.recallPointsSuccessful}
                 </p>
               </div>
@@ -250,8 +250,8 @@ export function SessionSummary({
               {/* Failed (if available) */}
               {metrics.recallPointsFailed !== undefined && (
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Failed</p>
-                  <p className="text-base font-semibold text-red-600">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Failed</p>
+                  <p className="text-base font-semibold text-red-400">
                     {metrics.recallPointsFailed}
                   </p>
                 </div>
@@ -260,10 +260,10 @@ export function SessionSummary({
               {/* Avg Confidence (if available) */}
               {metrics.avgConfidence !== undefined && (
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
                     Avg Confidence
                   </p>
-                  <p className="text-base font-semibold text-gray-700">
+                  <p className="text-base font-semibold text-slate-300">
                     {formatPercent(metrics.avgConfidence)}
                   </p>
                 </div>
@@ -272,8 +272,8 @@ export function SessionSummary({
               {/* Rabbitholes (if available) */}
               {metrics.rabbitholeCount !== undefined && metrics.rabbitholeCount > 0 && (
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Tangents</p>
-                  <p className="text-base font-semibold text-orange-600">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Tangents</p>
+                  <p className="text-base font-semibold text-orange-400">
                     {metrics.rabbitholeCount}
                   </p>
                 </div>

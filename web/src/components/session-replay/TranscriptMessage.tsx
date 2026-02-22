@@ -71,24 +71,24 @@ function getMessageStyles(role: 'user' | 'assistant' | 'system'): {
         timestamp: 'text-blue-300',
       };
     case 'assistant':
-      // Assistant messages: gray background, left-aligned
+      // Assistant messages: dark slate background, left-aligned
       return {
         container: 'flex justify-start',
-        bubble: 'bg-gray-200 text-gray-900 rounded-lg rounded-bl-sm',
-        timestamp: 'text-gray-500',
+        bubble: 'bg-slate-800 text-slate-200 rounded-lg rounded-bl-sm',
+        timestamp: 'text-slate-500',
       };
     case 'system':
-      // System messages: lighter gray, centered
+      // System messages: subtle dark background, centered
       return {
         container: 'flex justify-center',
-        bubble: 'bg-gray-100 text-gray-600 rounded-lg italic',
-        timestamp: 'text-gray-400',
+        bubble: 'bg-slate-800/50 text-slate-400 rounded-lg italic',
+        timestamp: 'text-slate-500',
       };
     default:
       return {
         container: 'flex justify-start',
-        bubble: 'bg-gray-200 text-gray-900 rounded-lg',
-        timestamp: 'text-gray-500',
+        bubble: 'bg-slate-800 text-slate-200 rounded-lg',
+        timestamp: 'text-slate-500',
       };
   }
 }
@@ -127,7 +127,7 @@ export function TranscriptMessage({
           {/* Role label for clarity */}
           <span
             className={`text-xs mb-1 ${
-              message.role === 'user' ? 'text-right text-blue-600' : 'text-left text-gray-500'
+              message.role === 'user' ? 'text-right text-blue-400' : 'text-left text-slate-400'
             }`}
           >
             {message.role === 'user' ? 'You' : message.role === 'assistant' ? 'AI' : 'System'}

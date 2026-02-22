@@ -133,7 +133,7 @@ export function SessionReplay() {
         <nav className="mb-4">
           <Link
             to="/sessions"
-            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+            className="text-clarity-400 hover:text-clarity-300 transition-colors"
           >
             &larr; Back to Sessions
           </Link>
@@ -142,7 +142,7 @@ export function SessionReplay() {
         {/* Loading spinner */}
         <div className="flex flex-col items-center justify-center py-20">
           <Spinner size="lg" label="Loading session..." />
-          <p className="mt-4 text-gray-500">Loading session data...</p>
+          <p className="mt-4 text-slate-400">Loading session data...</p>
         </div>
       </div>
     );
@@ -159,24 +159,24 @@ export function SessionReplay() {
         <nav className="mb-4">
           <Link
             to="/sessions"
-            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+            className="text-clarity-400 hover:text-clarity-300 transition-colors"
           >
             &larr; Back to Sessions
           </Link>
         </nav>
 
         {/* Error message */}
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-500/30 bg-red-500/10">
           <CardBody>
-            <h2 className="text-lg font-semibold text-red-800 mb-2">
+            <h2 className="text-lg font-semibold text-red-400 mb-2">
               Failed to Load Session
             </h2>
-            <p className="text-red-600">
+            <p className="text-red-400">
               {error.message || 'An error occurred while loading the session.'}
             </p>
             <Link
               to="/sessions"
-              className="inline-block mt-4 text-red-700 hover:text-red-900 underline"
+              className="inline-block mt-4 text-red-400 hover:text-red-300 underline"
             >
               Return to sessions list
             </Link>
@@ -197,7 +197,7 @@ export function SessionReplay() {
         <nav className="mb-4">
           <Link
             to="/sessions"
-            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+            className="text-clarity-400 hover:text-clarity-300 transition-colors"
           >
             &larr; Back to Sessions
           </Link>
@@ -206,15 +206,15 @@ export function SessionReplay() {
         {/* Not found message */}
         <Card>
           <CardBody className="text-center py-12">
-            <h2 className="text-lg font-semibold text-gray-700 mb-2">
+            <h2 className="text-lg font-semibold text-slate-300 mb-2">
               Session Not Found
             </h2>
-            <p className="text-gray-500">
-              The session with ID <code className="bg-gray-100 px-2 py-1 rounded">{id}</code> could not be found.
+            <p className="text-slate-400">
+              The session with ID <code className="bg-slate-800/60 px-2 py-1 rounded">{id}</code> could not be found.
             </p>
             <Link
               to="/sessions"
-              className="inline-block mt-4 text-clarity-600 hover:text-clarity-800 underline"
+              className="inline-block mt-4 text-clarity-400 hover:text-clarity-300 underline"
             >
               Return to sessions list
             </Link>
@@ -243,7 +243,7 @@ export function SessionReplay() {
       <nav className="mb-4">
         <Link
           to="/sessions"
-          className="inline-flex items-center gap-1 text-clarity-600 hover:text-clarity-800 transition-colors py-2 min-h-[44px]"
+          className="inline-flex items-center gap-1 text-clarity-400 hover:text-clarity-300 transition-colors py-2 min-h-[44px]"
         >
           <svg
             className="w-4 h-4"
@@ -265,8 +265,8 @@ export function SessionReplay() {
 
       {/* Page header - responsive typography */}
       <header className="mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-clarity-800 mb-1 sm:mb-2">Session Replay</h1>
-        <p className="text-sm sm:text-base text-clarity-600">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">Session Replay</h1>
+        <p className="text-sm sm:text-base text-slate-400">
           Review your study session from {new Date(session.startedAt).toLocaleDateString()}
         </p>
       </header>
@@ -300,17 +300,17 @@ export function SessionReplay() {
       {/* Transcript Section */}
       <section className="mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-3 sm:mb-4">
-          <h2 className="text-lg sm:text-xl font-semibold text-clarity-700">
+          <h2 className="text-lg sm:text-xl font-semibold text-slate-100">
             Conversation Transcript
           </h2>
 
           {/* Auto-scroll toggle - larger touch target */}
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer min-h-[44px]">
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer min-h-[44px]">
             <input
               type="checkbox"
               checked={autoScroll}
               onChange={(e) => setAutoScroll(e.target.checked)}
-              className="w-5 h-5 rounded border-gray-300 text-clarity-600 focus:ring-clarity-500"
+              className="w-5 h-5 rounded border-slate-700/50 text-clarity-600 focus:ring-clarity-500 bg-slate-800"
             />
             Auto-scroll to bottom
           </label>
@@ -332,7 +332,7 @@ export function SessionReplay() {
           <CardBody className="max-h-[600px] overflow-y-auto">
             {messages.length === 0 ? (
               // Empty transcript state
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-slate-400">
                 <p>No messages in this session transcript.</p>
               </div>
             ) : (
@@ -359,7 +359,7 @@ export function SessionReplay() {
 
         {/* Message count indicator */}
         {messages.length > 0 && (
-          <p className="mt-2 text-sm text-gray-500 text-right">
+          <p className="mt-2 text-sm text-slate-500 text-right">
             {messages.length} message{messages.length !== 1 ? 's' : ''} in transcript
           </p>
         )}
@@ -371,7 +371,7 @@ export function SessionReplay() {
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="px-4 py-2 border border-clarity-300 text-clarity-700 rounded-lg hover:bg-clarity-50 transition-all duration-150 font-medium min-h-[44px] active:scale-[0.98]"
+          className="px-4 py-2 border border-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-800/50 transition-all duration-150 font-medium min-h-[44px] active:scale-[0.98]"
         >
           Scroll to Top
         </button>
