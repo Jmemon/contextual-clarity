@@ -39,7 +39,7 @@ export default {
       // and the blinking cursor during AI streaming.
       keyframes: {
         'fade-in': {
-          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         // User message briefly flashes then slides up 16px and fades out (400ms).

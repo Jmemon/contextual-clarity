@@ -25,9 +25,9 @@
     scroll-behavior: smooth;
   }
 
-  /* Default body styles */
+  /* Default body styles — dark slate background for the whole app */
   body {
-    @apply antialiased text-gray-900;
+    @apply antialiased bg-slate-900 text-slate-300;
   }
 }
 
@@ -36,17 +36,16 @@
  * Reusable component patterns using @apply
  */
 @layer components {
-  /* Example: Common button styles - can be extended as needed */
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
   }
 
   .btn-primary {
-    @apply btn bg-clarity-600 text-white hover:bg-clarity-700;
+    @apply btn bg-clarity-600 text-white hover:bg-clarity-500;
   }
 
   .btn-secondary {
-    @apply btn bg-clarity-100 text-clarity-700 hover:bg-clarity-200;
+    @apply btn bg-slate-700 text-slate-200 hover:bg-slate-600;
   }
 }
 
