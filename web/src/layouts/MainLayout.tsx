@@ -28,6 +28,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { BookOpen, Clock, BarChart3, type LucideIcon } from 'lucide-react';
 
 // ============================================================================
 // Navigation Configuration
@@ -38,12 +39,9 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
  * Each item represents a main section of the application.
  */
 interface NavItem {
-  /** URL path for the route */
   path: string;
-  /** Display label shown in the sidebar */
   label: string;
-  /** Icon character or emoji for visual identification */
-  icon: string;
+  Icon: LucideIcon;
 }
 
 /**
@@ -51,9 +49,9 @@ interface NavItem {
  * Order determines the display order in the navigation list.
  */
 const NAV_ITEMS: NavItem[] = [
-  { path: '/', label: 'Dashboard', icon: '📊' },
-  { path: '/recall-sets', label: 'Recall Sets', icon: '📚' },
-  { path: '/sessions', label: 'Sessions', icon: '🕐' },
+  { path: '/', label: 'Recall Sets', Icon: BookOpen },
+  { path: '/sessions', label: 'Sessions', Icon: Clock },
+  { path: '/dashboard', label: 'Dashboard', Icon: BarChart3 },
 ];
 
 // ============================================================================
@@ -111,21 +109,16 @@ function CloseIcon() {
 
 /**
  * Logo component for the sidebar header.
- * Displays the application name with branding styling.
+ * Displays the application name with dark theme branding.
  */
 function Logo() {
   return (
-    <div className="flex items-center gap-3 px-4 py-6 border-b border-clarity-200">
-      {/* Logo icon - a stylized brain/memory symbol */}
-      <div className="w-10 h-10 rounded-lg bg-clarity-600 flex items-center justify-center text-white text-xl font-bold shrink-0 transition-transform duration-200 hover:scale-105">
-        CC
-      </div>
-      {/* Application name */}
+    <div className="flex items-center gap-3 px-4 py-6 border-b border-slate-800/50">
       <div>
-        <h1 className="text-lg font-semibold text-clarity-800">
+        <h1 className="text-lg font-semibold text-white">
           Contextual
         </h1>
-        <p className="text-sm text-clarity-600 -mt-1">
+        <p className="text-sm text-clarity-400 -mt-1">
           Clarity
         </p>
       </div>
@@ -141,26 +134,21 @@ function Logo() {
  */
 function MobileHeader({ onMenuToggle }: { onMenuToggle: () => void }) {
   return (
-    <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-clarity-200 px-4 py-3 flex items-center justify-between">
-      {/* Hamburger menu button - minimum 44x44px touch target */}
+    <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-slate-950 border-b border-slate-800/50 px-4 py-3 flex items-center justify-between">
       <button
         type="button"
         onClick={onMenuToggle}
-        className="p-2 -ml-2 rounded-lg text-clarity-600 hover:bg-clarity-50 hover:text-clarity-800 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+        className="p-2 -ml-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-2 focus:ring-offset-slate-950 min-w-[44px] min-h-[44px] flex items-center justify-center"
         aria-label="Open navigation menu"
       >
         <HamburgerIcon />
       </button>
 
-      {/* Compact logo for mobile header */}
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-clarity-600 flex items-center justify-center text-white text-sm font-bold">
-          CC
-        </div>
-        <span className="font-semibold text-clarity-800">Contextual Clarity</span>
+        <span className="font-semibold text-white">Contextual</span>
+        <span className="font-semibold text-clarity-400">Clarity</span>
       </div>
 
-      {/* Spacer for balance - same width as hamburger button */}
       <div className="w-[44px]" aria-hidden="true" />
     </header>
   );
@@ -169,7 +157,7 @@ function MobileHeader({ onMenuToggle }: { onMenuToggle: () => void }) {
 /**
  * Single navigation link component with active state styling.
  * Uses NavLink from React Router for automatic active class handling.
- * Touch targets are 44px minimum height for accessibility.
+ * Dark theme with Lucide icons and left-border accent for active state.
  *
  * @param item - Navigation item configuration
  * @param onClick - Optional click handler (used for closing mobile menu)
@@ -178,24 +166,17 @@ function NavItemLink({ item, onClick }: { item: NavItem; onClick?: () => void })
   return (
     <NavLink
       to={item.path}
-      // end prop ensures exact matching for the root path "/"
-      // Without it, "/" would be active for all routes
       end={item.path === '/'}
       onClick={onClick}
       className={({ isActive }) =>
-        // Base styles for all nav items - minimum 44px height for touch targets
-        `flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-all duration-150 min-h-[44px] ${
+        `flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-all duration-200 min-h-[44px] ${
           isActive
-            // Active state: highlighted background and bold text
-            ? 'bg-clarity-100 text-clarity-800 font-medium'
-            // Inactive state: subtle hover effect
-            : 'text-clarity-600 hover:bg-clarity-50 hover:text-clarity-700'
+            ? 'text-white border-l-[3px] border-clarity-500 bg-slate-800/50 ml-0 pl-[13px]'
+            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
         } focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-inset`
       }
     >
-      {/* Icon displayed to the left of the label */}
-      <span className="text-lg" aria-hidden="true">{item.icon}</span>
-      {/* Navigation label text */}
+      <item.Icon className="w-5 h-5" strokeWidth={1.5} />
       <span>{item.label}</span>
     </NavLink>
   );
@@ -283,7 +264,7 @@ export function MainLayout() {
   }, [isSidebarOpen]);
 
   return (
-    <div className="flex min-h-screen bg-clarity-50">
+    <div className="flex min-h-screen bg-slate-900">
       {/* Mobile header with hamburger menu - visible only on mobile/tablet */}
       <MobileHeader onMenuToggle={toggleSidebar} />
 
@@ -306,7 +287,7 @@ export function MainLayout() {
         data-testid="sidebar"
         className={`
           fixed lg:sticky top-0 left-0 z-50
-          w-64 h-screen bg-white border-r border-clarity-200
+          w-64 h-screen bg-slate-950 border-r border-slate-800/50
           flex flex-col
           transition-transform duration-300 ease-in-out
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -317,7 +298,7 @@ export function MainLayout() {
         <button
           type="button"
           onClick={closeSidebar}
-          className="lg:hidden absolute top-4 right-4 p-2 rounded-lg text-clarity-600 hover:bg-clarity-50 hover:text-clarity-800 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-clarity-500 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="lg:hidden absolute top-4 right-4 p-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-slate-950 min-w-[44px] min-h-[44px] flex items-center justify-center"
           aria-label="Close navigation menu"
         >
           <CloseIcon />
@@ -334,8 +315,8 @@ export function MainLayout() {
         </nav>
 
         {/* Footer area at the bottom of sidebar */}
-        <div className="px-4 py-4 border-t border-clarity-200">
-          <p className="text-xs text-clarity-400 text-center">
+        <div className="px-4 py-4 border-t border-slate-800/50">
+          <p className="text-xs text-slate-600 text-center">
             Contextual Clarity v0.1.0
           </p>
         </div>
