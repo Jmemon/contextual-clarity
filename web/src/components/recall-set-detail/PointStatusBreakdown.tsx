@@ -129,7 +129,7 @@ export function PointStatusBreakdown({
 
         {/* Empty state when no points exist */}
         {!isLoading && total === 0 && (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400">
             <svg
               className="w-12 h-12 mb-2"
               fill="none"
@@ -151,7 +151,7 @@ export function PointStatusBreakdown({
               />
             </svg>
             <p className="text-sm">No recall points yet</p>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Add points to see the status breakdown
             </p>
           </div>
@@ -179,18 +179,21 @@ export function PointStatusBreakdown({
                 <Tooltip
                   formatter={(value: number, name: string) => [value, name]}
                   contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e5e7eb',
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #334155',
                     borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+                    color: '#e2e8f0',
                   }}
+                  itemStyle={{ color: '#e2e8f0' }}
+                  labelStyle={{ color: '#94a3b8' }}
                 />
                 {/* Legend at the bottom */}
                 <Legend
                   verticalAlign="bottom"
                   height={36}
                   formatter={(value: string) => (
-                    <span className="text-sm text-gray-700">{value}</span>
+                    <span className="text-sm text-slate-300">{value}</span>
                   )}
                 />
               </PieChart>
@@ -200,7 +203,7 @@ export function PointStatusBreakdown({
 
         {/* Status summary row below chart */}
         {!isLoading && total > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-700/50">
             {chartData.map(({ name, value, color }) => (
               <div key={name} className="text-center">
                 <div
@@ -208,8 +211,8 @@ export function PointStatusBreakdown({
                   style={{ backgroundColor: color }}
                   aria-hidden="true"
                 />
-                <p className="text-xs text-gray-500">{name}</p>
-                <p className="text-lg font-semibold text-gray-900">{value}</p>
+                <p className="text-xs text-slate-400">{name}</p>
+                <p className="text-lg font-semibold text-white">{value}</p>
               </div>
             ))}
           </div>

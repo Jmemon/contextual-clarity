@@ -129,7 +129,7 @@ export function SessionHistoryTable({
       <CardHeader>
         <div className="flex items-center justify-between">
           <span>Session History</span>
-          <span className="text-sm font-normal text-gray-500">
+          <span className="text-sm font-normal text-slate-400">
             {sessions.length} session{sessions.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -170,14 +170,14 @@ export function SessionHistoryTable({
                 <TableRow key={session.id}>
                   {/* Date cell */}
                   <TableCell>
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm text-white">
                       {formatSessionDate(session.startedAt)}
                     </span>
                   </TableCell>
 
                   {/* Duration cell */}
                   <TableCell>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-slate-400">
                       {session.metrics
                         ? formatDuration(session.metrics.durationMs)
                         : '--'}
@@ -190,27 +190,27 @@ export function SessionHistoryTable({
                       <span
                         className={`text-sm font-medium ${
                           session.metrics.recallRate >= 0.8
-                            ? 'text-green-600'
+                            ? 'text-emerald-400'
                             : session.metrics.recallRate >= 0.6
-                            ? 'text-amber-600'
-                            : 'text-red-600'
+                            ? 'text-amber-400'
+                            : 'text-red-400'
                         }`}
                       >
                         {formatRecallRate(session.metrics.recallRate)}
                       </span>
                     ) : (
-                      <span className="text-sm text-gray-400">--</span>
+                      <span className="text-sm text-slate-500">--</span>
                     )}
                   </TableCell>
 
                   {/* Engagement score cell */}
                   <TableCell>
                     {session.metrics ? (
-                      <span className="text-sm text-gray-600">
+                      <span className="text-sm text-slate-400">
                         {session.metrics.engagementScore}/100
                       </span>
                     ) : (
-                      <span className="text-sm text-gray-400">--</span>
+                      <span className="text-sm text-slate-500">--</span>
                     )}
                   </TableCell>
 
@@ -225,7 +225,7 @@ export function SessionHistoryTable({
                   <TableCell className="text-right">
                     <Link
                       to={`/sessions/${session.id}`}
-                      className="text-sm text-clarity-600 hover:text-clarity-700 hover:underline"
+                      className="text-sm text-clarity-400 hover:text-clarity-300 hover:underline"
                     >
                       View
                     </Link>

@@ -292,16 +292,16 @@ export function RecallSetDetail() {
         <nav className="mb-4">
           <Link
             to="/"
-            className="text-clarity-600 hover:text-clarity-800 transition-colors"
+            className="text-clarity-400 hover:text-clarity-300 transition-colors"
           >
             &larr; Back to Recall Sets
           </Link>
         </nav>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <h2 className="text-lg font-semibold text-red-800 mb-2">
+        <div className="bg-red-900/20 border border-red-800/50 rounded-lg p-6 text-center">
+          <h2 className="text-lg font-semibold text-red-400 mb-2">
             Recall Set Not Found
           </h2>
-          <p className="text-red-600">
+          <p className="text-red-400">
             {setError?.message || 'The requested recall set could not be found.'}
           </p>
         </div>
@@ -319,7 +319,7 @@ export function RecallSetDetail() {
       <nav className="mb-6">
         <Link
           to="/"
-          className="text-clarity-600 hover:text-clarity-800 transition-colors inline-flex items-center gap-1"
+          className="text-clarity-400 hover:text-clarity-300 transition-colors inline-flex items-center gap-1"
         >
           <svg
             className="w-4 h-4"

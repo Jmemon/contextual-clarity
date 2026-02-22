@@ -216,10 +216,10 @@ export function PointsList({
                   {/* Content cell - truncated with tooltip */}
                   <TableCell>
                     <div className="max-w-md">
-                      <p className="font-medium text-gray-900" title={point.content}>
+                      <p className="font-medium text-white" title={point.content}>
                         {truncateText(point.content, 60)}
                       </p>
-                      <p className="text-sm text-gray-500 mt-1" title={point.context}>
+                      <p className="text-sm text-slate-400 mt-1" title={point.context}>
                         {truncateText(point.context, 80)}
                       </p>
                     </div>
@@ -237,8 +237,8 @@ export function PointsList({
                     <span
                       className={`text-sm ${
                         new Date(point.fsrsState.due) < new Date()
-                          ? 'text-red-600 font-medium'
-                          : 'text-gray-600'
+                          ? 'text-red-400 font-medium'
+                          : 'text-slate-400'
                       }`}
                     >
                       {formatDueDate(point.fsrsState.due)}
@@ -247,7 +247,7 @@ export function PointsList({
 
                   {/* Repetitions count cell */}
                   <TableCell>
-                    <span className="text-sm text-gray-600">{point.fsrsState.reps}</span>
+                    <span className="text-sm text-slate-400">{point.fsrsState.reps}</span>
                   </TableCell>
 
                   {/* Actions cell */}
@@ -282,7 +282,7 @@ export function PointsList({
                         size="sm"
                         onClick={() => onDeletePoint(point)}
                         aria-label={`Delete ${truncateText(point.content, 20)}`}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-900/30"
                       >
                         <svg
                           className="w-4 h-4"

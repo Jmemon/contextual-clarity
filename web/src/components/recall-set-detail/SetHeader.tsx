@@ -71,7 +71,7 @@ export function SetHeader({
       <div className="flex-1">
         {/* Title row with status badge */}
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">
             {name}
           </h1>
           <Badge status={statusToBadge[status]}>
@@ -80,7 +80,7 @@ export function SetHeader({
         </div>
 
         {/* Description text */}
-        <p className="text-gray-600 max-w-2xl">{description}</p>
+        <p className="text-slate-400 max-w-2xl">{description}</p>
       </div>
 
       {/* Right side: Action buttons */}

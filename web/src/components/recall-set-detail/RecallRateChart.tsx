@@ -93,9 +93,9 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   const value = payload[0]?.value ?? 0;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-      <p className="text-sm text-gray-600 mb-1">{label}</p>
-      <p className="text-lg font-semibold text-clarity-600">
+    <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg p-3">
+      <p className="text-sm text-slate-400 mb-1">{label}</p>
+      <p className="text-lg font-semibold text-clarity-400">
         {(value * 100).toFixed(1)}%
       </p>
     </div>
@@ -129,7 +129,7 @@ export function RecallRateChart({
           <span>Recall Rate Over Time</span>
           {/* Indicator if showing sample data */}
           {isMockData && !isLoading && (
-            <span className="text-xs text-gray-400 font-normal">
+            <span className="text-xs text-slate-500 font-normal">
               Sample data
             </span>
           )}
@@ -152,23 +152,23 @@ export function RecallRateChart({
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
               >
                 {/* Grid lines for readability */}
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
 
                 {/* X-axis with date labels */}
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 12, fill: '#6b7280' }}
-                  tickLine={{ stroke: '#e5e7eb' }}
-                  axisLine={{ stroke: '#e5e7eb' }}
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  tickLine={{ stroke: '#334155' }}
+                  axisLine={{ stroke: '#334155' }}
                 />
 
                 {/* Y-axis with percentage scale (0-100%) */}
                 <YAxis
                   domain={[0, 1]}
                   tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
-                  tick={{ fontSize: 12, fill: '#6b7280' }}
-                  tickLine={{ stroke: '#e5e7eb' }}
-                  axisLine={{ stroke: '#e5e7eb' }}
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  tickLine={{ stroke: '#334155' }}
+                  axisLine={{ stroke: '#334155' }}
                   width={50}
                 />
 
@@ -179,10 +179,10 @@ export function RecallRateChart({
                 <Line
                   type="monotone"
                   dataKey="recallRate"
-                  stroke="#7c3aed" // Clarity purple
+                  stroke="#38bdf8"
                   strokeWidth={2}
-                  dot={{ r: 4, fill: '#7c3aed' }}
-                  activeDot={{ r: 6, fill: '#7c3aed', stroke: '#fff', strokeWidth: 2 }}
+                  dot={{ r: 4, fill: '#38bdf8' }}
+                  activeDot={{ r: 6, fill: '#38bdf8', stroke: '#1e293b', strokeWidth: 2 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -191,7 +191,7 @@ export function RecallRateChart({
 
         {/* Legend/description below chart */}
         {!isLoading && (
-          <p className="text-xs text-gray-500 mt-4 text-center">
+          <p className="text-xs text-slate-400 mt-4 text-center">
             {isMockData
               ? 'Chart shows sample data. Complete more study sessions to see your actual progress.'
               : 'Chart shows your recall success rate over the selected time period.'}
