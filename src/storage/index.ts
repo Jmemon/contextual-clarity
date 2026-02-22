@@ -28,8 +28,8 @@ export type {
   NewRecallSet,
   RecallPoint,
   NewRecallPoint,
-  Session,
-  NewSession,
+  SessionRow,
+  NewSessionRow,
   SessionMessage,
   NewSessionMessage,
 } from './schema';

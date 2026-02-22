@@ -683,13 +683,15 @@ export class WebSocketSessionHandler {
           await data.engine.pauseSession();
         }
       }
+
+      // FIX 5: Close only on the success path — the reason is accurate when no error occurred.
+      ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session ended by user');
     } catch (error) {
       console.error(`[WS] Error handling leave session:`, error);
       this.sendError(ws, 'SESSION_ENGINE_ERROR', 'Failed to leave session');
+      // FIX 5: Close on the error path with a distinct reason so it's clear this was an error.
+      ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Leave session failed');
     }
-
-    // Close the connection — client navigates to dashboard
-    ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session ended by user');
   }
 
   /**

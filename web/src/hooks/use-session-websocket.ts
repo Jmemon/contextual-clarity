@@ -74,7 +74,7 @@ export type ServerMessage =
   | { type: 'point_transition'; recalledCount: number; totalPoints: number; fromPointId: string; toPointId: string; pointsRemaining: number }
   | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
-  | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number }
+  | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message?: string; canContinue?: boolean }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
   | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
   | { type: 'rabbithole_entered'; topic: string }
@@ -128,6 +128,7 @@ export interface EvaluationResult {
 
 /**
  * Overlay data received when all points have been recalled (T08).
+ * FIX 7: Added optional message and canContinue fields forwarded from the server payload.
  */
 export interface CompleteOverlayData {
   /** Session ID */
@@ -136,6 +137,10 @@ export interface CompleteOverlayData {
   recalledCount: number;
   /** Total points in session */
   totalPoints: number;
+  /** Optional message from the server to show in the overlay */
+  message?: string;
+  /** Whether the user can continue discussing after the overlay */
+  canContinue?: boolean;
 }
 
 /**
@@ -305,6 +310,9 @@ export function useSessionWebSocket(
   const [isOpeningMessage, setIsOpeningMessage] = useState(true);
   // Ref to hold the active clear-timeout so it can be cancelled on rapid sends.
   const lastSentClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // FIX 8: Ref to track the current rabbitholePrompt inside sendUserMessage without
+  // requiring it as a useCallback dependency (avoids recreating the function on every prompt change).
+  const rabbitholePromptRef = useRef<RabbitholePromptData | null>(null);
 
   // T09: Rabbit hole UX mode state.
   const [isInRabbithole, setIsInRabbithole] = useState(false);
@@ -312,6 +320,9 @@ export function useSessionWebSocket(
   // rabbitholePrompt holds the detected event data shown in RabbitholePrompt.
   // Cleared when the user accepts or declines.
   const [rabbitholePrompt, setRabbitholePrompt] = useState<RabbitholePromptData | null>(null);
+  // FIX 8: Keep rabbitholePromptRef in sync so sendUserMessage can read the latest value
+  // without needing rabbitholePrompt as a useCallback dependency.
+  rabbitholePromptRef.current = rabbitholePrompt;
 
   // Refs for WebSocket instance and reconnection tracking
   const wsRef = useRef<WebSocket | null>(null);
@@ -467,11 +478,14 @@ export function useSessionWebSocket(
 
         // T08: All recall points have been marked as recalled — show the completion overlay.
         // The session is NOT finalized yet; the user can choose to continue or leave.
+        // FIX 7: Forward message and canContinue so the overlay can display server-provided text.
         case 'session_complete_overlay':
           callbacksRef.current.onCompleteOverlay?.({
             sessionId: message.sessionId,
             recalledCount: message.recalledCount,
             totalPoints: message.totalPoints,
+            message: message.message,
+            canContinue: message.canContinue,
           });
           break;
 
@@ -674,10 +688,22 @@ export function useSessionWebSocket(
    * T12: Also sets lastSentUserMessage briefly (500ms) so SingleExchangeView
    * can display the user_sent flash phase. Cancels any pending clear timeout
    * on rapid successive sends.
+   *
+   * FIX 8: If a rabbit hole prompt is currently visible (rabbitholePromptRef.current
+   * is non-null), implicitly dismiss it and send a decline_rabbithole message to the
+   * server before sending the user's message. This prevents the prompt from lingering
+   * after the user has already moved on.
    */
   const sendUserMessage = useCallback(
     (content: string) => {
       if (!content.trim()) return;
+
+      // FIX 8: Auto-dismiss any pending rabbit hole prompt when the user sends a message.
+      // This signals to the server that the user is not interested in the tangent.
+      if (rabbitholePromptRef.current !== null) {
+        setRabbitholePrompt(null);
+        sendMessage({ type: 'decline_rabbithole' });
+      }
 
       // Add user message to the full history list
       setMessages((prev) => [

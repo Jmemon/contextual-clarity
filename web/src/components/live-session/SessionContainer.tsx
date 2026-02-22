@@ -406,12 +406,16 @@ export function SessionContainer({
 
       {/* T08: Session complete overlay — shown when all recall points recalled.
            User can continue discussing or leave (which pauses the session). */}
+      {/* FIX 7: Pass message and canContinue from overlayData so the overlay shows
+           the server-provided text and conditionally shows the "Continue" button. */}
       {showCompleteOverlay && overlayData && (
         <SessionCompleteOverlay
           recalledCount={overlayData.recalledCount}
           totalPoints={overlayData.totalPoints}
           onContinue={handleContinueDiscussion}
           onDone={leaveSession}
+          message={overlayData.message}
+          canContinue={overlayData.canContinue}
         />
       )}
 

@@ -219,12 +219,6 @@ export class SessionEngine {
    */
   private currentModel: string = 'claude-3-5-sonnet-20241022';
 
-  /**
-   * T08: Set to true when all points are recalled while the user is in a rabbit hole.
-   * The completion overlay is deferred until the rabbit hole exits via exitRabbithole().
-   */
-  private completionPending: boolean = false;
-
   // ============================================================================
   // T09: Rabbit Hole UX Mode State
   // ============================================================================
@@ -488,7 +482,6 @@ export class SessionEngine {
     this.pointChecklist = new Map(
       this.targetPoints.map(p => [p.id, recalledSet.has(p.id) ? 'recalled' : 'pending'])
     );
-    this.completionPending = false;
 
     // Set currentProbeIndex to the first still-pending point
     this.currentProbeIndex = 0;
@@ -825,7 +818,7 @@ export class SessionEngine {
    * or when finalizeSession() is called explicitly.
    *
    * Edge case: if the user is currently in a rabbit hole, set completionPending = true
-   * and defer the overlay until onRabbitHoleExit() is called.
+   * and defer the overlay until exitRabbithole() is called.
    *
    * @param evalResult - The evaluation result from the last evaluateUncheckedPoints() call
    * @returns ProcessMessageResult with a continuation response (not marked completed yet)
@@ -835,8 +828,8 @@ export class SessionEngine {
     const totalPoints = this.targetPoints.length;
 
     if (this.isInRabbitHole()) {
-      // Defer the overlay until the rabbit hole exits
-      this.completionPending = true;
+      // Defer the overlay until the rabbit hole exits via exitRabbithole()
+      // (completionPendingAfterRabbithole is set in processRabbitholeMessage)
     } else {
       // Emit the overlay event — frontend will show completion overlay
       this.emitEvent('session_complete_overlay', {
@@ -858,24 +851,6 @@ export class SessionEngine {
       totalPoints,
       pointsRecalledThisTurn: evalResult.recalledPointIds,
     };
-  }
-
-  /**
-   * T08: Called when the user exits a rabbit hole.
-   * If completionPending is true (all points recalled while in rabbit hole),
-   * now emits the session_complete_overlay event that was deferred.
-   */
-  onRabbitHoleExit(): void {
-    if (this.completionPending && this.currentSession) {
-      this.completionPending = false;
-      this.emitEvent('session_complete_overlay', {
-        sessionId: this.currentSession.id,
-        recalledCount: this.getRecalledCount(),
-        totalPoints: this.targetPoints.length,
-        message: "You've covered everything!",
-        canContinue: true,
-      });
-    }
   }
 
   /**
@@ -971,6 +946,9 @@ export class SessionEngine {
     this.activeRabbitholeTopic = null;
     this.rabbitholePointsRecalled = 0;
     this.completionPendingAfterRabbithole = false;
+    // FIX 6: Reset cooldown — the user explicitly returned to normal session flow,
+    // so rabbit hole detection should be re-enabled immediately.
+    this.rabbitholeDeclineCooldown = 0;
 
     // Emit exited event
     this.emitEvent('rabbithole_exited', {
@@ -1029,11 +1007,11 @@ export class SessionEngine {
       });
     }
 
-    // If all points are recalled while in a rabbit hole, defer the overlay
+    // If all points are recalled while in a rabbit hole, defer the overlay.
+    // exitRabbithole() reads completionPendingAfterRabbithole to decide whether
+    // to fire session_complete_overlay once the user exits.
     if (this.allPointsRecalled() && !this.completionPendingAfterRabbithole) {
       this.completionPendingAfterRabbithole = true;
-      // Also set the main completionPending flag so onRabbitHoleExit() works
-      this.completionPending = true;
     }
 
     // Route to the RabbitholeAgent for the actual response
@@ -1175,8 +1153,11 @@ export class SessionEngine {
 
   /**
    * Returns true if every point in the checklist has been recalled.
+   * FIX 4: Returns false when the checklist is empty to prevent false-positive
+   * completions before the session has loaded any target points.
    */
   allPointsRecalled(): boolean {
+    if (this.pointChecklist.size === 0) return false;
     for (const status of this.pointChecklist.values()) {
       if (status === 'pending') return false;
     }
@@ -1553,7 +1534,6 @@ export class SessionEngine {
     this.pointChecklist = new Map();
     this.currentProbeIndex = 0;
     this.messages = [];
-    this.completionPending = false; // T08: reset deferred overlay flag
     this.llmClient.setSystemPrompt(undefined);
 
     // T09: Reset rabbit hole UX mode state
