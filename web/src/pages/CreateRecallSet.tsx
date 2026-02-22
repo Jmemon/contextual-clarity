@@ -36,7 +36,7 @@ export function CreateRecallSet() {
    * Handle cancel - go back to recall sets list.
    */
   const handleCancel = () => {
-    navigate('/recall-sets');
+    navigate('/');
   };
 
   return (

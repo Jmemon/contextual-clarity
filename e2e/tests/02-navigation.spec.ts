@@ -26,66 +26,66 @@ test.describe('Navigation', () => {
     test('sidebar links navigate to correct pages', async ({ page, testEnv }) => {
       await page.goto(testEnv.webUrl);
 
-      // Start on Dashboard
-      await expectDashboard(page);
-
-      // Navigate to Recall Sets
-      await page.getByRole('link', { name: /Recall Sets/i }).click();
+      // Start on Recall Sets (home page)
       await expectRecallSetsList(page);
 
       // Navigate to Sessions
       await page.getByRole('link', { name: /Sessions/i }).click();
       await expectSessionsList(page);
 
-      // Navigate back to Dashboard
+      // Navigate to Dashboard
       await page.getByRole('link', { name: /Dashboard/i }).click();
       await expectDashboard(page);
+
+      // Navigate back to Recall Sets
+      await page.getByRole('link', { name: /Recall Sets/i }).click();
+      await expectRecallSetsList(page);
     });
 
     test('active link is highlighted', async ({ page, testEnv }) => {
       await page.goto(testEnv.webUrl);
 
-      // Dashboard link should be active
-      const dashboardLink = page.getByRole('link', { name: /Dashboard/i });
-      await expect(dashboardLink).toHaveClass(/bg-clarity/);
-
-      // Navigate to Recall Sets
-      await page.getByRole('link', { name: /Recall Sets/i }).click();
-
-      // Now Recall Sets link should be active
+      // Recall Sets link should be active (home page)
       const recallSetsLink = page.getByRole('link', { name: /Recall Sets/i });
-      await expect(recallSetsLink).toHaveClass(/bg-clarity/);
+      await expect(recallSetsLink).toHaveClass(/border-clarity/);
 
-      // Dashboard link should no longer be active
-      await expect(dashboardLink).not.toHaveClass(/bg-clarity-100/);
+      // Navigate to Dashboard
+      await page.getByRole('link', { name: /Dashboard/i }).click();
+
+      // Now Dashboard link should be active
+      const dashboardLink = page.getByRole('link', { name: /Dashboard/i });
+      await expect(dashboardLink).toHaveClass(/border-clarity/);
+
+      // Recall Sets link should no longer be active
+      await expect(recallSetsLink).not.toHaveClass(/border-clarity/);
     });
 
     test('browser back/forward navigation works', async ({ page, testEnv }) => {
       await page.goto(testEnv.webUrl);
-      await expectDashboard(page);
-
-      // Navigate to Recall Sets
-      await page.getByRole('link', { name: /Recall Sets/i }).click();
       await expectRecallSetsList(page);
 
       // Navigate to Sessions
       await page.getByRole('link', { name: /Sessions/i }).click();
       await expectSessionsList(page);
 
-      // Go back - wait for URL to update
-      await page.goBack();
-      await page.waitForURL('**/recall-sets');
-      await expect(page.locator('h1', { hasText: 'Recall Sets' })).toBeVisible();
+      // Navigate to Dashboard
+      await page.getByRole('link', { name: /Dashboard/i }).click();
+      await expectDashboard(page);
 
-      // Go back again
+      // Go back to Sessions
+      await page.goBack();
+      await page.waitForURL('**/sessions');
+      await expect(page.getByRole('heading', { name: /Session History|Sessions/i })).toBeVisible();
+
+      // Go back to Recall Sets (home)
       await page.goBack();
       await page.waitForURL(/\/$/);
-      await expect(page.getByRole('heading', { name: /Dashboard/i })).toBeVisible();
-
-      // Go forward
-      await page.goForward();
-      await page.waitForURL('**/recall-sets');
       await expect(page.locator('h1', { hasText: 'Recall Sets' })).toBeVisible();
+
+      // Go forward to Sessions
+      await page.goForward();
+      await page.waitForURL('**/sessions');
+      await expect(page.getByRole('heading', { name: /Session History|Sessions/i })).toBeVisible();
     });
   });
 
@@ -179,7 +179,7 @@ test.describe('Navigation', () => {
 
   test.describe('Deep Linking', () => {
     test('direct URL to recall sets list works', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
     });
 

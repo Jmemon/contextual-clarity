@@ -170,7 +170,7 @@ export function RecallSetDetail() {
     if (!id) return;
 
     await deleteSetMutation.mutateAsync(id);
-    navigate('/recall-sets');
+    navigate('/');
   }, [id, deleteSetMutation, navigate]);
 
   // ============================================================================

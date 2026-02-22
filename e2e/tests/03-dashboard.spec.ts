@@ -15,7 +15,7 @@ import { expectDashboard, expectNotLoading } from '../helpers/assertions';
 test.describe('Dashboard', () => {
   test.describe('Due Points Card', () => {
     test('displays due points count', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Find the due points card
@@ -32,7 +32,7 @@ test.describe('Dashboard', () => {
     });
 
     test('shows "Start Studying" button when points are due', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const duePointsCard = page.getByTestId('due-points-card');
@@ -49,7 +49,7 @@ test.describe('Dashboard', () => {
     test('shows encouraging message when all caught up', async ({ page, testEnv }) => {
       // This test checks the "all caught up" state
       // Note: This may not trigger if test data has due points
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
       await expectNotLoading(page);
 
@@ -63,7 +63,7 @@ test.describe('Dashboard', () => {
     });
 
     test('displays today\'s session count and study time', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const duePointsCard = page.getByTestId('due-points-card');
@@ -76,7 +76,7 @@ test.describe('Dashboard', () => {
     });
 
     test('Start Studying button navigates to recall sets', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const duePointsCard = page.getByTestId('due-points-card');
@@ -84,14 +84,14 @@ test.describe('Dashboard', () => {
 
       if (parseInt(dueCount || '0') > 0) {
         await duePointsCard.getByRole('link', { name: /Start Studying/i }).click();
-        await expect(page).toHaveURL(/\/recall-sets/);
+        await expect(page).toHaveURL(/\/$/);  // Recall Sets is now at /
       }
     });
   });
 
   test.describe('Recent Sessions List', () => {
     test('displays recent sessions section', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Recent Sessions card should be visible
@@ -100,7 +100,7 @@ test.describe('Dashboard', () => {
 
     test('shows empty state when no sessions', async ({ page, testEnv }) => {
       // Fresh test environment may have no sessions
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Check for either sessions or empty state
@@ -129,7 +129,7 @@ test.describe('Dashboard', () => {
         headers: { 'Content-Type': 'application/json' },
       });
 
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
       await expectNotLoading(page);
 
@@ -155,7 +155,7 @@ test.describe('Dashboard', () => {
         method: 'POST',
       });
 
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
       await expectNotLoading(page);
 
@@ -170,7 +170,7 @@ test.describe('Dashboard', () => {
     });
 
     test('"View All" link navigates to sessions page', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Use exact match to avoid matching "View all 20 reviews" link
@@ -187,7 +187,7 @@ test.describe('Dashboard', () => {
         await route.continue();
       });
 
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
 
       // Should show loading spinner initially
       const spinner = page.getByTestId('spinner');
@@ -206,10 +206,10 @@ test.describe('Dashboard', () => {
         })
       );
 
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
 
       // Should show error state or handle gracefully
-      // The page should still load without crashing
+      // The page should still load without crashing (dashboard route intercepts only dashboard API)
       await expect(page.getByRole('heading', { name: /Dashboard/i })).toBeVisible();
     });
   });
@@ -217,7 +217,7 @@ test.describe('Dashboard', () => {
   test.describe('Dashboard Responsiveness', () => {
     test('adjusts layout for mobile', async ({ page, testEnv }) => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Dashboard content should be visible
@@ -231,7 +231,7 @@ test.describe('Dashboard', () => {
 
     test('adjusts layout for tablet', async ({ page, testEnv }) => {
       await page.setViewportSize({ width: 768, height: 1024 });
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // All dashboard elements should be visible

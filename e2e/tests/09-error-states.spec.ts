@@ -15,7 +15,7 @@ import { expectDashboard, expectRecallSetsList, expectNotLoading, expect404 } fr
 test.describe('Error States', () => {
   test.describe('Network Errors', () => {
     test('handles offline state gracefully', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Go offline briefly
@@ -31,7 +31,7 @@ test.describe('Error States', () => {
     });
 
     test('recovers from temporary network failure', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Fail first request, then succeed
@@ -62,7 +62,7 @@ test.describe('Error States', () => {
     });
 
     test('shows timeout error for slow requests', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
 
       // Make API extremely slow
       await page.route('**/api/**', async (route) => {
@@ -90,7 +90,7 @@ test.describe('Error States', () => {
         })
       );
 
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
 
       // Should show error state - app displays "Failed to load recall sets"
       await expect(
@@ -139,7 +139,7 @@ test.describe('Error States', () => {
         })
       );
 
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
 
       // Should handle gracefully without crashing
       // Page will show error state when JSON parsing fails, or the heading
@@ -158,7 +158,7 @@ test.describe('Error States', () => {
         })
       );
 
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
 
       // Should show empty state
       await expect(
@@ -190,7 +190,7 @@ test.describe('Error States', () => {
 
   test.describe('Form Submission Errors', () => {
     test('shows error when create fails', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -230,7 +230,7 @@ test.describe('Error States', () => {
     });
 
     test('preserves form data after submission error', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -287,7 +287,7 @@ test.describe('Error States', () => {
         return route.continue();
       });
 
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
 
       // Wait for error state
       await page.waitForTimeout(1000);
@@ -318,7 +318,7 @@ test.describe('Error States', () => {
         return route.continue();
       });
 
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
 
       // Wait for error
       await page.waitForTimeout(1000);

@@ -27,7 +27,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('sidebar is hidden by default', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const sidebar = page.getByTestId('sidebar');
@@ -48,7 +48,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('content fills full width', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Main content should fill the viewport
@@ -62,7 +62,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('cards stack vertically', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Due points card should be visible
@@ -105,7 +105,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('text is readable without horizontal scroll', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Check for horizontal overflow
@@ -117,7 +117,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('forms are usable on mobile', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -157,7 +157,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('content uses available space efficiently', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Cards should be visible
@@ -166,7 +166,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('recall set cards may be in grid', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
 
       // Get all recall set cards
@@ -194,7 +194,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('sidebar is always visible', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const sidebar = page.getByTestId('sidebar');
@@ -214,7 +214,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('content is beside sidebar', async ({ page, testEnv }) => {
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const sidebar = page.getByTestId('sidebar');
@@ -230,7 +230,7 @@ test.describe('Responsive Design', () => {
     });
 
     test('recall set cards in multi-column grid', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
 
       // Need at least 2 cards to test grid
@@ -256,7 +256,7 @@ test.describe('Responsive Design', () => {
     test('resizing from mobile to desktop works', async ({ page, testEnv }) => {
       // Start mobile
       await page.setViewportSize(VIEWPORTS.mobile);
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Sidebar should be hidden (off-screen)
@@ -279,7 +279,7 @@ test.describe('Responsive Design', () => {
     test('resizing from desktop to mobile works', async ({ page, testEnv }) => {
       // Start desktop
       await page.setViewportSize(VIEWPORTS.desktop);
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Sidebar should be visible (on-screen)
@@ -310,7 +310,7 @@ test.describe('Responsive Design', () => {
 
       // Test on mobile
       await page.setViewportSize(VIEWPORTS.mobile);
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       const sessionCard = page.getByTestId('session-card').first();
@@ -337,7 +337,7 @@ test.describe('Responsive Design', () => {
     test('stat cards have responsive text size', async ({ page, testEnv }) => {
       // Test mobile
       await page.setViewportSize(VIEWPORTS.mobile);
-      await page.goto(testEnv.webUrl);
+      await page.goto(`${testEnv.webUrl}/dashboard`);
       await expectDashboard(page);
 
       // Check due points card text is visible and not overflowing

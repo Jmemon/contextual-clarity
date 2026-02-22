@@ -22,7 +22,7 @@ test.describe('Live Session', () => {
   test.describe('Session Start', () => {
     test('can start a session from recall set', async ({ page, testEnv }) => {
       // Go to recall sets list where the Start Session button is on each card
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expect(page.getByRole('heading', { name: 'Recall Sets', exact: true, level: 1 })).toBeVisible();
 
       // Find the test recall set card and click its Start Session button

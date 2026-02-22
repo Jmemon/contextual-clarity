@@ -16,7 +16,7 @@ import { expectRecallSetsList, expectRecallSetDetail, expectNotLoading } from '.
 test.describe('Recall Sets', () => {
   test.describe('Recall Sets List', () => {
     test('displays list of recall sets', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -26,7 +26,7 @@ test.describe('Recall Sets', () => {
     });
 
     test('recall set card displays key information', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -46,7 +46,7 @@ test.describe('Recall Sets', () => {
     });
 
     test('clicking recall set card navigates to detail page', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -60,7 +60,7 @@ test.describe('Recall Sets', () => {
     });
 
     test('shows "Create Recall Set" button', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
 
       // Should have a create button
@@ -73,7 +73,7 @@ test.describe('Recall Sets', () => {
 
     test('empty state when no recall sets', async ({ page, testEnv }) => {
       // This is hard to test with seeded data, so we'll check the structure exists
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
 
       // Either we have cards or we don't - page should handle both
@@ -86,7 +86,7 @@ test.describe('Recall Sets', () => {
 
   test.describe('Create Recall Set', () => {
     test('can open create recall set modal/form', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
 
       // Click create button
@@ -101,7 +101,7 @@ test.describe('Recall Sets', () => {
     });
 
     test('creates new recall set with valid data', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -129,7 +129,7 @@ test.describe('Recall Sets', () => {
     });
 
     test('shows validation errors for empty name', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -162,7 +162,7 @@ test.describe('Recall Sets', () => {
     });
 
     test('can cancel creating recall set', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -182,7 +182,7 @@ test.describe('Recall Sets', () => {
       await cancelButton.click();
 
       // Should return to list - wait for navigation to complete
-      await page.waitForURL('**/recall-sets', { timeout: 10000 });
+      await page.waitForURL(/\/$/, { timeout: 10000 });
       await expectRecallSetsList(page);
     });
   });
@@ -212,7 +212,7 @@ test.describe('Recall Sets', () => {
 
     test('can start session from recall sets list', async ({ page, testEnv }) => {
       // Start Session button is on the card, not the detail page
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 

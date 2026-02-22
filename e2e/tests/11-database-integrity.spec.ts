@@ -16,7 +16,7 @@ test.describe('Database Integrity', () => {
     test('created recall set persists in database', async ({ page, testEnv }) => {
       const uniqueName = `DB Test Set ${Date.now()}`;
 
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -187,7 +187,7 @@ test.describe('Database Integrity', () => {
   test.describe('Session Operations', () => {
     test('session start creates database record', async ({ page, testEnv }) => {
       // Start Session button is on the RecallSetCard in the list page, not detail page
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 

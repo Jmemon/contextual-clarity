@@ -22,8 +22,8 @@ test.describe('Smoke Tests', () => {
     // Verify the page title contains the app name
     await expect(page).toHaveTitle(/Contextual Clarity/i);
 
-    // Verify the main heading is visible
-    await expect(page.getByRole('heading', { name: /Dashboard/i })).toBeVisible();
+    // Verify the main heading is visible (home page is Recall Sets)
+    await expect(page.getByRole('heading', { name: /Recall Sets/i })).toBeVisible();
   });
 
   test('sidebar navigation is visible on desktop', async ({ page, testEnv }) => {
@@ -85,8 +85,8 @@ test.describe('Smoke Tests', () => {
 
     await page.goto(testEnv.webUrl);
 
-    // Wait for meaningful content
-    await expect(page.getByRole('heading', { name: /Dashboard/i })).toBeVisible();
+    // Wait for meaningful content (home page is Recall Sets)
+    await expect(page.getByRole('heading', { name: /Recall Sets/i })).toBeVisible();
 
     // Check that page rendered within 5 seconds
     const loadTime = Date.now() - startTime;

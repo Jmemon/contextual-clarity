@@ -15,7 +15,7 @@ import { expectFieldError, expectNoFieldError, expectRecallSetsList, expectRecal
 test.describe('Form Validation', () => {
   test.describe('Recall Set Form', () => {
     test('validates required name field', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -41,7 +41,7 @@ test.describe('Form Validation', () => {
     });
 
     test('validates name length constraints', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -67,7 +67,7 @@ test.describe('Form Validation', () => {
     });
 
     test('clears validation errors when field is corrected', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -94,7 +94,7 @@ test.describe('Form Validation', () => {
     });
 
     test('shows loading state during submission', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -183,7 +183,7 @@ test.describe('Form Validation', () => {
 
   test.describe('Form Accessibility', () => {
     test('form inputs have associated labels', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -222,7 +222,7 @@ test.describe('Form Validation', () => {
     });
 
     test('error messages are accessible', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -257,7 +257,7 @@ test.describe('Form Validation', () => {
     });
 
     test('forms can be navigated with keyboard', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -300,7 +300,7 @@ test.describe('Form Validation', () => {
 
   test.describe('Form State Management', () => {
     test('preserves form data on validation error', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 
@@ -328,7 +328,7 @@ test.describe('Form Validation', () => {
     });
 
     test('resets form on cancel', async ({ page, testEnv }) => {
-      await page.goto(`${testEnv.webUrl}/recall-sets`);
+      await page.goto(testEnv.webUrl);
       await expectRecallSetsList(page);
       await expectNotLoading(page);
 

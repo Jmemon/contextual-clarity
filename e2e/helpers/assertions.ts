@@ -16,7 +16,7 @@ import { expect, type Page, type Locator } from '@playwright/test';
  * Waits for loading to complete before checking for the heading.
  */
 export async function expectDashboard(page: Page): Promise<void> {
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL('/dashboard');
   // Wait for loading to finish (dashboard shows "Loading dashboard..." while loading)
   await expect(page.getByText('Loading dashboard...')).not.toBeVisible({ timeout: 30000 });
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
@@ -26,7 +26,7 @@ export async function expectDashboard(page: Page): Promise<void> {
  * Asserts that the page is showing the recall sets list.
  */
 export async function expectRecallSetsList(page: Page): Promise<void> {
-  await expect(page).toHaveURL('/recall-sets');
+  await expect(page).toHaveURL('/');
   // Use exact match for the main h1 heading to avoid matching recall set card headings
   await expect(
     page.getByRole('heading', { name: 'Recall Sets', exact: true, level: 1 })
