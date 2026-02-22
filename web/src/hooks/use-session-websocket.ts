@@ -76,7 +76,7 @@ export type ServerMessage =
   | { type: 'assistant_complete'; fullContent: string }
   | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
-  | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message?: string; canContinue?: boolean }
+  | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
   | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
   | { type: 'rabbithole_entered'; topic: string }
@@ -142,7 +142,7 @@ export interface EvaluationResult {
 
 /**
  * Overlay data received when all points have been recalled (T08).
- * FIX 7: Added optional message and canContinue fields forwarded from the server payload.
+ * T13: message and canContinue are required — the server always sends both.
  */
 export interface CompleteOverlayData {
   /** Session ID */
@@ -151,10 +151,10 @@ export interface CompleteOverlayData {
   recalledCount: number;
   /** Total points in session */
   totalPoints: number;
-  /** Optional message from the server to show in the overlay */
-  message?: string;
+  /** Completion message from the server to show in the overlay */
+  message: string;
   /** Whether the user can continue discussing after the overlay */
-  canContinue?: boolean;
+  canContinue: boolean;
 }
 
 /**
@@ -533,6 +533,8 @@ export function useSessionWebSocket(
             sessionId: message.sessionId,
             recalledCount: message.recalledCount,
             totalPoints: message.totalPoints,
+            message: '',
+            canContinue: false,
           });
           break;
 
