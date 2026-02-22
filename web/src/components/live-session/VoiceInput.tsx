@@ -1,15 +1,15 @@
 /**
  * Voice Input Component for Live Sessions
  *
- * Voice-first input that replaces MessageInput. Supports two modes:
- * - Voice (default): tap mic to record, Deepgram transcribes, review before sending
- * - Text (fallback): standard text input for when voice isn't available/desired
+ * Voice-first input that supports two modes:
+ * - Voice (default): tap mic to record, server transcribes, review before sending
+ * - Text (fallback): standard text input
  *
  * State-based rendering:
  * - Idle: mic button + keyboard switch
- * - Recording: waveform + pulsing red mic button
- * - Processing: loading spinner
- * - Review: transcribed text (tappable to edit) + correction mic + send button
+ * - Recording: waveform + send button (stops recording and transcribes)
+ * - Transcribing: loading spinner
+ * - Review: editable text + voice-edit mic + send button
  * - Error: error message + text fallback
  * - Text mode: standard input + mic switch + send
  *
@@ -27,8 +27,8 @@ import { Waveform } from './Waveform';
 export interface VoiceInputProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onSubmit'> {
   /** Callback when a message is sent (voice or text) */
   onSend: (message: string) => void;
-  /** Callback to process transcription through the pipeline (optional) */
-  onProcessTranscription?: (text: string) => void;
+  /** Session ID for pipeline processing during transcription */
+  sessionId?: string;
   /** Whether the input is disabled (e.g., waiting for AI response) */
   disabled?: boolean;
   /** Placeholder text for text input mode */
@@ -84,7 +84,7 @@ function KeyboardIcon({ className = '' }: { className?: string }) {
 
 export function VoiceInput({
   onSend,
-  onProcessTranscription,
+  sessionId,
   disabled = false,
   placeholder = 'Type your response...',
   className = '',
@@ -97,61 +97,30 @@ export function VoiceInput({
   // Touch tracking for swipe-up gesture (mobile send)
   const touchStartYRef = useRef<number | null>(null);
 
-  // Voice input hook
+  // Voice input hook — batch transcription
   const {
     state: voiceState,
     transcribedText,
-    interimText,
     errorMessage,
     waveformData,
+    isVoiceEdit,
     startRecording,
-    stopRecording,
-    startCorrection,
+    stopAndSend,
+    startVoiceEdit,
     setTranscribedText,
     reset: resetVoice,
-  } = useVoiceInput({
-    onFinalTranscription: (text) => {
-      onProcessTranscription?.(text);
-    },
-    /**
-     * Called when a correction recording finishes.  POSTs to the backend
-     * correction endpoint which runs the instruction through Claude Haiku and
-     * returns the corrected text.  On success the textarea is updated in place;
-     * on failure the original text is kept so the user can try again.
-     */
-    onProcessCorrection: async (currentText, correctionInstruction) => {
-      try {
-        const response = await fetch('/api/voice/correct', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ currentText, correctionInstruction }),
-        });
-
-        const data = await response.json() as { success?: boolean; data?: { correctedText?: string } };
-
-        if (data.success && data.data?.correctedText) {
-          setTranscribedText(data.data.correctedText);
-        }
-        // If the call fails, the original transcribedText is unchanged and the
-        // user can manually edit or try correcting again.
-      } catch {
-        // Network error — silently leave the existing text intact
-      }
-    },
-  });
+  } = useVoiceInput({ sessionId });
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
-  /** Send the current transcribed text (voice review mode) */
   const handleVoiceSend = useCallback(() => {
     if (disabled || !transcribedText.trim()) return;
     onSend(transcribedText.trim());
     resetVoice();
   }, [disabled, transcribedText, onSend, resetVoice]);
 
-  /** Handle text mode form submission */
   const handleTextSubmit = useCallback((e: FormEvent) => {
     e.preventDefault();
     const trimmed = textInputValue.trim();
@@ -161,7 +130,6 @@ export function VoiceInput({
     textareaRef.current?.focus();
   }, [textInputValue, disabled, onSend]);
 
-  /** Handle Enter key in text mode */
   const handleTextKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -169,7 +137,6 @@ export function VoiceInput({
     }
   }, [handleTextSubmit]);
 
-  /** Handle Enter key in voice review mode */
   const handleReviewKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -177,7 +144,6 @@ export function VoiceInput({
     }
   }, [handleVoiceSend]);
 
-  /** Mobile swipe-up detection for sending */
   const handleTouchStart = useCallback((e: TouchEvent) => {
     touchStartYRef.current = e.touches[0]?.clientY ?? null;
   }, []);
@@ -188,19 +154,16 @@ export function VoiceInput({
     const deltaY = touchStartYRef.current - touchEndY;
     touchStartYRef.current = null;
 
-    // Swipe up (50px threshold) to send
     if (deltaY > 50 && voiceState === 'review') {
       handleVoiceSend();
     }
   }, [voiceState, handleVoiceSend]);
 
-  /** Switch to text input mode */
   const switchToText = useCallback(() => {
     resetVoice();
     setInputMode('text');
   }, [resetVoice]);
 
-  /** Switch to voice input mode */
   const switchToVoice = useCallback(() => {
     setTextInputValue('');
     setInputMode('voice');
@@ -233,8 +196,6 @@ export function VoiceInput({
               transition-opacity
             "
           />
-
-          {/* Mic switch button */}
           <button
             type="button"
             onClick={switchToVoice}
@@ -244,8 +205,6 @@ export function VoiceInput({
           >
             <MicIcon className="w-5 h-5" />
           </button>
-
-          {/* Send button */}
           <button
             type="submit"
             disabled={disabled || !textInputValue.trim()}
@@ -310,57 +269,49 @@ export function VoiceInput({
         </div>
       )}
 
-      {/* Recording state: waveform + pulsing red stop button */}
-      {(voiceState === 'recording' || voiceState === 'correction') && (
+      {/* Recording state: waveform + send button */}
+      {voiceState === 'recording' && (
         <div className="space-y-3">
-          {/* Interim transcription preview */}
-          {interimText && (
-            <p className="text-clarity-300 text-sm text-center truncate px-4">
-              {interimText}
-            </p>
-          )}
-
           <div className="flex items-center gap-4">
             <Waveform data={waveformData} className="flex-1" />
 
+            {/* Send button — stops recording and triggers transcription */}
             <button
               type="button"
-              onClick={stopRecording}
+              onClick={stopAndSend}
               className="
                 w-14 h-14 rounded-full
-                bg-red-500 text-white
+                bg-clarity-600 text-white
                 flex items-center justify-center
-                animate-pulse
-                hover:bg-red-400
+                hover:bg-clarity-500
                 transition-colors
               "
-              aria-label="Stop recording"
+              aria-label="Send recording"
             >
-              <MicIcon className="w-6 h-6" />
+              <SendIcon className="w-6 h-6" />
             </button>
           </div>
 
           <p className="text-clarity-500 text-xs text-center">
-            {voiceState === 'correction' ? 'Speak your correction...' : 'Listening... tap to stop'}
+            {isVoiceEdit ? 'Speak your edit instruction... tap send when done' : 'Listening... tap send when done'}
           </p>
         </div>
       )}
 
-      {/* Processing state: loading spinner */}
-      {voiceState === 'processing' && (
+      {/* Transcribing state: loading spinner */}
+      {voiceState === 'transcribing' && (
         <div className="flex items-center justify-center py-4">
           <svg className="animate-spin h-6 w-6 text-clarity-400" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          <span className="ml-3 text-clarity-400 text-sm">Processing speech...</span>
+          <span className="ml-3 text-clarity-400 text-sm">Transcribing...</span>
         </div>
       )}
 
-      {/* Review state: editable transcription + correction mic + send */}
+      {/* Review state: editable transcription + voice-edit mic + send */}
       {voiceState === 'review' && (
         <div className="space-y-3">
-          {/* Editable transcription text */}
           <textarea
             value={transcribedText}
             onChange={(e) => setTranscribedText(e.target.value)}
@@ -377,24 +328,23 @@ export function VoiceInput({
           />
 
           <div className="flex items-center justify-between">
-            {/* Re-record / correct button */}
+            {/* Voice-edit button */}
             <button
               type="button"
-              onClick={startCorrection}
+              onClick={startVoiceEdit}
               disabled={disabled}
               className="
                 p-2 text-clarity-400 hover:text-white
                 transition-colors disabled:opacity-50
                 flex items-center gap-2 text-sm
               "
-              aria-label="Record correction"
+              aria-label="Record edit instruction"
             >
               <MicIcon className="w-4 h-4" />
-              <span>Correct</span>
+              <span>Edit with voice</span>
             </button>
 
             <div className="flex items-center gap-2">
-              {/* Cancel button */}
               <button
                 type="button"
                 onClick={resetVoice}
@@ -403,7 +353,6 @@ export function VoiceInput({
                 Cancel
               </button>
 
-              {/* Send button */}
               <button
                 type="button"
                 onClick={handleVoiceSend}
