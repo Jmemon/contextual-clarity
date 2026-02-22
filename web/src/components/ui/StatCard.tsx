@@ -37,9 +37,9 @@ export interface StatCardProps extends HTMLAttributes<HTMLDivElement> {
  * - neutral: gray (no change)
  */
 const trendColors: Record<TrendDirection, string> = {
-  up: 'text-green-600',
-  down: 'text-red-600',
-  neutral: 'text-gray-500',
+  up: 'text-emerald-400',
+  down: 'text-red-400',
+  neutral: 'text-slate-500',
 };
 
 /**
@@ -128,12 +128,11 @@ export function StatCard({
     <div
       data-testid={testId}
       className={`
-        bg-white
+        bg-slate-800/60
         rounded-lg
-        shadow-md
-        border border-gray-200
+        border border-slate-700/50
         p-4 sm:p-6
-        transition-shadow duration-200 hover:shadow-lg
+        transition-all duration-200 hover:border-slate-600 hover:-translate-y-0.5
         ${className}
       `.trim()}
       {...props}
@@ -142,10 +141,10 @@ export function StatCard({
         {/* Main content area */}
         <div className="flex-1 min-w-0">
           {/* Label - smaller, secondary text with truncation */}
-          <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1 truncate">{label}</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-400 mb-1 truncate">{label}</p>
 
           {/* Value - responsive text size, prominent display */}
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{value}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-slate-50 truncate">{value}</p>
 
           {/* Trend indicator with change value */}
           {trend && change && (
@@ -164,7 +163,7 @@ export function StatCard({
 
         {/* Optional icon on the right side - hidden on very small screens */}
         {icon && (
-          <div className="ml-3 sm:ml-4 p-2 sm:p-3 bg-clarity-100 rounded-lg text-clarity-600 shrink-0">
+          <div className="ml-3 sm:ml-4 p-2 sm:p-3 bg-clarity-500/20 rounded-lg text-clarity-400 shrink-0">
             {icon}
           </div>
         )}

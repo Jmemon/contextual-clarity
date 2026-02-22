@@ -48,17 +48,17 @@ export function EmptyState({
     >
       {/* Icon container with muted styling */}
       {icon && (
-        <div className="mb-4 text-gray-400" aria-hidden="true">
+        <div className="mb-4 text-slate-600" aria-hidden="true">
           {icon}
         </div>
       )}
 
       {/* Title text - prominent but not overwhelming */}
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+      <h3 className="text-lg font-semibold text-slate-200 mb-2">{title}</h3>
 
       {/* Description text - secondary, explanatory */}
       {description && (
-        <p className="text-gray-500 max-w-sm mb-6">{description}</p>
+        <p className="text-slate-400 max-w-sm mb-6">{description}</p>
       )}
 
       {/* Action element - typically a button */}

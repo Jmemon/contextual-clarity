@@ -93,15 +93,15 @@ export function ErrorState({
       {...props}
     >
       {/* Error icon with red color for visual indication */}
-      <div className="mb-4 text-red-500" aria-hidden="true">
+      <div className="mb-4 text-red-400" aria-hidden="true">
         <ErrorIcon />
       </div>
 
       {/* Error title - prominent styling */}
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+      <h3 className="text-lg font-semibold text-slate-200 mb-2">{title}</h3>
 
       {/* Error message - secondary, explanatory text */}
-      <p className="text-gray-500 max-w-sm mb-6">{message}</p>
+      <p className="text-slate-400 max-w-sm mb-6">{message}</p>
 
       {/* Optional retry button */}
       {onRetry && (

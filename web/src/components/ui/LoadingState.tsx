@@ -77,7 +77,7 @@ export function LoadingState({
 
       {/* Optional message displayed below spinner */}
       {message && (
-        <p className="mt-4 text-gray-500 text-sm">{message}</p>
+        <p className="mt-4 text-slate-400 text-sm">{message}</p>
       )}
     </div>
   );
