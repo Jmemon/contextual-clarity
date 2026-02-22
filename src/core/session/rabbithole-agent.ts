@@ -148,7 +148,9 @@ export class RabbitholeAgent {
       maxTokens: 256,
     });
 
-    // Record the assistant's opening in history
+    // Record both the synthetic user turn and the assistant's opening in history.
+    // The user turn MUST be first — Anthropic API requires messages[0].role === 'user'.
+    this.messages.push({ role: 'user', content: openingPrompt });
     this.messages.push({ role: 'assistant', content: response.text });
 
     return response.text;
