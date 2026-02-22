@@ -55,7 +55,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {label && (
           <label
             htmlFor={selectId}
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-slate-300 mb-1"
           >
             {label}
           </label>
@@ -79,17 +79,17 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               w-full px-3 py-2.5 sm:py-2 pr-10
               min-h-[44px] sm:min-h-[40px]
               border rounded-lg
-              text-base sm:text-sm text-gray-900
-              bg-white
+              text-base sm:text-sm text-white
+              bg-slate-800
               appearance-none
               transition-colors duration-150
               focus:outline-none focus:ring-2 focus:ring-offset-0
-              disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed
+              disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed
               cursor-pointer
               ${
                 hasError
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
-                  : 'border-gray-300 focus:border-clarity-500 focus:ring-clarity-200'
+                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                  : 'border-slate-600 focus:border-clarity-500 focus:ring-clarity-500/20'
               }
               ${className}
             `.trim()}
@@ -107,7 +107,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           {/* Custom dropdown arrow icon */}
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
             <svg
-              className="h-5 w-5 text-gray-400"
+              className="h-5 w-5 text-slate-500"
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
@@ -126,7 +126,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {hasError && (
           <p
             id={`${selectId}-error`}
-            className="mt-1 text-sm text-red-600"
+            className="mt-1 text-sm text-red-400"
             role="alert"
           >
             {error}
@@ -137,7 +137,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {!hasError && helperText && (
           <p
             id={`${selectId}-helper`}
-            className="mt-1 text-sm text-gray-500"
+            className="mt-1 text-sm text-slate-500"
           >
             {helperText}
           </p>

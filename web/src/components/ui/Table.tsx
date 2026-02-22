@@ -47,7 +47,7 @@ export interface TableProps extends HTMLAttributes<HTMLTableElement> {
  */
 export function Table({ children, className = '', ...props }: TableProps) {
   return (
-    <div className="w-full overflow-x-auto -webkit-overflow-scrolling-touch scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+    <div className="w-full overflow-x-auto -webkit-overflow-scrolling-touch scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">
       <table
         className={`
           w-full
@@ -84,8 +84,8 @@ export function TableHeader({
   return (
     <thead
       className={`
-        bg-gray-50
-        border-b border-gray-200
+        bg-slate-800/80
+        border-b border-slate-700/50
         ${className}
       `.trim()}
       {...props}
@@ -115,7 +115,7 @@ export function TableBody({
   return (
     <tbody
       className={`
-        divide-y divide-gray-200
+        divide-y divide-slate-700/50
         ${className}
       `.trim()}
       {...props}
@@ -148,7 +148,7 @@ export function TableRow({
   return (
     <tr
       className={`
-        ${hoverable ? 'hover:bg-gray-50 transition-colors duration-150' : ''}
+        ${hoverable ? 'hover:bg-slate-800/50 transition-colors duration-150' : ''}
         ${className}
       `.trim()}
       {...props}
@@ -181,7 +181,7 @@ export function TableHead({
         px-3 sm:px-4 py-2 sm:py-3
         text-left
         text-[10px] sm:text-xs font-semibold
-        text-gray-600
+        text-slate-400
         uppercase tracking-wider
         whitespace-nowrap
         ${className}
@@ -214,7 +214,7 @@ export function TableCell({
     <td
       className={`
         px-3 sm:px-4 py-2 sm:py-3
-        text-gray-900
+        text-slate-200
         ${className}
       `.trim()}
       {...props}

@@ -57,20 +57,20 @@ export interface ToastProps extends HTMLAttributes<HTMLDivElement> {
  * Includes background, border, icon, and text colors.
  */
 const typeStyles: Record<ToastType, string> = {
-  success: 'bg-green-50 border-green-200 text-green-800',
-  error: 'bg-red-50 border-red-200 text-red-800',
-  warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-  info: 'bg-blue-50 border-blue-200 text-blue-800',
+  success: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300',
+  error: 'bg-red-500/20 border-red-500/30 text-red-300',
+  warning: 'bg-amber-500/20 border-amber-500/30 text-amber-300',
+  info: 'bg-blue-500/20 border-blue-500/30 text-blue-300',
 };
 
 /**
  * Icon colors for each toast type.
  */
 const iconColors: Record<ToastType, string> = {
-  success: 'text-green-500',
-  error: 'text-red-500',
-  warning: 'text-yellow-500',
-  info: 'text-blue-500',
+  success: 'text-emerald-400',
+  error: 'text-red-400',
+  warning: 'text-amber-400',
+  info: 'text-blue-400',
 };
 
 // ============================================================================
@@ -210,7 +210,7 @@ export function Toast({ toast, onDismiss, className = '', ...props }: ToastProps
       <button
         type="button"
         onClick={() => onDismiss(id)}
-        className="flex-shrink-0 rounded-md p-1 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-current"
+        className="flex-shrink-0 rounded-md p-1 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-current"
         aria-label="Dismiss notification"
       >
         <CloseIcon className="w-4 h-4" />

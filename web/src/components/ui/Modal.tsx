@@ -123,7 +123,7 @@ export function Modal({
   return (
     // Overlay backdrop - full screen, semi-transparent
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       onClick={handleOverlayClick}
       aria-hidden="true"
     >
@@ -138,7 +138,7 @@ export function Modal({
         onKeyDown={handleKeyDown}
         className={`
           relative
-          bg-white
+          bg-slate-800
           rounded-lg
           shadow-xl
           w-[calc(100%-2rem)] sm:w-full max-w-lg mx-4
@@ -153,10 +153,10 @@ export function Modal({
         {/* Modal header with title and close button */}
         {/* Responsive padding for mobile */}
         {title && (
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-700/50">
             <h2
               id="modal-title"
-              className="text-base sm:text-lg font-semibold text-gray-900 pr-2"
+              className="text-base sm:text-lg font-semibold text-slate-100 pr-2"
             >
               {title}
             </h2>
@@ -165,7 +165,8 @@ export function Modal({
               type="button"
               onClick={onClose}
               className="
-                text-gray-400 hover:text-gray-600
+                text-slate-500 hover:text-slate-300
+                hover:bg-slate-700/50
                 rounded-lg p-2 -mr-2
                 min-w-[44px] min-h-[44px]
                 flex items-center justify-center

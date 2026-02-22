@@ -39,7 +39,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-slate-300 mb-1"
           >
             {label}
           </label>
@@ -57,15 +57,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           className={`
             w-full px-3 py-2.5 sm:py-2
             min-h-[44px] sm:min-h-[40px]
-            border rounded-lg
-            text-base sm:text-sm text-gray-900 placeholder-gray-400
+            bg-slate-800 border rounded-lg
+            text-base sm:text-sm text-white placeholder-slate-500
             transition-colors duration-150
             focus:outline-none focus:ring-2 focus:ring-offset-0
-            disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed
+            disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed
             ${
               hasError
-                ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
-                : 'border-gray-300 focus:border-clarity-500 focus:ring-clarity-200'
+                ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                : 'border-slate-600 focus:border-clarity-500 focus:ring-clarity-500/20'
             }
             ${className}
           `.trim()}
@@ -76,7 +76,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {hasError && (
           <p
             id={`${inputId}-error`}
-            className="mt-1 text-sm text-red-600"
+            className="mt-1 text-sm text-red-400"
             role="alert"
           >
             {error}
@@ -87,7 +87,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {!hasError && helperText && (
           <p
             id={`${inputId}-helper`}
-            className="mt-1 text-sm text-gray-500"
+            className="mt-1 text-sm text-slate-500"
           >
             {helperText}
           </p>
