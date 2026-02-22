@@ -1,18 +1,18 @@
 /**
- * Voice Input Hook — Batch Transcription
+ * Voice Input Hook — Batch Transcription (Auto-Send)
  *
  * Manages the voice input lifecycle: mic permission, MediaRecorder for audio
  * capture, waveform visualization via AudioContext.AnalyserNode, and batch
  * transcription via server-side Deepgram REST API.
  *
- * State machine: idle -> recording -> transcribing -> review -> error
+ * State machine: idle -> recording -> transcribing -> idle (auto-sends on success)
  *
  * Key design decisions:
  * - Audio captured as a Blob (accumulated chunks), NOT streamed
  * - Transcription happens server-side via POST /api/voice/transcribe
  * - No client-side Deepgram connection — API key stays on server
  * - AbortController cancels in-flight requests on cleanup/new recording
- * - Voice-edit reuses recording + transcribing states with a mode flag
+ * - After transcription, onSend callback fires automatically (no review step)
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -21,31 +21,22 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 // Types
 // =============================================================================
 
-export type VoiceInputState = 'idle' | 'recording' | 'transcribing' | 'review' | 'error';
-
-/** Internal mode: are we recording an initial message or a voice-edit instruction? */
-type RecordingMode = 'initial' | 'voice-edit';
+export type VoiceInputState = 'idle' | 'recording' | 'transcribing' | 'error';
 
 export interface UseVoiceInputOptions {
   /** Session ID passed to the transcribe endpoint for pipeline processing */
   sessionId?: string;
-  /** Called when voice-edit correction completes (updated text) */
-  onCorrectionComplete?: (correctedText: string) => void;
+  /** Called automatically after transcription completes — sends the message */
+  onSend?: (text: string) => void;
 }
 
 export interface UseVoiceInputReturn {
   state: VoiceInputState;
-  transcribedText: string;
   errorMessage: string;
   waveformData: number[];
-  /** Whether currently in voice-edit mode (affects UI hint text) */
-  isVoiceEdit: boolean;
   startRecording: () => Promise<void>;
-  /** Stop recording and send audio for transcription */
+  /** Stop recording and send audio for transcription (auto-sends on success) */
   stopAndSend: () => void;
-  /** Start a voice-edit recording (record instruction to modify current text) */
-  startVoiceEdit: () => Promise<void>;
-  setTranscribedText: (text: string) => void;
   reset: () => void;
 }
 
@@ -78,15 +69,10 @@ function getMimeType(): string {
 
 export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn {
   const [state, setState] = useState<VoiceInputState>('idle');
-  const [transcribedText, setTranscribedText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [waveformData, setWaveformData] = useState<number[]>(() => new Array(WAVEFORM_BARS).fill(0));
 
-  // Recording mode: 'initial' or 'voice-edit'
-  const modeRef = useRef<RecordingMode>('initial');
-
   // Refs to avoid stale closures
-  const transcribedTextRef = useRef('');
   const optionsRef = useRef(options);
 
   // Resource refs for cleanup
@@ -101,7 +87,6 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
 
   // Keep refs current
   useEffect(() => { optionsRef.current = options; }, [options]);
-  useEffect(() => { transcribedTextRef.current = transcribedText; }, [transcribedText]);
 
   // ---------------------------------------------------------------------------
   // Waveform animation
@@ -178,9 +163,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
   // Core: Start recording
   // ---------------------------------------------------------------------------
 
-  const startRecordingInternal = useCallback(async (mode: RecordingMode) => {
+  const startRecordingInternal = useCallback(async () => {
     cleanup();
-    modeRef.current = mode;
     chunksRef.current = [];
 
     try {
@@ -293,36 +277,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
   }, []);
 
   /**
-   * POST correction instruction to /api/voice/correct.
-   * Returns the corrected text.
-   */
-  const applyCorrection = useCallback(async (
-    currentText: string,
-    correctionInstruction: string,
-    signal?: AbortSignal
-  ): Promise<string> => {
-    const response = await fetch('/api/voice/correct', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ currentText, correctionInstruction }),
-      signal,
-    });
-
-    const data = await response.json() as {
-      success?: boolean;
-      data?: { correctedText?: string };
-    };
-
-    if (data.success && data.data?.correctedText) {
-      return data.data.correctedText;
-    }
-
-    // If correction fails, return original text unchanged
-    return currentText;
-  }, []);
-
-  /**
-   * Stop recording and send for transcription. This is the "Send" action.
+   * Stop recording and send for transcription.
+   * On success, fires onSend callback automatically and returns to idle.
    */
   const stopAndSend = useCallback(async () => {
     // Stop waveform + release mic immediately for responsive UI
@@ -350,53 +306,24 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
       const timeoutId = setTimeout(() => abortController.abort(), TRANSCRIBE_TIMEOUT_MS);
 
       try {
-        const mode = modeRef.current;
+        // Transcribe with pipeline (pass sessionId)
+        const result = await transcribeBlob(
+          blob,
+          optionsRef.current.sessionId,
+          abortController.signal
+        );
 
-        if (mode === 'initial') {
-          // Initial recording: transcribe with pipeline (pass sessionId)
-          const result = await transcribeBlob(
-            blob,
-            optionsRef.current.sessionId,
-            abortController.signal
-          );
+        clearTimeout(timeoutId);
 
-          clearTimeout(timeoutId);
-
-          if (!result.text) {
-            // No speech detected — go back to idle
-            setState('idle');
-            return;
-          }
-
-          setTranscribedText(result.text);
-          setState('review');
-        } else {
-          // Voice-edit: transcribe WITHOUT pipeline (it's an instruction, not content)
-          const result = await transcribeBlob(
-            blob,
-            undefined, // no sessionId = no pipeline
-            abortController.signal
-          );
-
-          clearTimeout(timeoutId);
-
-          if (!result.text) {
-            // No edit instruction detected — stay in review with existing text
-            setState('review');
-            return;
-          }
-
-          // Apply the transcribed instruction as a correction to the current text
-          const corrected = await applyCorrection(
-            transcribedTextRef.current,
-            result.text,
-            abortController.signal
-          );
-
-          setTranscribedText(corrected);
-          optionsRef.current.onCorrectionComplete?.(corrected);
-          setState('review');
+        if (!result.text) {
+          // No speech detected — go back to idle
+          setState('idle');
+          return;
         }
+
+        // Auto-send: skip review, fire callback directly, return to idle
+        optionsRef.current.onSend?.(result.text);
+        setState('idle');
       } catch (err) {
         clearTimeout(timeoutId);
 
@@ -411,24 +338,19 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
       setErrorMessage((err as Error).message || 'Failed to process recording');
       setState('error');
     }
-  }, [stopWaveformAnimation, collectAudioBlob, transcribeBlob, applyCorrection]);
+  }, [stopWaveformAnimation, collectAudioBlob, transcribeBlob]);
 
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
   const startRecording = useCallback(async () => {
-    await startRecordingInternal('initial');
-  }, [startRecordingInternal]);
-
-  const startVoiceEdit = useCallback(async () => {
-    await startRecordingInternal('voice-edit');
+    await startRecordingInternal();
   }, [startRecordingInternal]);
 
   const reset = useCallback(() => {
     cleanup();
     setState('idle');
-    setTranscribedText('');
     setErrorMessage('');
   }, [cleanup]);
 
@@ -439,14 +361,10 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
 
   return {
     state,
-    transcribedText,
     errorMessage,
     waveformData,
-    isVoiceEdit: modeRef.current === 'voice-edit',
     startRecording,
     stopAndSend,
-    startVoiceEdit,
-    setTranscribedText,
     reset,
   };
 }
