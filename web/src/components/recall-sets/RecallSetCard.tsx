@@ -110,14 +110,14 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
     <Link
       to={`/recall-sets/${id}`}
       data-testid="recall-set-card"
-      className="block group focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-2 rounded-lg"
+      className="block group focus:outline-none focus:ring-2 focus:ring-clarity-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded-lg"
       aria-label={`View ${name} recall set`}
     >
-      <Card className="h-full transition-all duration-200 group-hover:border-clarity-400 group-hover:shadow-lg group-hover:-translate-y-0.5">
+      <Card className="h-full transition-all duration-200 group-hover:border-clarity-500/30 group-hover:-translate-y-0.5">
         <CardBody className="flex flex-col h-full p-4 sm:p-6">
           {/* Header row: Name and Status badge */}
           <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 group-hover:text-clarity-700 transition-colors line-clamp-1">
+            <h3 className="text-base sm:text-lg font-semibold text-slate-100 group-hover:text-clarity-400 transition-colors line-clamp-1">
               {name}
             </h3>
             <Badge status={getStatusBadgeVariant(status)}>
@@ -126,7 +126,7 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
           </div>
 
           {/* Description - truncated to prevent overflow */}
-          <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 line-clamp-2">
+          <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4 line-clamp-2">
             {description ? truncateText(description, 100) : 'No description'}
           </p>
 
@@ -134,16 +134,16 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
           <div className="flex gap-3 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
             {/* Total points in the set */}
             <div className="flex flex-col">
-              <span className="text-gray-500">Total</span>
-              <span className="font-medium text-gray-900">{totalPoints}</span>
+              <span className="text-slate-500">Total</span>
+              <span className="font-medium text-slate-200">{totalPoints}</span>
             </div>
 
             {/* Due points - highlighted if any are due */}
             <div className="flex flex-col">
-              <span className="text-gray-500">Due</span>
+              <span className="text-slate-500">Due</span>
               <span
                 className={`font-medium ${
-                  duePoints > 0 ? 'text-amber-600' : 'text-gray-900'
+                  duePoints > 0 ? 'text-amber-400' : 'text-slate-200'
                 }`}
               >
                 {duePoints}
@@ -152,10 +152,10 @@ export function RecallSetCard({ recallSet }: RecallSetCardProps) {
 
             {/* New points - highlighted if any are new */}
             <div className="flex flex-col">
-              <span className="text-gray-500">New</span>
+              <span className="text-slate-500">New</span>
               <span
                 className={`font-medium ${
-                  newPoints > 0 ? 'text-blue-600' : 'text-gray-900'
+                  newPoints > 0 ? 'text-blue-400' : 'text-slate-200'
                 }`}
               >
                 {newPoints}

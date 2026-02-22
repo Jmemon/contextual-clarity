@@ -77,7 +77,7 @@ export function RecallSetFilters({
 }: RecallSetFiltersProps) {
   return (
     <nav
-      className="inline-flex gap-1 p-1 bg-gray-100 rounded-lg"
+      className="inline-flex gap-1 p-1 bg-slate-800/60 rounded-lg"
       role="tablist"
       aria-label="Filter recall sets by status"
     >
@@ -104,8 +104,8 @@ export function RecallSetFilters({
               whitespace-nowrap
               ${
                 isSelected
-                  ? 'bg-white text-clarity-700 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'bg-slate-700 text-white'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
               }
             `}
           >
@@ -117,8 +117,8 @@ export function RecallSetFilters({
                   ml-1.5 sm:ml-2 px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full
                   ${
                     isSelected
-                      ? 'bg-clarity-100 text-clarity-700'
-                      : 'bg-gray-200 text-gray-600'
+                      ? 'bg-clarity-500/20 text-clarity-400'
+                      : 'bg-slate-700 text-slate-400'
                   }
                 `}
               >

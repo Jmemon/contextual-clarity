@@ -62,15 +62,21 @@ export function RecallSets() {
   // Filter recall sets based on the current filter selection
   // When filter is 'all', show everything; otherwise filter by status
   const filteredSets = useMemo(() => {
-    if (!recallSets) {
-      return [];
-    }
+    if (!recallSets) return [];
 
-    if (filter === 'all') {
-      return recallSets;
-    }
+    const filtered = filter === 'all'
+      ? recallSets
+      : recallSets.filter((set) => set.status === filter);
 
-    return recallSets.filter((set) => set.status === filter);
+    // Sort: sets with due points first (desc), then by name
+    return [...filtered].sort((a, b) => {
+      const aDue = a.summary.duePoints;
+      const bDue = b.summary.duePoints;
+      if (aDue > 0 && bDue === 0) return -1;
+      if (aDue === 0 && bDue > 0) return 1;
+      if (aDue > 0 && bDue > 0) return bDue - aDue;
+      return a.name.localeCompare(b.name);
+    });
   }, [recallSets, filter]);
 
   // -------------------------------------------------------------------------
@@ -82,10 +88,10 @@ export function RecallSets() {
       <div className="p-8">
         {/* Page header shown during loading */}
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-clarity-800 mb-2">
+          <h1 className="text-3xl font-bold text-white mb-2">
             Recall Sets
           </h1>
-          <p className="text-clarity-600">
+          <p className="text-slate-400">
             Organize your learning materials into themed collections.
           </p>
         </header>
@@ -106,7 +112,7 @@ export function RecallSets() {
     return (
       <div className="p-8">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-clarity-800 mb-2">
+          <h1 className="text-3xl font-bold text-white mb-2">
             Recall Sets
           </h1>
         </header>
@@ -137,10 +143,10 @@ export function RecallSets() {
       {/* Page header with title and create button - stacks on mobile */}
       <header className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-clarity-800 mb-1 sm:mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">
             Recall Sets
           </h1>
-          <p className="text-sm sm:text-base text-clarity-600">
+          <p className="text-sm sm:text-base text-slate-400">
             Organize your learning materials into themed collections.
           </p>
         </div>
