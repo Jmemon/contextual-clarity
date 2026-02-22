@@ -260,7 +260,7 @@ export function RecentSessionsList({
             title="No sessions yet"
             description="Start a study session from one of your recall sets to begin tracking your progress."
             action={
-              <Link to="/recall-sets">
+              <Link to="/">
                 <Button variant="primary">
                   View Recall Sets
                 </Button>

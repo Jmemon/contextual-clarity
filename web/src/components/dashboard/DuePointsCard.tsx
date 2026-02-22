@@ -125,7 +125,7 @@ export function DuePointsCard({
         {/* Full width on mobile for larger touch target */}
         {hasDuePoints && (
           <div className="mt-4 sm:mt-6 text-center">
-            <Link to="/recall-sets" className="block sm:inline-block">
+            <Link to="/" className="block sm:inline-block">
               <Button variant="primary" className="w-full sm:w-auto min-h-[44px]">
                 Start Studying
               </Button>

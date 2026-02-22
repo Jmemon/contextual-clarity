@@ -5,15 +5,16 @@
  *
  * Route Structure:
  * - Routes using MainLayout (with sidebar navigation):
- *   - / (Dashboard)
- *   - /recall-sets (Recall Sets list)
+ *   - / (Recall Sets list — home page)
+ *   - /dashboard (Dashboard overview)
  *   - /recall-sets/new (Create new Recall Set)
  *   - /recall-sets/:id (Recall Set detail)
  *   - /sessions (Session history)
  *   - /sessions/:id (Session replay)
  *
  * - Routes without MainLayout (full-screen):
- *   - /session/:id (Live session - note singular "session")
+ *   - /session (Live session start screen)
+ *   - /session/:id (Live session — note singular "session")
  *
  * - Catch-all:
  *   - * (404 Not Found)
@@ -52,9 +53,9 @@ import { CreateRecallSet } from './pages/CreateRecallSet';
  * (even though we're not using loaders yet, this sets us up for it).
  *
  * Structure:
- * 1. MainLayout routes - wrapped in layout with sidebar
- * 2. Full-screen routes - render without layout chrome
- * 3. Catch-all 404 - handles unknown routes
+ * 1. MainLayout routes — wrapped in layout with sidebar
+ * 2. Full-screen routes — render without layout chrome
+ * 3. Catch-all 404 — handles unknown routes
  */
 const router = createBrowserRouter([
   // -------------------------------------------------------------------------
@@ -66,33 +67,33 @@ const router = createBrowserRouter([
     element: <MainLayout />,
     children: [
       {
-        // Dashboard - main landing page
+        // Recall Sets list — home page
         path: '/',
-        element: <Dashboard />,
-      },
-      {
-        // Recall Sets list - all available sets
-        path: '/recall-sets',
         element: <RecallSets />,
       },
       {
-        // Create new Recall Set - must come before :id to take precedence
+        // Dashboard overview — moved from /
+        path: '/dashboard',
+        element: <Dashboard />,
+      },
+      {
+        // Create new Recall Set — must come before :id to take precedence
         path: '/recall-sets/new',
         element: <CreateRecallSet />,
       },
       {
-        // Recall Set detail - single set with its items
+        // Recall Set detail — single set with its items
         // :id parameter captures the set ID from URL
         path: '/recall-sets/:id',
         element: <RecallSetDetail />,
       },
       {
-        // Sessions history - list of completed sessions
+        // Sessions history — list of completed sessions
         path: '/sessions',
         element: <Sessions />,
       },
       {
-        // Session replay - detailed view of past session
+        // Session replay — detailed view of past session
         // Note: plural "sessions" for completed sessions
         path: '/sessions/:id',
         element: <SessionReplay />,
@@ -104,7 +105,12 @@ const router = createBrowserRouter([
   // Full-screen routes (no MainLayout)
   // -------------------------------------------------------------------------
   {
-    // Live session - active study session (full-screen)
+    // Live session start screen (full-screen, no sidebar)
+    path: '/session',
+    element: <LiveSession />,
+  },
+  {
+    // Live session — active study session (full-screen)
     // Note: singular "session" for active/live sessions
     // This route renders directly without the sidebar wrapper
     path: '/session/:id',

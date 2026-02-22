@@ -20,8 +20,8 @@
  * ```tsx
  * // In router configuration
  * <Route element={<MainLayout />}>
- *   <Route path="/" element={<Dashboard />} />
- *   <Route path="/recall-sets" element={<RecallSets />} />
+ *   <Route path="/" element={<RecallSets />} />
+ *   <Route path="/dashboard" element={<Dashboard />} />
  * </Route>
  * ```
  */

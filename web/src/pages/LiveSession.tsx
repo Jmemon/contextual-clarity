@@ -220,7 +220,7 @@ function StartSessionScreen() {
                     No recall sets available for study.
                   </p>
                   <Link
-                    to="/recall-sets"
+                    to="/"
                     className="text-clarity-400 hover:text-white underline"
                   >
                     Create a recall set to get started

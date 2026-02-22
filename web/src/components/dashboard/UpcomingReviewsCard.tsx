@@ -257,7 +257,7 @@ export function UpcomingReviewsCard({
                 title="No upcoming reviews"
                 description="Add some recall points to your sets to start building your review schedule."
                 action={
-                  <Link to="/recall-sets">
+                  <Link to="/">
                     <Button variant="primary">
                       View Recall Sets
                     </Button>
@@ -279,7 +279,7 @@ export function UpcomingReviewsCard({
                 {hasMore && (
                   <div className="p-4 text-center border-t border-gray-200">
                     <Link
-                      to="/recall-sets"
+                      to="/"
                       className="text-sm text-clarity-600 hover:text-clarity-700 font-medium"
                     >
                       View all {summary.total} reviews

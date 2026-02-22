@@ -53,16 +53,16 @@ export function NotFound() {
             to="/"
             className="block w-full px-6 py-3 bg-clarity-600 text-white rounded-lg hover:bg-clarity-700 transition-colors font-medium"
           >
-            Go to Dashboard
+            Go Home
           </Link>
 
           {/* Secondary navigation links */}
           <div className="flex justify-center gap-4 text-sm">
             <Link
-              to="/recall-sets"
+              to="/dashboard"
               className="text-clarity-600 hover:text-clarity-800 transition-colors"
             >
-              Recall Sets
+              Dashboard
             </Link>
             <span className="text-clarity-300">|</span>
             <Link

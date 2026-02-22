@@ -44,7 +44,7 @@ export function CreateRecallSet() {
       {/* Back link */}
       <nav className="mb-6">
         <Link
-          to="/recall-sets"
+          to="/"
           className="inline-flex items-center text-sm text-clarity-600 hover:text-clarity-800 transition-colors"
         >
           <svg

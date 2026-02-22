@@ -291,7 +291,7 @@ export function RecallSetDetail() {
       <div className="p-8">
         <nav className="mb-4">
           <Link
-            to="/recall-sets"
+            to="/"
             className="text-clarity-600 hover:text-clarity-800 transition-colors"
           >
             &larr; Back to Recall Sets
@@ -318,7 +318,7 @@ export function RecallSetDetail() {
       {/* Breadcrumb navigation */}
       <nav className="mb-6">
         <Link
-          to="/recall-sets"
+          to="/"
           className="text-clarity-600 hover:text-clarity-800 transition-colors inline-flex items-center gap-1"
         >
           <svg
