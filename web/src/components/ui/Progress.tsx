@@ -36,10 +36,10 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
  * Tailwind classes for progress bar fill colors
  */
 const variantClasses: Record<ProgressVariant, string> = {
-  primary: 'bg-clarity-600',
-  success: 'bg-green-600',
-  warning: 'bg-amber-500',
-  error: 'bg-red-600',
+  primary: 'bg-gradient-to-r from-clarity-600 to-clarity-400',
+  success: 'bg-gradient-to-r from-emerald-600 to-emerald-400',
+  warning: 'bg-gradient-to-r from-amber-600 to-amber-400',
+  error: 'bg-gradient-to-r from-red-600 to-red-400',
 };
 
 /**
@@ -75,12 +75,12 @@ export function Progress({
         <div className="flex justify-between items-center mb-1">
           {/* Label on the left */}
           {label && (
-            <span className="text-sm font-medium text-gray-700">{label}</span>
+            <span className="text-sm font-medium text-slate-300">{label}</span>
           )}
 
           {/* Percentage value on the right */}
           {showValue && (
-            <span className="text-sm font-medium text-gray-500">
+            <span className="text-sm font-medium text-slate-400">
               {Math.round(percentage)}%
             </span>
           )}
@@ -96,7 +96,7 @@ export function Progress({
         aria-label={label || 'Progress'}
         className={`
           w-full
-          bg-gray-200
+          bg-slate-700
           rounded-full
           overflow-hidden
           ${sizeClasses[size]}
@@ -108,7 +108,7 @@ export function Progress({
             ${sizeClasses[size]}
             ${variantClasses[variant]}
             rounded-full
-            transition-all duration-300 ease-out
+            transition-all duration-700 ease-out
           `}
           style={{ width: `${percentage}%` }}
         />

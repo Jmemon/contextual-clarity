@@ -51,12 +51,11 @@ export function Card({ children, className = '', ...props }: CardProps) {
   return (
     <div
       className={`
-        bg-white
-        rounded-lg
-        shadow-md
-        border border-gray-200
+        bg-slate-800/60
+        rounded-xl
+        border border-slate-700/50
         overflow-hidden
-        transition-shadow duration-200
+        transition-all duration-200
         ${className}
       `.trim()}
       {...props}
@@ -80,9 +79,8 @@ export function CardHeader({
     <div
       className={`
         px-4 sm:px-6 py-3 sm:py-4
-        border-b border-gray-200
-        bg-gray-50
-        font-semibold text-gray-900
+        border-b border-slate-700/50
+        font-semibold text-slate-100
         ${className}
       `.trim()}
       {...props}
@@ -125,8 +123,7 @@ export function CardFooter({
     <div
       className={`
         px-4 sm:px-6 py-3 sm:py-4
-        border-t border-gray-200
-        bg-gray-50
+        border-t border-slate-700/50
         ${className}
       `.trim()}
       {...props}

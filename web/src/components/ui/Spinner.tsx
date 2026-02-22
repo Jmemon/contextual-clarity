@@ -49,8 +49,8 @@ export function Spinner({
       className={`
         inline-block
         ${sizeClasses[size]}
-        border-clarity-200
-        border-t-clarity-600
+        border-slate-700
+        border-t-clarity-400
         rounded-full
         animate-spin
         ${className}
