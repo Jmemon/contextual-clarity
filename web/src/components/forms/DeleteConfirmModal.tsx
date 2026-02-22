@@ -64,9 +64,9 @@ export function DeleteConfirmModal({
         <div className="flex items-start gap-4">
           {/* Warning icon - red circle with exclamation */}
           <div className="flex-shrink-0">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-900/30">
               <svg
-                className="w-6 h-6 text-red-600"
+                className="w-6 h-6 text-red-400"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -86,19 +86,19 @@ export function DeleteConfirmModal({
           {/* Message content */}
           <div className="flex-1">
             {/* Item name prominently displayed */}
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-medium text-white">
               Are you sure you want to delete{' '}
-              <span className="font-semibold text-red-600">"{itemName}"</span>?
+              <span className="font-semibold text-red-400">"{itemName}"</span>?
             </p>
 
             {/* Warning message about consequences */}
-            <p className="mt-2 text-sm text-gray-500">{message}</p>
+            <p className="mt-2 text-sm text-slate-400">{message}</p>
           </div>
         </div>
       </div>
 
       {/* Action buttons */}
-      <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+      <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-700/50">
         {/* Cancel button - allows user to abort */}
         <Button
           type="button"

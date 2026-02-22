@@ -45,7 +45,7 @@ export function CreateRecallSet() {
       <nav className="mb-6">
         <Link
           to="/"
-          className="inline-flex items-center text-sm text-clarity-600 hover:text-clarity-800 transition-colors"
+          className="inline-flex items-center text-sm text-slate-400 hover:text-white transition-colors"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -62,7 +62,7 @@ export function CreateRecallSet() {
 
       {/* Form card */}
       <Card className="p-6">
-        <h1 className="text-2xl font-bold text-clarity-800 mb-6">Create New Recall Set</h1>
+        <h1 className="text-2xl font-bold text-white mb-6">Create New Recall Set</h1>
         <RecallSetForm
           mode="create"
           onSubmit={handleSubmit}
