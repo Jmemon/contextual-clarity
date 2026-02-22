@@ -93,7 +93,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   const value = payload[0]?.value ?? 0;
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg p-3">
+    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
       <p className="text-sm text-slate-400 mb-1">{label}</p>
       <p className="text-lg font-semibold text-clarity-400">
         {(value * 100).toFixed(1)}%
