@@ -14,7 +14,7 @@
  * ```
  */
 
-import { useState, useCallback, type HTMLAttributes } from 'react';
+import { useState, useEffect, useCallback, type HTMLAttributes } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSessionWebSocket, type SessionCompleteSummary, type CompleteOverlayData } from '@/hooks/use-session-websocket';
 import { SingleExchangeView } from './SingleExchangeView';
@@ -48,19 +48,22 @@ export interface SessionContainerProps extends HTMLAttributes<HTMLDivElement> {
 
 /**
  * Simple hook to track elapsed time since session start.
+ *
+ * BUG FIX (T11): The original implementation used `useState` to set up the
+ * interval, which silently discards the cleanup function returned from the
+ * initializer. The interval leaked and was never cleared on unmount.
+ * Fixed by using `useEffect`, which properly runs the cleanup on unmount.
  */
 function useSessionTimer() {
   const [startTime] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Update elapsed time every second
-  useState(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
-
     return () => clearInterval(interval);
-  });
+  }, [startTime]);
 
   // Format as MM:SS
   const formatTime = () => {
@@ -240,8 +243,23 @@ export function SessionContainer({
   const [showCompleteOverlay, setShowCompleteOverlay] = useState(false);
   const [overlayData, setOverlayData] = useState<CompleteOverlayData | null>(null);
 
-  // Timer for session duration display
-  const { formattedTime } = useSessionTimer();
+  // Timer for session duration display.
+  // T11: elapsedSeconds is passed to SessionProgress (which now shows the timer internally).
+  // formattedTime is no longer used in the header since the timer moved into SessionProgress.
+  const { elapsedSeconds } = useSessionTimer();
+
+  // T11: Mute state for recall chime sounds, persisted across browser reloads.
+  const [isMuted, setIsMuted] = useState(() => {
+    return localStorage.getItem('recall-sound-muted') === 'true';
+  });
+
+  const handleToggleMute = useCallback(() => {
+    setIsMuted(prev => {
+      const newValue = !prev;
+      localStorage.setItem('recall-sound-muted', String(newValue));
+      return newValue;
+    });
+  }, []);
 
   const navigate = useNavigate();
 
@@ -307,6 +325,8 @@ export function SessionContainer({
     enterRabbithole,
     exitRabbithole,
     declineRabbithole,
+    // T11: explored rabbit hole labels for SessionProgress pills
+    rabbitholeLabels,
   } = useSessionWebSocket(sessionId, {
     onSessionStarted: handleSessionStarted,
     onPointTransition: handlePointTransition,
@@ -359,22 +379,8 @@ export function SessionContainer({
           </div>
         </div>
 
-        {/* Timer and progress */}
+        {/* T11: Exit button */}
         <div className="flex items-center gap-6">
-          {/* Session timer */}
-          <div className="text-clarity-200 font-mono text-lg">
-            {formattedTime}
-          </div>
-
-          {/* Session progress */}
-          <SessionProgress
-            currentPoint={recalledCount}
-            totalPoints={totalPoints}
-            showBar={false}
-            className="min-w-[100px]"
-          />
-
-          {/* Exit button */}
           <Link
             to="/"
             className="px-4 py-2 bg-clarity-700 text-white rounded-lg hover:bg-clarity-600 transition-colors text-sm"
@@ -384,24 +390,30 @@ export function SessionContainer({
         </div>
       </header>
 
-      {/* T09: RabbitholeIndicator replaces SessionProgress bar during rabbit hole mode.
+      {/* T11: New single progress bar — replaces the old header timer + two old SessionProgress calls.
+           Hides automatically during rabbit hole mode (slide-up + fade handled inside the component).
+           totalPoints guard ensures we don't render an empty circle row before the session starts. */}
+      {totalPoints > 0 && (
+        <div className="px-6 py-2 bg-clarity-900/30">
+          <SessionProgress
+            totalPoints={totalPoints}
+            recalledCount={recalledCount}
+            elapsedSeconds={elapsedSeconds}
+            rabbitholeLabels={rabbitholeLabels}
+            isInRabbithole={isInRabbithole}
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
+          />
+        </div>
+      )}
+
+      {/* T09: RabbitholeIndicator shown when user is inside a rabbit hole.
            Signals to the user they're in a separate exploration context. */}
-      {isInRabbithole && rabbitholeTopic ? (
+      {isInRabbithole && rabbitholeTopic && (
         <RabbitholeIndicator
           topic={rabbitholeTopic}
           onReturn={exitRabbithole}
         />
-      ) : (
-        /* Progress bar below header — hidden during rabbit hole mode */
-        totalPoints > 0 && (
-          <div className="px-6 py-2 bg-clarity-900/30">
-            <SessionProgress
-              currentPoint={recalledCount}
-              totalPoints={totalPoints}
-              showBar={true}
-            />
-          </div>
-        )
       )}
 
       {/* T08: Session complete overlay — shown when all recall points recalled.
