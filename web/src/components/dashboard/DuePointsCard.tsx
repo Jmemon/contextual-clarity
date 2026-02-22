@@ -95,10 +95,10 @@ export function DuePointsCard({
       <CardBody>
         {/* Main due points display - large and prominent, responsive text sizing */}
         <div className="text-center py-3 sm:py-4">
-          <p className={`text-4xl sm:text-5xl font-bold ${hasDuePoints ? 'text-amber-600' : 'text-green-600'}`}>
+          <p className={`text-4xl sm:text-5xl font-bold ${hasDuePoints ? 'text-amber-400' : 'text-emerald-400'}`}>
             {duePoints}
           </p>
-          <p className="text-sm sm:text-base text-gray-500 mt-1">
+          <p className="text-sm sm:text-base text-slate-400 mt-1">
             {hasDuePoints
               ? `point${duePoints === 1 ? '' : 's'} due for review`
               : 'All caught up!'}
@@ -106,18 +106,18 @@ export function DuePointsCard({
         </div>
 
         {/* Today's activity summary - responsive text */}
-        <div className="flex justify-around border-t border-gray-200 pt-3 sm:pt-4 mt-3 sm:mt-4">
+        <div className="flex justify-around border-t border-slate-700/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
           <div className="text-center">
-            <p className="text-xl sm:text-2xl font-semibold text-gray-700">{todaysSessions}</p>
-            <p className="text-xs sm:text-sm text-gray-500">
+            <p className="text-xl sm:text-2xl font-semibold text-slate-300">{todaysSessions}</p>
+            <p className="text-xs sm:text-sm text-slate-400">
               session{todaysSessions === 1 ? '' : 's'} today
             </p>
           </div>
           <div className="text-center">
-            <p className="text-xl sm:text-2xl font-semibold text-gray-700">
+            <p className="text-xl sm:text-2xl font-semibold text-slate-300">
               {formatDuration(todaysStudyTimeMs)}
             </p>
-            <p className="text-xs sm:text-sm text-gray-500">studied today</p>
+            <p className="text-xs sm:text-sm text-slate-400">studied today</p>
           </div>
         </div>
 
@@ -136,7 +136,7 @@ export function DuePointsCard({
         {/* Encouraging message when all caught up */}
         {!hasDuePoints && (
           <div className="mt-4 sm:mt-6 text-center">
-            <p className="text-xs sm:text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-slate-400">
               Great job staying on top of your reviews!
             </p>
           </div>

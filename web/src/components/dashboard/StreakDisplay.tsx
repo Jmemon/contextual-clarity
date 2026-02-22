@@ -117,7 +117,7 @@ function FlameIcon({ isActive }: { isActive: boolean }) {
       )}
       {/* Flame SVG */}
       <svg
-        className={`relative w-16 h-16 ${isActive ? 'text-orange-500' : 'text-gray-300'}`}
+        className={`relative w-16 h-16 ${isActive ? 'text-orange-500' : 'text-slate-600'}`}
         viewBox="0 0 24 24"
         fill="currentColor"
         aria-hidden="true"
@@ -169,44 +169,44 @@ export function StreakDisplay({
           <FlameIcon isActive={isOnStreak} />
 
           {/* Current streak number */}
-          <p className={`text-5xl font-bold mt-4 ${isOnStreak ? 'text-orange-500' : 'text-gray-400'}`}>
+          <p className={`text-5xl font-bold mt-4 ${isOnStreak ? 'text-orange-500' : 'text-slate-500'}`}>
             {currentStreak}
           </p>
-          <p className="text-gray-500 mt-1">
+          <p className="text-slate-400 mt-1">
             day{currentStreak === 1 ? '' : 's'} streak
           </p>
 
           {/* Record indicator */}
           {isAtRecord && currentStreak > 1 && (
-            <div className="flex items-center gap-1 mt-2 text-amber-600">
+            <div className="flex items-center gap-1 mt-2 text-amber-400">
               <TrophyIcon />
               <span className="text-sm font-medium">Personal Record!</span>
             </div>
           )}
 
           {/* Motivational message */}
-          <p className="text-sm text-gray-600 mt-4 max-w-xs">
+          <p className="text-sm text-slate-400 mt-4 max-w-xs">
             {getStreakMessage(currentStreak)}
           </p>
         </div>
 
         {/* Stats row - longest streak and last activity */}
-        <div className="flex justify-around pt-4 mt-4 border-t border-gray-200">
+        <div className="flex justify-around pt-4 mt-4 border-t border-slate-700/50">
           {/* Longest streak */}
           <div className="text-center">
             <div className="flex items-center justify-center gap-1">
               <TrophyIcon />
-              <p className="text-xl font-semibold text-gray-700">{longestStreak}</p>
+              <p className="text-xl font-semibold text-slate-300">{longestStreak}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">longest streak</p>
+            <p className="text-xs text-slate-500 mt-0.5">longest streak</p>
           </div>
 
           {/* Last activity */}
           <div className="text-center">
-            <p className="text-xl font-semibold text-gray-700">
+            <p className="text-xl font-semibold text-slate-300">
               {formatLastActivity(lastActivityDate)}
             </p>
-            <p className="text-xs text-gray-500 mt-0.5">last activity</p>
+            <p className="text-xs text-slate-500 mt-0.5">last activity</p>
           </div>
         </div>
       </CardBody>

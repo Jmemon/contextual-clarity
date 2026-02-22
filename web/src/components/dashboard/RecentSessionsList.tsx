@@ -126,9 +126,9 @@ function getStatusBadge(status: SessionSummary['status']): { status: 'success' |
  * Higher rates get green, lower rates get amber/red.
  */
 function getRecallRateColor(rate: number): string {
-  if (rate >= 0.8) return 'text-green-600';
-  if (rate >= 0.6) return 'text-amber-600';
-  return 'text-red-600';
+  if (rate >= 0.8) return 'text-emerald-400';
+  if (rate >= 0.6) return 'text-amber-400';
+  return 'text-red-400';
 }
 
 // ============================================================================
@@ -147,17 +147,17 @@ function SessionItem({ session }: { session: SessionSummary }) {
     <Link
       to={`/sessions/${session.id}/replay`}
       data-testid="session-card"
-      className="block p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-150 border-b border-gray-100 last:border-b-0 min-h-[60px] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-clarity-500"
+      className="block p-3 sm:p-4 hover:bg-slate-800/50 transition-colors duration-150 border-b border-slate-800/50 last:border-b-0 min-h-[60px] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-clarity-500"
     >
       <div className="flex items-start justify-between gap-2 sm:gap-4">
         {/* Session info - left side */}
         <div className="flex-1 min-w-0">
           {/* Recall set name with link */}
-          <p className="text-sm sm:text-base font-medium text-gray-900 truncate">
+          <p className="text-sm sm:text-base font-medium text-white truncate">
             {session.recallSetName}
           </p>
           {/* Date and duration */}
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
+          <p className="text-xs sm:text-sm text-slate-400 mt-0.5 sm:mt-1">
             {formatDate(session.startedAt)} - {formatDuration(session.durationMs)}
           </p>
         </div>
@@ -169,7 +169,7 @@ function SessionItem({ session }: { session: SessionSummary }) {
             <p className={`text-base sm:text-lg font-semibold ${getRecallRateColor(session.recallRate)}`}>
               {recallPercentage}%
             </p>
-            <p className="text-[10px] sm:text-xs text-gray-500">recall</p>
+            <p className="text-[10px] sm:text-xs text-slate-400">recall</p>
           </div>
           {/* Status badge - hidden on very small screens */}
           <div className="hidden xs:block">
@@ -227,7 +227,7 @@ export function RecentSessionsList({
           {/* Link to view all sessions - 44px touch target */}
           <Link
             to="/sessions"
-            className="text-xs sm:text-sm text-clarity-600 hover:text-clarity-700 font-medium py-2 -my-2 px-2 -mr-2 min-h-[44px] flex items-center transition-colors duration-150"
+            className="text-xs sm:text-sm text-clarity-400 hover:text-clarity-300 font-medium py-2 -my-2 px-2 -mr-2 min-h-[44px] flex items-center transition-colors duration-150"
           >
             View All
           </Link>
@@ -244,7 +244,7 @@ export function RecentSessionsList({
         {/* Error state */}
         {!isLoading && error && (
           <div className="p-6 text-center">
-            <p className="text-red-600 mb-4">Failed to load sessions</p>
+            <p className="text-red-400 mb-4">Failed to load sessions</p>
             {onRetry && (
               <Button variant="secondary" onClick={onRetry}>
                 Try Again

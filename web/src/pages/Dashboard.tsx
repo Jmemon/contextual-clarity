@@ -36,7 +36,7 @@ function DashboardLoading() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh]">
       <Spinner size="lg" label="Loading dashboard..." />
-      <p className="text-gray-500 mt-4">Loading your dashboard...</p>
+      <p className="text-slate-400 mt-4">Loading your dashboard...</p>
     </div>
   );
 }
@@ -59,9 +59,9 @@ function DashboardError({
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh]">
       {/* Error icon */}
-      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+      <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
         <svg
-          className="w-8 h-8 text-red-600"
+          className="w-8 h-8 text-red-400"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -75,10 +75,10 @@ function DashboardError({
           />
         </svg>
       </div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">
+      <h2 className="text-xl font-semibold text-white mb-2">
         Failed to Load Dashboard
       </h2>
-      <p className="text-gray-500 mb-6 text-center max-w-md">
+      <p className="text-slate-400 mb-6 text-center max-w-md">
         {error.message || 'An unexpected error occurred while loading your dashboard.'}
       </p>
       <Button variant="primary" onClick={onRetry}>
@@ -173,10 +173,10 @@ export function Dashboard() {
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Page header with title and description - responsive text sizing */}
       <header className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-clarity-800 mb-2">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
           Dashboard
         </h1>
-        <p className="text-sm sm:text-base text-clarity-600">
+        <p className="text-sm sm:text-base text-slate-400">
           Your learning overview and progress at a glance.
         </p>
       </header>
@@ -184,7 +184,7 @@ export function Dashboard() {
       {/* Overview statistics grid - shows key metrics */}
       {/* Responsive: 1 col mobile, 2 cols tablet, 3 cols desktop */}
       <section className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-clarity-700 mb-3 sm:mb-4">
+        <h2 className="text-lg sm:text-xl font-semibold text-slate-200 mb-3 sm:mb-4">
           Overview
         </h2>
         <OverviewStats

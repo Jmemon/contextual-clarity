@@ -105,29 +105,29 @@ function SummarySection({
   summary: UpcomingReviewsCardProps['summary'];
 }) {
   return (
-    <div className="flex justify-around py-4 border-b border-gray-200">
+    <div className="flex justify-around py-4 border-b border-slate-700/50">
       {/* Overdue count - red emphasis */}
       <div className="text-center">
-        <p className={`text-2xl font-bold ${summary.overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+        <p className={`text-2xl font-bold ${summary.overdue > 0 ? 'text-red-400' : 'text-slate-500'}`}>
           {summary.overdue}
         </p>
-        <p className="text-xs text-gray-500">Overdue</p>
+        <p className="text-xs text-slate-400">Overdue</p>
       </div>
 
       {/* Due today count - amber emphasis */}
       <div className="text-center">
-        <p className={`text-2xl font-bold ${summary.dueToday > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+        <p className={`text-2xl font-bold ${summary.dueToday > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
           {summary.dueToday}
         </p>
-        <p className="text-xs text-gray-500">Due Today</p>
+        <p className="text-xs text-slate-400">Due Today</p>
       </div>
 
       {/* Upcoming count - blue/neutral */}
       <div className="text-center">
-        <p className={`text-2xl font-bold ${summary.upcoming > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+        <p className={`text-2xl font-bold ${summary.upcoming > 0 ? 'text-blue-400' : 'text-slate-500'}`}>
           {summary.upcoming}
         </p>
-        <p className="text-xs text-gray-500">Upcoming</p>
+        <p className="text-xs text-slate-400">Upcoming</p>
       </div>
     </div>
   );
@@ -142,17 +142,17 @@ function ReviewItem({ review }: { review: UpcomingReview }) {
   return (
     <Link
       to={`/recall-sets/${review.recallSetId}`}
-      className="block p-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
+      className="block p-3 hover:bg-slate-800/50 transition-colors border-b border-slate-800/50 last:border-b-0"
     >
       <div className="flex items-start justify-between gap-3">
         {/* Review content - left side */}
         <div className="flex-1 min-w-0">
           {/* Truncated recall point content */}
-          <p className="text-sm font-medium text-gray-900 truncate">
+          <p className="text-sm font-medium text-white truncate">
             {review.recallPointContent}
           </p>
           {/* Recall set name */}
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5">
             {review.recallSetName}
           </p>
         </div>
@@ -162,7 +162,7 @@ function ReviewItem({ review }: { review: UpcomingReview }) {
           <Badge status={priorityBadge.status}>
             {priorityBadge.label}
           </Badge>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-slate-500">
             {formatDueDate(review.daysUntilDue)}
           </p>
         </div>
@@ -235,7 +235,7 @@ export function UpcomingReviewsCard({
         {/* Error state */}
         {!isLoading && error && (
           <div className="p-6 text-center">
-            <p className="text-red-600 mb-4">Failed to load reviews</p>
+            <p className="text-red-400 mb-4">Failed to load reviews</p>
             {onRetry && (
               <Button variant="secondary" onClick={onRetry}>
                 Try Again
@@ -277,10 +277,10 @@ export function UpcomingReviewsCard({
 
                 {/* "See more" link if there are more reviews */}
                 {hasMore && (
-                  <div className="p-4 text-center border-t border-gray-200">
+                  <div className="p-4 text-center border-t border-slate-700/50">
                     <Link
                       to="/"
-                      className="text-sm text-clarity-600 hover:text-clarity-700 font-medium"
+                      className="text-sm text-clarity-400 hover:text-clarity-300 font-medium"
                     >
                       View all {summary.total} reviews
                     </Link>
