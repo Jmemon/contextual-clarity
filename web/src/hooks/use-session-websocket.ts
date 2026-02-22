@@ -175,14 +175,13 @@ export interface UseSessionWebSocketOptions {
   onSessionStarted?: (sessionId: string, openingMessage: string) => void;
   /** Callback when evaluation result is received */
   onEvaluationResult?: (result: EvaluationResult) => void;
-  /** Callback when transitioning to next recall point */
-  onPointTransition?: (nextIndex: number, total: number) => void;
+  // NOTE: onPointTransition was removed in T13 — point_transition event no longer exists
   /** Callback when session completes (finalized as 'completed') */
   onSessionComplete?: (summary: SessionCompleteSummary) => void;
   /** T08: Callback when all points recalled — triggers completion overlay in UI */
   onCompleteOverlay?: (data: CompleteOverlayData) => void;
   /** T08: Callback when session is paused after leave_session */
-  onSessionPaused?: (data: CompleteOverlayData) => void;
+  onSessionPaused?: () => void;
   /** T09: Callback when a rabbit hole tangent is detected — show opt-in prompt */
   onRabbitholeDetected?: (data: RabbitholePromptData) => void;
   /** T09: Callback when the user enters a rabbit hole */
@@ -297,7 +296,6 @@ export function useSessionWebSocket(
   const {
     onSessionStarted,
     onEvaluationResult,
-    onPointTransition,
     onSessionComplete,
     onCompleteOverlay,
     onSessionPaused,
@@ -375,7 +373,6 @@ export function useSessionWebSocket(
   const callbacksRef = useRef({
     onSessionStarted,
     onEvaluationResult,
-    onPointTransition,
     onSessionComplete,
     onCompleteOverlay,
     onSessionPaused,
@@ -390,7 +387,6 @@ export function useSessionWebSocket(
     callbacksRef.current = {
       onSessionStarted,
       onEvaluationResult,
-      onPointTransition,
       onSessionComplete,
       onCompleteOverlay,
       onSessionPaused,
@@ -399,7 +395,7 @@ export function useSessionWebSocket(
       onRabbitholeExited,
       onError,
     };
-  }, [onSessionStarted, onEvaluationResult, onPointTransition, onSessionComplete, onCompleteOverlay, onSessionPaused, onRabbitholeDetected, onRabbitholeEntered, onRabbitholeExited, onError]);
+  }, [onSessionStarted, onEvaluationResult, onSessionComplete, onCompleteOverlay, onSessionPaused, onRabbitholeDetected, onRabbitholeEntered, onRabbitholeExited, onError]);
 
   /**
    * Clear any pending reconnection timeout.
@@ -529,13 +525,7 @@ export function useSessionWebSocket(
         // T08: Session has been paused (user clicked "Done" on the overlay or sent leave_session).
         // Navigate away — the session is persisted and can be resumed later.
         case 'session_paused':
-          callbacksRef.current.onSessionPaused?.({
-            sessionId: message.sessionId,
-            recalledCount: message.recalledCount,
-            totalPoints: message.totalPoints,
-            message: '',
-            canContinue: false,
-          });
+          callbacksRef.current.onSessionPaused?.();
           break;
 
         // T09: Server detected a rabbit hole — store the prompt data so the UI can show it.

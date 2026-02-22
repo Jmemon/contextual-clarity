@@ -278,7 +278,7 @@ async function runInteractiveLoop(engine: SessionEngine): Promise<void> {
 async function handleSlashCommand(
   command: string,
   engine: SessionEngine,
-  rl: readline.Interface
+  _rl: readline.Interface
 ): Promise<'quit' | undefined> {
   // Normalize command to lowercase and extract the base command
   const normalizedCommand = command.toLowerCase().split(' ')[0];

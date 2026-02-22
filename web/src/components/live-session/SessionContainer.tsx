@@ -263,11 +263,6 @@ export function SessionContainer({
     setSessionState('active');
   }, []);
 
-  const handlePointTransition = useCallback(() => {
-    // Point transition handled automatically by the hook
-    setSessionState('active');
-  }, []);
-
   const handleSessionComplete = useCallback((summary: SessionCompleteSummary) => {
     setSessionSummary(summary);
     setSessionState('completed');
@@ -324,7 +319,6 @@ export function SessionContainer({
     rabbitholeLabels,
   } = useSessionWebSocket(sessionId, {
     onSessionStarted: handleSessionStarted,
-    onPointTransition: handlePointTransition,
     onSessionComplete: handleSessionComplete,
     onCompleteOverlay: handleCompleteOverlay,
     onSessionPaused: handleSessionPaused,
