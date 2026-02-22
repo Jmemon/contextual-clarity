@@ -79,7 +79,7 @@ export function RabbitholePrompt({
           {/* Secondary: Stay on track */}
           <button
             onClick={onDecline}
-            className="px-3 py-1.5 text-xs font-medium bg-clarity-700 text-clarity-200 rounded-lg hover:bg-clarity-600 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-slate-700 text-clarity-200 rounded-lg hover:bg-slate-600 transition-colors"
           >
             Stay on track
           </button>

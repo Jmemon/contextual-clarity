@@ -77,11 +77,11 @@ function StartSessionScreen() {
   ) || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-clarity-800 to-clarity-900 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 to-[#0c1929] flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-clarity-900/50">
+      <header className="flex items-center justify-between px-6 py-4 bg-slate-950/70">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded-lg bg-clarity-600 flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white text-sm font-bold">
             CC
           </div>
           <div>
@@ -92,7 +92,7 @@ function StartSessionScreen() {
 
         <Link
           to="/"
-          className="px-4 py-2 bg-clarity-700 text-white rounded-lg hover:bg-clarity-600 transition-colors text-sm"
+          className="px-4 py-2 bg-slate-800/60 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm"
         >
           Back to Dashboard
         </Link>
@@ -146,7 +146,7 @@ function StartSessionScreen() {
                           w-full p-4 rounded-xl text-left transition-all
                           ${selectedSetId === set.id
                             ? 'bg-clarity-600 ring-2 ring-clarity-400'
-                            : 'bg-clarity-700/50 hover:bg-clarity-700'
+                            : 'bg-slate-800/60 hover:bg-slate-700'
                           }
                         `}
                       >
@@ -187,7 +187,7 @@ function StartSessionScreen() {
                           w-full p-4 rounded-xl text-left transition-all
                           ${selectedSetId === set.id
                             ? 'bg-clarity-600 ring-2 ring-clarity-400'
-                            : 'bg-clarity-700/30 hover:bg-clarity-700/50'
+                            : 'bg-slate-800/40 hover:bg-slate-800/60'
                           }
                         `}
                       >
@@ -215,7 +215,7 @@ function StartSessionScreen() {
 
               {/* Empty state */}
               {availableSets.length === 0 && otherSets.length === 0 && (
-                <div className="text-center py-12 bg-clarity-700/30 rounded-xl">
+                <div className="text-center py-12 bg-slate-800/40 rounded-xl">
                   <p className="text-clarity-300 mb-4">
                     No recall sets available for study.
                   </p>
@@ -256,8 +256,8 @@ function StartSessionScreen() {
       </main>
 
       {/* Footer */}
-      <footer className="px-6 py-3 bg-clarity-900/50 text-center">
-        <p className="text-clarity-500 text-sm">
+      <footer className="px-6 py-3 bg-slate-950/70 text-center">
+        <p className="text-slate-500 text-sm">
           Sessions use WebSocket for real-time communication with the Agent
         </p>
       </footer>
@@ -290,7 +290,7 @@ export function LiveSession() {
 
   // Show the active session interface
   return (
-    <div className="min-h-screen bg-gradient-to-br from-clarity-800 to-clarity-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 to-[#0c1929]">
       <SessionContainer sessionId={sessionId} />
     </div>
   );

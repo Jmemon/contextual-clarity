@@ -86,7 +86,7 @@ export function SessionCompleteOverlay({
     >
       {/* Card panel */}
       <div
-        className="bg-clarity-800 border border-clarity-600 rounded-2xl p-8 w-full max-w-md shadow-2xl text-center"
+        className="bg-slate-800 border border-slate-600 rounded-2xl p-8 w-full max-w-md shadow-2xl text-center"
         style={{
           transform: visible ? 'scale(1)' : 'scale(0.95)',
           transition: 'transform 200ms ease-out',
@@ -142,7 +142,7 @@ export function SessionCompleteOverlay({
           {canContinue && (
             <button
               onClick={onContinue}
-              className="w-full px-6 py-3 bg-clarity-700/50 text-clarity-200 rounded-xl font-medium hover:bg-clarity-700 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-clarity-500"
+              className="w-full px-6 py-3 bg-slate-800/60 text-clarity-200 rounded-xl font-medium hover:bg-slate-700 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-clarity-500"
             >
               Continue Discussion
             </button>

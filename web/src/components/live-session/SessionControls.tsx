@@ -66,7 +66,7 @@ export function SessionControls({
         size="md"
         onClick={onLeaveSession}
         disabled={disabled}
-        className="bg-clarity-700 border-clarity-600 text-clarity-200 hover:bg-clarity-600 hover:text-white"
+        className="bg-slate-700 border-slate-600 text-clarity-200 hover:bg-slate-600 hover:text-white"
       >
         Leave Session
       </Button>

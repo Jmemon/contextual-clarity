@@ -110,29 +110,29 @@ function SessionCompleteScreen({ summary, sessionId }: { summary: SessionComplet
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-4 w-full max-w-md mb-8">
-        <div className="bg-clarity-700/50 rounded-xl p-4">
+        <div className="bg-slate-800/60 rounded-xl p-4">
           <p className="text-clarity-400 text-sm mb-1">Duration</p>
           <p className="text-2xl font-bold text-white">{formatDuration(summary.durationMs)}</p>
         </div>
-        <div className="bg-clarity-700/50 rounded-xl p-4">
+        <div className="bg-slate-800/60 rounded-xl p-4">
           <p className="text-clarity-400 text-sm mb-1">Recall Rate</p>
           <p className="text-2xl font-bold text-white">{recallPercentage}%</p>
         </div>
-        <div className="bg-clarity-700/50 rounded-xl p-4">
+        <div className="bg-slate-800/60 rounded-xl p-4">
           <p className="text-clarity-400 text-sm mb-1">Points Attempted</p>
           <p className="text-2xl font-bold text-white">{summary.totalPointsReviewed}</p>
         </div>
-        <div className="bg-clarity-700/50 rounded-xl p-4">
+        <div className="bg-slate-800/60 rounded-xl p-4">
           <p className="text-clarity-400 text-sm mb-1">Successful</p>
           <p className="text-2xl font-bold text-green-400">{summary.successfulRecalls}</p>
         </div>
       </div>
 
       {/* Engagement score */}
-      <div className="bg-clarity-700/30 rounded-xl p-4 w-full max-w-md mb-8">
+      <div className="bg-slate-800/40 rounded-xl p-4 w-full max-w-md mb-8">
         <p className="text-clarity-400 text-sm mb-2">Engagement Score</p>
         <div className="flex items-center justify-center gap-4">
-          <div className="h-2 flex-1 bg-clarity-700 rounded-full overflow-hidden">
+          <div className="h-2 flex-1 bg-slate-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-clarity-500 rounded-full"
               style={{ width: `${summary.engagementScore}%` }}
@@ -152,7 +152,7 @@ function SessionCompleteScreen({ summary, sessionId }: { summary: SessionComplet
         </Link>
         <Link
           to="/"
-          className="px-6 py-3 bg-clarity-700 text-white rounded-xl font-medium hover:bg-clarity-600 transition-colors"
+          className="px-6 py-3 bg-slate-700 text-white rounded-xl font-medium hover:bg-slate-600 transition-colors"
         >
           Back to Dashboard
         </Link>
@@ -207,7 +207,7 @@ function ConnectionErrorScreen({
         </button>
         <Link
           to="/"
-          className="px-6 py-3 bg-clarity-700 text-white rounded-xl font-medium hover:bg-clarity-600 transition-colors"
+          className="px-6 py-3 bg-slate-700 text-white rounded-xl font-medium hover:bg-slate-600 transition-colors"
         >
           Back to Dashboard
         </Link>
@@ -352,10 +352,10 @@ export function SessionContainer({
   return (
     <div className={`flex flex-col h-full ${className}`} {...props}>
       {/* Header with timer and progress */}
-      <header className="flex items-center justify-between px-6 py-4 bg-clarity-900/50 border-b border-clarity-700">
+      <header className="flex items-center justify-between px-6 py-4 bg-slate-950/70 border-b border-slate-700">
         {/* Session info */}
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded-lg bg-clarity-600 flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white text-sm font-bold">
             CC
           </div>
           <div>
@@ -372,7 +372,7 @@ export function SessionContainer({
         <div className="flex items-center gap-6">
           <Link
             to="/"
-            className="px-4 py-2 bg-clarity-700 text-white rounded-lg hover:bg-clarity-600 transition-colors text-sm"
+            className="px-4 py-2 bg-slate-800/60 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm"
           >
             Exit
           </Link>
@@ -383,7 +383,7 @@ export function SessionContainer({
            Hides automatically during rabbit hole mode (slide-up + fade handled inside the component).
            totalPoints guard ensures we don't render an empty circle row before the session starts. */}
       {totalPoints > 0 && (
-        <div className="px-6 py-2 bg-clarity-900/30">
+        <div className="px-6 py-2 bg-slate-950/30">
           <SessionProgress
             totalPoints={totalPoints}
             recalledCount={recalledCount}
@@ -450,7 +450,7 @@ export function SessionContainer({
         )}
 
         {/* Input and controls */}
-        <div className="border-t border-clarity-700 pt-6 mt-4">
+        <div className="border-t border-slate-700 pt-6 mt-4">
           {/* Session controls — "I've got it!" removed (T06: continuous evaluation).
               T08: "End Session" renamed to "Leave Session" (non-destructive pause). */}
           <SessionControls

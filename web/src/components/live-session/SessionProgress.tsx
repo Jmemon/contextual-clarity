@@ -290,7 +290,7 @@ export function SessionProgress({
             : 'max-h-20 opacity-100 translate-y-0',
         ].join(' ')}
       >
-        <div className="flex items-center justify-between gap-4 px-4 py-2 bg-clarity-800/50 rounded-lg">
+        <div className="flex items-center justify-between gap-4 px-4 py-2 bg-slate-800/50 rounded-lg">
           {/* Left: Anonymous point circles */}
           <PointIcons
             totalPoints={totalPoints}
