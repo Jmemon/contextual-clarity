@@ -398,19 +398,12 @@ class FailableSessionRepository {
     return this.real.findAll();
   }
 
-  // T08: findActiveSession replaces findInProgress (matches in_progress OR paused)
+  // T08: findActiveSession replaces the removed findInProgress (matches in_progress OR paused)
   async findActiveSession(recallSetId: string) {
     if (this.failOnFindInProgress) {
       throw new Error('Simulated database error: findActiveSession failed');
     }
     return this.real.findActiveSession(recallSetId);
-  }
-
-  async findInProgress(recallSetId: string) {
-    if (this.failOnFindInProgress) {
-      throw new Error('Simulated database error: findInProgress failed');
-    }
-    return this.real.findInProgress(recallSetId);
   }
 
   async create(input: Parameters<SessionRepository['create']>[0]) {

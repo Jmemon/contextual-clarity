@@ -87,8 +87,8 @@ function mapToDomain(row: typeof sessions.$inferSelect): Session {
  *   targetRecallPointIds: ['rp_001', 'rp_002'],
  * });
  *
- * // Check for an existing in-progress session
- * const existing = await repo.findInProgress('rs_abc123');
+ * // Check for an existing active (in_progress or paused) session
+ * const existing = await repo.findActiveSession('rs_abc123');
  *
  * // Complete the session
  * await repo.complete(session.id);
@@ -172,14 +172,6 @@ export class SessionRepository
     }
 
     return mapToDomain(result[0]);
-  }
-
-  /**
-   * @deprecated Use findActiveSession() instead (T08 — also matches 'paused' sessions).
-   * Kept for backwards compatibility; delegates to findActiveSession().
-   */
-  async findInProgress(recallSetId: string): Promise<Session | null> {
-    return this.findActiveSession(recallSetId);
   }
 
   /**

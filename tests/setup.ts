@@ -660,13 +660,17 @@ export function createTestApp(context: TestContext): Hono {
       return badRequest(c, `Cannot start session: recall set is ${recallSet.status}`);
     }
 
-    const existingSession = await repos.sessionRepo.findInProgress(body.recallSetId);
+    // T08: findActiveSession replaces findInProgress — also matches 'paused' sessions
+    const existingSession = await repos.sessionRepo.findActiveSession(body.recallSetId);
     if (existingSession) {
+      const resumeMessage = existingSession.status === 'paused'
+        ? 'Resuming paused session'
+        : 'Resuming existing in-progress session';
       return success(
         c,
         {
           sessionId: existingSession.id,
-          message: 'Resuming existing in-progress session',
+          message: resumeMessage,
           isResume: true,
         },
         200

@@ -279,12 +279,21 @@ export class WebSocketSessionHandler {
       // T09 added: rabbithole_detected, rabbithole_entered, rabbithole_exited
       engine.setEventListener((event) => {
         if (event.type === 'session_complete_overlay') {
-          const payload = event.data as { sessionId: string; recalledCount: number; totalPoints: number };
+          // T08: Forward overlay event including new message and canContinue fields
+          const payload = event.data as {
+            sessionId: string;
+            recalledCount: number;
+            totalPoints: number;
+            message: string;
+            canContinue: boolean;
+          };
           this.send(ws, {
             type: 'session_complete_overlay',
             sessionId: payload.sessionId,
             recalledCount: payload.recalledCount,
             totalPoints: payload.totalPoints,
+            message: payload.message,
+            canContinue: payload.canContinue,
           });
         } else if (event.type === 'session_paused') {
           const payload = event.data as { sessionId: string; recalledCount: number; totalPoints: number };
@@ -617,11 +626,16 @@ export class WebSocketSessionHandler {
   /**
    * T08: Handles a request to leave the session (replaces handleEndSession).
    *
-   * Unlike the old end_session which abandoned the session, leave_session PAUSES it —
-   * preserving checklist state so the user can resume later. This is non-destructive.
+   * Unlike the old end_session which abandoned the session, leave_session branches based
+   * on whether all points have been recalled:
    *
-   * Capture session state BEFORE calling pauseSession() because pauseSession()
-   * calls resetState() which sets currentSession to null.
+   * - If all recalled: calls finalizeSession() (marks 'completed') and sends session_complete.
+   * - Otherwise: calls pauseSession() (marks 'paused') and the 'session_paused' WS message
+   *   is forwarded by the event listener wired in handleOpen().
+   *
+   * IMPORTANT: Both finalizeSession() and pauseSession() call resetState() which sets
+   * currentSession = null, so we MUST capture recalledCount, totalPoints, and
+   * allPointsRecalled() BEFORE calling either method.
    *
    * @param ws - The WebSocket connection
    */
@@ -639,19 +653,43 @@ export class WebSocketSessionHandler {
     }
 
     try {
-      // Pause the session via the SessionEngine
-      // This sets status to 'paused', persists recalledPointIds, and emits 'session_paused'
-      // The 'session_paused' WS message is forwarded by the event listener wired in handleOpen().
       if (data.engine) {
-        await data.engine.pauseSession();
+        // Capture progress state BEFORE calling finalize/pause — both reset currentSession to null.
+        const allRecalled = data.engine.allPointsRecalled();
+        const recalledCount = data.engine.getRecalledCount();
+        const totalPoints = data.engine.getSessionState()?.totalPoints ?? 0;
+
+        if (allRecalled) {
+          // All points recalled: finalize the session as 'completed', then send session_complete.
+          await data.engine.finalizeSession();
+
+          const summary: SessionSummary = {
+            sessionId: data.sessionId,
+            totalPointsReviewed: totalPoints,
+            successfulRecalls: recalledCount,
+            recallRate: totalPoints > 0 ? recalledCount / totalPoints : 1.0,
+            durationMs: Date.now() - data.lastMessageTime,
+            engagementScore: 80,
+            estimatedCostUsd: 0.05,
+          };
+
+          this.send(ws, {
+            type: 'session_complete',
+            summary,
+          });
+        } else {
+          // Not all recalled: pause the session (preserves checklist state for later resumption).
+          // The 'session_paused' WS message is forwarded by the event listener in handleOpen().
+          await data.engine.pauseSession();
+        }
       }
     } catch (error) {
-      console.error(`[WS] Error pausing session:`, error);
-      this.sendError(ws, 'SESSION_ENGINE_ERROR', 'Failed to pause session');
+      console.error(`[WS] Error handling leave session:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', 'Failed to leave session');
     }
 
     // Close the connection — client navigates to dashboard
-    ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session paused by user');
+    ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Session ended by user');
   }
 
   /**

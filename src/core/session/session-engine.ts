@@ -843,6 +843,8 @@ export class SessionEngine {
         sessionId: this.currentSession!.id,
         recalledCount,
         totalPoints,
+        message: "You've covered everything!",
+        canContinue: true,
       });
     }
 
@@ -870,6 +872,8 @@ export class SessionEngine {
         sessionId: this.currentSession.id,
         recalledCount: this.getRecalledCount(),
         totalPoints: this.targetPoints.length,
+        message: "You've covered everything!",
+        canContinue: true,
       });
     }
   }
@@ -982,6 +986,8 @@ export class SessionEngine {
         sessionId: this.currentSession.id,
         recalledCount: this.getRecalledCount(),
         totalPoints: this.targetPoints.length,
+        message: "You've covered everything!",
+        canContinue: true,
       });
     }
   }

@@ -35,6 +35,10 @@ export interface SessionCompleteOverlayProps extends HTMLAttributes<HTMLDivEleme
   onContinue: () => void;
   /** Called when user clicks "Done" — triggers leave_session and navigation */
   onDone: () => void;
+  /** Optional message from the server to display (e.g. "You've covered everything!") */
+  message?: string;
+  /** Whether to show the "Continue Discussion" button (server-controlled) */
+  canContinue?: boolean;
 }
 
 // ============================================================================
@@ -53,6 +57,8 @@ export function SessionCompleteOverlay({
   totalPoints,
   onContinue,
   onDone,
+  message,
+  canContinue = true,
   className = '',
   ...props
 }: SessionCompleteOverlayProps) {
@@ -105,8 +111,9 @@ export function SessionCompleteOverlay({
 
         {/* Title */}
         <h2 className="text-2xl font-bold text-white mb-2">All Points Recalled!</h2>
+        {/* Render server-provided message when available, otherwise fall back to progress text */}
         <p className="text-clarity-300 mb-6">
-          You recalled {recalledCount} of {totalPoints} points ({recallPercentage}%).
+          {message ?? `You recalled ${recalledCount} of ${totalPoints} points (${recallPercentage}%).`}
         </p>
 
         {/* Stats row */}
@@ -131,13 +138,15 @@ export function SessionCompleteOverlay({
             Done
           </button>
 
-          {/* Continue Discussion — dismisses overlay only, session remains active */}
-          <button
-            onClick={onContinue}
-            className="w-full px-6 py-3 bg-clarity-700/50 text-clarity-200 rounded-xl font-medium hover:bg-clarity-700 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-clarity-500"
-          >
-            Continue Discussion
-          </button>
+          {/* Continue Discussion — only shown when canContinue is true; dismisses overlay only */}
+          {canContinue && (
+            <button
+              onClick={onContinue}
+              className="w-full px-6 py-3 bg-clarity-700/50 text-clarity-200 rounded-xl font-medium hover:bg-clarity-700 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-clarity-500"
+            >
+              Continue Discussion
+            </button>
+          )}
         </div>
       </div>
     </div>

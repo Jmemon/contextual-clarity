@@ -524,15 +524,18 @@ export function sessionsRoutes(): Hono {
         return badRequest(c, `Cannot start session: recall set is ${recallSet.status}`);
       }
 
-      // Check for existing in-progress session
-      const existingSession = await sessionRepo.findInProgress(recallSetId);
+      // Check for an existing active session (in_progress or paused — T08: paused sessions can be resumed)
+      const existingSession = await sessionRepo.findActiveSession(recallSetId);
       if (existingSession) {
         // Return the existing session ID instead of creating a new one
+        const resumeMessage = existingSession.status === 'paused'
+          ? 'Resuming paused session'
+          : 'Resuming existing in-progress session';
         return success(
           c,
           {
             sessionId: existingSession.id,
-            message: 'Resuming existing in-progress session',
+            message: resumeMessage,
             isResume: true,
           },
           200

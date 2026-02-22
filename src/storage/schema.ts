@@ -317,8 +317,11 @@ export type NewRecallSet = typeof recallSets.$inferInsert;
 export type RecallPoint = typeof recallPoints.$inferSelect;
 export type NewRecallPoint = typeof recallPoints.$inferInsert;
 
-export type Session = typeof sessions.$inferSelect;
-export type NewSession = typeof sessions.$inferInsert;
+// T08: Renamed from Session/NewSession to SessionRow/NewSessionRow to avoid collision
+// with the Session domain model in src/core/models/. Any imports of these schema types
+// must use SessionRow / NewSessionRow going forward.
+export type SessionRow = typeof sessions.$inferSelect;
+export type NewSessionRow = typeof sessions.$inferInsert;
 
 export type SessionMessage = typeof sessionMessages.$inferSelect;
 export type NewSessionMessage = typeof sessionMessages.$inferInsert;

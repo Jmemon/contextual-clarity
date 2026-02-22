@@ -288,6 +288,10 @@ export interface SessionCompleteOverlayPayload {
   totalPoints: number;
   /** Session ID for reference */
   sessionId: string;
+  /** Human-readable completion message shown in the overlay */
+  message: string;
+  /** Whether the user can continue discussion after dismissing the overlay */
+  canContinue: boolean;
 }
 
 /**
