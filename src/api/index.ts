@@ -143,7 +143,7 @@ export {
   type WebSocketHandlerDependencies,
   type ClientMessage,
   type ServerMessage,
-  type SessionSummary,
+  type SessionCompletionSummary,
   type WebSocketErrorCode,
   type WebSocketCloseCode,
 } from './ws';

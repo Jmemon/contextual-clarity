@@ -120,11 +120,11 @@ function SessionCompleteScreen({ summary, sessionId }: { summary: SessionComplet
         </div>
         <div className="bg-clarity-700/50 rounded-xl p-4">
           <p className="text-clarity-400 text-sm mb-1">Points Attempted</p>
-          <p className="text-2xl font-bold text-white">{summary.pointsAttempted}</p>
+          <p className="text-2xl font-bold text-white">{summary.totalPointsReviewed}</p>
         </div>
         <div className="bg-clarity-700/50 rounded-xl p-4">
           <p className="text-clarity-400 text-sm mb-1">Successful</p>
-          <p className="text-2xl font-bold text-green-400">{summary.pointsSuccessful}</p>
+          <p className="text-2xl font-bold text-green-400">{summary.successfulRecalls}</p>
         </div>
       </div>
 

@@ -79,6 +79,7 @@ import {
   type SessionEngineConfig,
   type ProcessMessageResult,
   type SessionEvent,
+  type SessionEventData,
   type SessionState,
   DEFAULT_SESSION_CONFIG,
 } from './types';
@@ -341,15 +342,15 @@ export class SessionEngine {
   }
 
   /**
-   * Emits an event to the registered listener (if any).
+   * Emits a typed event to the registered listener (if any).
+   * The data parameter must match the SessionEventData discriminated union.
    *
-   * @param type - The type of event
-   * @param data - Event-specific data payload
+   * @param data - Typed event data with discriminant `type` field
    */
-  private emitEvent(type: SessionEvent['type'], data: unknown): void {
+  private emitEvent(data: SessionEventData): void {
     if (this.eventListener) {
       this.eventListener({
-        type,
+        type: data.type,
         data,
         timestamp: new Date(),
       });
@@ -434,11 +435,11 @@ export class SessionEngine {
     this.updateLLMPrompt();
 
     // Emit session started event
-    this.emitEvent('session_started', {
+    this.emitEvent({
+      type: 'session_started',
       sessionId: session.id,
       recallSetId: recallSet.id,
       targetPointCount: duePoints.length,
-      targetPointIds: duePoints.map((p) => p.id),
     });
 
     return session;
@@ -518,7 +519,8 @@ export class SessionEngine {
     this.updateLLMPrompt();
 
     // Emit session started event (as a resume)
-    this.emitEvent('session_started', {
+    this.emitEvent({
+      type: 'session_started',
       sessionId: session.id,
       recallSetId: recallSet.id,
       targetPointCount: points.length,
@@ -548,13 +550,8 @@ export class SessionEngine {
   async getOpeningMessage(): Promise<string> {
     this.validateActiveSession();
 
-    // Emit point started event for the first probe point
-    const firstProbePoint = this.getNextProbePoint();
-    this.emitEvent('point_started', {
-      pointIndex: this.currentProbeIndex,
-      pointId: firstProbePoint?.id ?? '',
-      totalPoints: this.targetPoints.length,
-    });
+    // T13: Removed emitEvent('point_started') — replaced by checklist model from T01.
+    // The tutor probes the next unchecked point via prompt, not a discrete event.
 
     // Generate the opening question from the LLM
     // The prompt is already configured to focus on the current recall point
@@ -575,7 +572,8 @@ export class SessionEngine {
     );
 
     // Emit assistant message event
-    this.emitEvent('assistant_message', {
+    this.emitEvent({
+      type: 'assistant_message',
       content: response.text,
       isOpening: true,
     });
@@ -613,7 +611,8 @@ export class SessionEngine {
     await this.saveMessage('user', content);
 
     // Emit user message event
-    this.emitEvent('user_message', {
+    this.emitEvent({
+      type: 'user_message',
       content,
     });
 
@@ -768,27 +767,13 @@ export class SessionEngine {
 
       confidencePerPoint.set(point.id, evaluation.confidence);
 
-      // Emit evaluation event for each point
-      this.emitEvent('point_evaluated', {
-        pointId: point.id,
-        success: evaluation.success,
-        confidence: evaluation.confidence,
-        reasoning: evaluation.reasoning,
-      });
+      // T13: Removed emitEvent('point_evaluated') and emitEvent('point_completed').
+      // These are replaced by point_recalled (emitted in markPointRecalled) and
+      // FSRS updates happen inside markPointRecalled() via recordRecallOutcome().
 
       // Confidence >= 0.6: point is recalled
       if (evaluation.success && evaluation.confidence >= 0.6) {
         recalledPointIds.push(point.id);
-
-        // Emit point_completed event with FSRS data
-        const rating = this.evaluationToRating(evaluation);
-        const newState = this.scheduler.schedule(point.fsrsState, rating);
-        this.emitEvent('point_completed', {
-          pointId: point.id,
-          rating,
-          newDueDate: newState.due,
-          success: evaluation.success,
-        });
 
         feedbackParts.push(
           `The user demonstrated recall of "${point.content.substring(0, 60)}..." (confidence: ${evaluation.confidence.toFixed(2)}).`
@@ -832,7 +817,8 @@ export class SessionEngine {
       // (completionPendingAfterRabbithole is set in processRabbitholeMessage)
     } else {
       // Emit the overlay event — frontend will show completion overlay
-      this.emitEvent('session_complete_overlay', {
+      this.emitEvent({
+        type: 'session_complete_overlay',
         sessionId: this.currentSession!.id,
         recalledCount,
         totalPoints,
@@ -898,7 +884,7 @@ export class SessionEngine {
     });
 
     // Emit the entered event BEFORE generating the opening message
-    this.emitEvent('rabbithole_entered', { topic });
+    this.emitEvent({ type: 'rabbithole_entered', topic });
 
     // Generate and return the opening message from the agent
     const openingMessage = await this.activeRabbitholeAgent.generateOpeningMessage();
@@ -951,7 +937,8 @@ export class SessionEngine {
     this.rabbitholeDeclineCooldown = 0;
 
     // Emit exited event
-    this.emitEvent('rabbithole_exited', {
+    this.emitEvent({
+      type: 'rabbithole_exited',
       label: topic,
       pointsRecalledDuring,
       completionPending,
@@ -960,7 +947,8 @@ export class SessionEngine {
     // T09/T08: If all points were recalled during the rabbit hole,
     // now that we've exited, fire the deferred completion overlay.
     if (completionPending && this.currentSession) {
-      this.emitEvent('session_complete_overlay', {
+      this.emitEvent({
+        type: 'session_complete_overlay',
         sessionId: this.currentSession.id,
         recalledCount: this.getRecalledCount(),
         totalPoints: this.targetPoints.length,
@@ -1063,7 +1051,8 @@ export class SessionEngine {
     await this.sessionRepo.pause(sessionId);
 
     // Emit paused event BEFORE resetting state (so we have the data)
-    this.emitEvent('session_paused', {
+    this.emitEvent({
+      type: 'session_paused',
       sessionId,
       recalledCount,
       totalPoints,
@@ -1129,7 +1118,8 @@ export class SessionEngine {
 
     this.pointChecklist.set(pointId, 'recalled');
 
-    this.emitEvent('point_recalled', {
+    this.emitEvent({
+      type: 'point_recalled',
       pointId,
       recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
@@ -1305,98 +1295,9 @@ export class SessionEngine {
     );
 
     // Emit assistant message event
-    this.emitEvent('assistant_message', {
+    this.emitEvent({
+      type: 'assistant_message',
       content: response.text,
-      isOpening: false,
-    });
-
-    return response.text;
-  }
-
-  /**
-   * Generates a transition message after completing a point.
-   *
-   * Provides feedback on the completed point and introduces the next topic.
-   *
-   * Phase 2: Now tracks token usage for metrics collection.
-   *
-   * @param evaluation - The evaluation result from the completed point
-   * @param hasNextPoint - Whether there's another point to discuss
-   * @returns The transition message
-   */
-  private async generateTransitionMessage(
-    evaluation: RecallEvaluation,
-    hasNextPoint: boolean
-  ): Promise<string> {
-    // Build appropriate prompt based on evaluation and whether there's a next point.
-    // T07: No praise, no congratulatory language — the UI handles positive reinforcement.
-    const successPrompt = hasNextPoint
-      ? 'The user recalled this point. Transition to the next topic by asking an opening question about it. Do not congratulate or praise — just move on naturally.'
-      : 'The user recalled the final point. Wrap up briefly — no congratulations, no praise.';
-
-    const strugglePrompt = hasNextPoint
-      ? 'The user struggled with this point. Briefly note the key idea they missed, then move on to the next topic with an opening question. No pity, no excessive encouragement.'
-      : 'The user struggled with the final point. Briefly note the key idea, then wrap up. No pity, no excessive encouragement.';
-
-    const feedbackPrompt = evaluation.success ? successPrompt : strugglePrompt;
-
-    const response = await this.llmClient.complete(feedbackPrompt, {
-      temperature: this.config.tutorTemperature,
-      maxTokens: this.config.tutorMaxTokens,
-    });
-
-    // Save the transition message with token usage (Phase 2: metrics tracking)
-    await this.saveMessage(
-      'assistant',
-      response.text,
-      response.usage?.inputTokens,
-      response.usage?.outputTokens
-    );
-
-    // Emit assistant message event
-    this.emitEvent('assistant_message', {
-      content: response.text,
-      isTransition: true,
-    });
-
-    return response.text;
-  }
-
-  /**
-   * Generates a session completion message.
-   *
-   * Provides a brief wrap-up when the user finishes all recall points.
-   *
-   * Phase 2: Now tracks token usage for metrics collection.
-   *
-   * @param lastEvaluation - The evaluation result from the final point
-   * @returns The completion message
-   */
-  private async generateCompletionMessage(
-    lastEvaluation: RecallEvaluation
-  ): Promise<string> {
-    // T07: No warm congratulations, no "learning journey" language — matter-of-fact wrap-up only.
-    const feedbackPrompt = lastEvaluation.success
-      ? `The user has finished all ${this.targetPoints.length} recall points. Provide a brief, matter-of-fact wrap-up. No warm congratulations, no exclamation marks, no "learning journey" language.`
-      : `The user has finished all ${this.targetPoints.length} recall points, though they struggled with the last one. Provide a brief wrap-up noting the key idea they missed. No pity, no excessive encouragement.`;
-
-    const response = await this.llmClient.complete(feedbackPrompt, {
-      temperature: this.config.tutorTemperature,
-      maxTokens: this.config.tutorMaxTokens,
-    });
-
-    // Save the completion message with token usage (Phase 2: metrics tracking)
-    await this.saveMessage(
-      'assistant',
-      response.text,
-      response.usage?.inputTokens,
-      response.usage?.outputTokens
-    );
-
-    // Emit assistant message event
-    this.emitEvent('assistant_message', {
-      content: response.text,
-      isCompletion: true,
     });
 
     return response.text;
@@ -1496,9 +1397,20 @@ export class SessionEngine {
     await this.finalizeAndPersistMetrics();
 
     // Emit session completed event
-    this.emitEvent('session_completed', {
+    this.emitEvent({
+      type: 'session_completed',
       sessionId: this.currentSession!.id,
-      pointsReviewed: this.targetPoints.length,
+      summary: {
+        sessionId: this.currentSession!.id,
+        totalPointsReviewed: this.targetPoints.length,
+        successfulRecalls: this.getRecalledCount(),
+        recallRate: this.targetPoints.length > 0 ? this.getRecalledCount() / this.targetPoints.length : 1.0,
+        durationMs: 0, // Calculated at the WS layer
+        rabbitholeCount: 0, // Tracked by metrics collector
+        recalledPointIds: this.getRecalledPointIds(),
+        engagementScore: 80,
+        estimatedCostUsd: 0.05,
+      },
     });
 
     // Update local state
@@ -1620,9 +1532,10 @@ export class SessionEngine {
         });
       }
 
-      // T09: Emit 'rabbithole_detected' (NOT 'point_evaluated') so the handler can
+      // T09: Emit 'rabbithole_detected' so the handler can
       // forward it to the frontend as a prompt for the user to opt in.
-      this.emitEvent('rabbithole_detected', {
+      this.emitEvent({
+        type: 'rabbithole_detected',
         topic: rabbitholeEvent.topic,
         rabbitholeEventId: rabbitholeEvent.id,
       });

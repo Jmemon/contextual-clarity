@@ -53,25 +53,27 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'rec
 
 /**
  * Messages sent from client to server via WebSocket.
+ * T13: Removed 'trigger_eval' (evaluation is continuous since T06).
+ * T13: Added 'dismiss_overlay' for dismissing the completion overlay.
  */
 export type ClientMessage =
   | { type: 'user_message'; content: string }
-  | { type: 'trigger_eval' }
   | { type: 'leave_session' }  // T08: replaces 'end_session' — pauses session instead of abandoning
   | { type: 'ping' }
   | { type: 'enter_rabbithole'; rabbitholeEventId: string; topic: string }
   | { type: 'exit_rabbithole' }
-  | { type: 'decline_rabbithole' };
+  | { type: 'decline_rabbithole' }
+  | { type: 'dismiss_overlay' };  // T13: dismiss completion overlay, continue discussion
 
 /**
  * Messages received from server via WebSocket.
+ * T13: Removed 'evaluation_result' and 'point_transition' (deprecated).
+ * T13: Updated 'session_started' to use recalledCount instead of currentPointIndex.
  */
 export type ServerMessage =
-  | { type: 'session_started'; sessionId: string; openingMessage: string }
+  | { type: 'session_started'; sessionId: string; openingMessage: string; totalPoints: number; recalledCount: number }
   | { type: 'assistant_chunk'; content: string }
   | { type: 'assistant_complete'; fullContent: string }
-  | { type: 'evaluation_result'; recallPointId: string; outcome: string; feedback: string }
-  | { type: 'point_transition'; recalledCount: number; totalPoints: number; fromPointId: string; toPointId: string; pointsRemaining: number }
   | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message?: string; canContinue?: boolean }
@@ -84,18 +86,30 @@ export type ServerMessage =
 
 /**
  * Summary data received when session completes.
+ * T13: Field names updated to match server's SessionCompletionSummary.
+ * - totalPointsReviewed replaces pointsAttempted
+ * - successfulRecalls replaces pointsSuccessful
+ * New fields: sessionId, rabbitholeCount, recalledPointIds, estimatedCostUsd
  */
 export interface SessionCompleteSummary {
+  /** Unique identifier for the session */
+  sessionId: string;
   /** Total duration of the session in milliseconds */
   durationMs: number;
   /** Recall success rate (0.0 to 1.0) */
   recallRate: number;
-  /** Number of recall points attempted */
-  pointsAttempted: number;
-  /** Number of successful recalls */
-  pointsSuccessful: number;
+  /** Total number of recall points reviewed (was: pointsAttempted) */
+  totalPointsReviewed: number;
+  /** Number of successfully recalled points (was: pointsSuccessful) */
+  successfulRecalls: number;
   /** Overall engagement score */
   engagementScore: number;
+  /** Number of rabbit holes entered during the session */
+  rabbitholeCount: number;
+  /** IDs of all recall points that were successfully recalled */
+  recalledPointIds: string[];
+  /** Estimated API cost in USD */
+  estimatedCostUsd: number;
 }
 
 /**
@@ -238,6 +252,8 @@ export interface UseSessionWebSocketReturn {
   exitRabbithole: () => void;
   /** T09: Decline the current rabbit hole prompt */
   declineRabbithole: () => void;
+  /** T13: Dismiss the completion overlay and continue the discussion */
+  dismissOverlay: () => void;
 
   // ---- T11: Visual Progress fields ----
   /**
@@ -445,6 +461,9 @@ export function useSessionWebSocket(
             },
           ]);
           setIsWaitingForResponse(false);
+          // T13: Initialize progress from session_started payload (supports resumed sessions)
+          setTotalPoints(message.totalPoints);
+          setRecalledCount(message.recalledCount);
           // T12: Track the latest AI text and mark this as the opening message
           // so SingleExchangeView skips the fade-in animation.
           setLatestAssistantMessage(message.openingMessage);
@@ -474,20 +493,6 @@ export function useSessionWebSocket(
           // so subsequent messages use the fade-in animation.
           setLatestAssistantMessage(message.fullContent);
           setIsOpeningMessage(false);
-          break;
-
-        case 'evaluation_result':
-          callbacksRef.current.onEvaluationResult?.({
-            recallPointId: message.recallPointId,
-            outcome: message.outcome,
-            feedback: message.feedback,
-          });
-          break;
-
-        case 'point_transition':
-          setRecalledCount(message.recalledCount);
-          setTotalPoints(message.totalPoints);
-          callbacksRef.current.onPointTransition?.(message.recalledCount, message.totalPoints);
           break;
 
         case 'point_recalled':
@@ -821,6 +826,14 @@ export function useSessionWebSocket(
     sendMessage({ type: 'decline_rabbithole' });
   }, [sendMessage]);
 
+  /**
+   * T13: Dismiss the completion overlay and continue discussion.
+   * Sends 'dismiss_overlay' to the server (pure UI state change — no engine action).
+   */
+  const dismissOverlay = useCallback(() => {
+    sendMessage({ type: 'dismiss_overlay' });
+  }, [sendMessage]);
+
   // Auto-connect on mount if enabled and sessionId is provided
   useEffect(() => {
     if (autoConnect && sessionId) {
@@ -861,6 +874,8 @@ export function useSessionWebSocket(
     enterRabbithole,
     exitRabbithole,
     declineRabbithole,
+    // T13: Dismiss completion overlay
+    dismissOverlay,
     // T11 visual progress fields
     rabbitholeLabels,
   };

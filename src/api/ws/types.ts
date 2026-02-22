@@ -6,7 +6,7 @@
  *
  * 1. **User Input**: Messages from the client to the server
  * 2. **Streaming Responses**: LLM responses streamed as chunks
- * 3. **Session Events**: Evaluation results, point transitions, completion
+ * 3. **Session Events**: Recall events, rabbit hole transitions, completion
  * 4. **Connection Management**: Ping/pong keepalive and error handling
  *
  * Protocol Flow:
@@ -40,11 +40,8 @@
  *   content: 'The Treaty of Versailles was signed in 1919...'
  * }));
  *
- * // Client triggers manual evaluation
- * ws.send(JSON.stringify({ type: 'trigger_eval' }));
- *
- * // Client ends session early
- * ws.send(JSON.stringify({ type: 'end_session' }));
+ * // Client leaves session
+ * ws.send(JSON.stringify({ type: 'leave_session' }));
  * ```
  */
 
@@ -64,15 +61,6 @@ export interface UserMessagePayload {
   type: 'user_message';
   /** The text content of the user's message */
   content: string;
-}
-
-/**
- * Client request to manually trigger recall evaluation for the current point.
- * Useful when the user believes they've demonstrated sufficient recall
- * and wants to move on, even if automatic evaluation hasn't triggered.
- */
-export interface TriggerEvalPayload {
-  type: 'trigger_eval';
 }
 
 /**
@@ -122,29 +110,40 @@ export interface DeclineRabbitholePayload {
 }
 
 /**
+ * T13: User dismisses the completion overlay and continues the discussion.
+ * No engine call needed — this is purely a UI state change on the server side.
+ */
+export interface DismissOverlayPayload {
+  type: 'dismiss_overlay';
+}
+
+/**
  * Union type representing all possible messages from client to server.
  * Use this type when parsing incoming WebSocket messages.
+ *
+ * T13: Removed 'trigger_eval' (evaluation is continuous since T06).
  */
 export type ClientMessage =
   | UserMessagePayload
-  | TriggerEvalPayload
   | LeaveSessionPayload
   | PingPayload
   | EnterRabbitholePayload
   | ExitRabbitholePayload
-  | DeclineRabbitholePayload;
+  | DeclineRabbitholePayload
+  | DismissOverlayPayload;
 
 /**
  * All valid client message types for validation.
+ * T13: Removed 'trigger_eval' (evaluation is continuous since T06).
  */
 export const CLIENT_MESSAGE_TYPES = [
   'user_message',
-  'trigger_eval',
   'leave_session',
   'ping',
   'enter_rabbithole',
   'exit_rabbithole',
   'decline_rabbithole',
+  'dismiss_overlay',
 ] as const;
 
 export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number];
@@ -157,6 +156,9 @@ export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number];
  * Sent when the WebSocket connection is established and the session is ready.
  * Contains the session ID and the AI tutor's opening message to start
  * the recall conversation.
+ *
+ * T13: Removed currentPointIndex (no longer meaningful with checklist model).
+ * Added recalledCount (0 for fresh sessions, >0 for resumed sessions).
  */
 export interface SessionStartedPayload {
   type: 'session_started';
@@ -164,10 +166,10 @@ export interface SessionStartedPayload {
   sessionId: string;
   /** The AI tutor's opening message (question about the recall point) */
   openingMessage: string;
-  /** Current recall point index (0-based) */
-  currentPointIndex: number;
   /** Total number of recall points in this session */
   totalPoints: number;
+  /** Number of points already recalled (0 for fresh session, >0 for resumed) */
+  recalledCount: number;
 }
 
 /**
@@ -197,40 +199,9 @@ export interface AssistantCompletePayload {
 }
 
 /**
- * Sent after a recall evaluation is performed.
- * Contains the result of the evaluation for the specified recall point.
- */
-export interface EvaluationResultPayload {
-  type: 'evaluation_result';
-  /** ID of the recall point that was evaluated */
-  pointId: string;
-  /** Whether the recall was successful */
-  success: boolean;
-  /** Feedback message about the recall attempt */
-  feedback: string;
-  /** Confidence score of the evaluation (0.0 to 1.0) */
-  confidence: number;
-}
-
-/**
- * Sent when transitioning from one recall point to the next.
- * Indicates the session is progressing to review the next item.
- */
-export interface PointTransitionPayload {
-  type: 'point_transition';
-  /** ID of the recall point that was just recalled */
-  fromPointId: string;
-  /** ID of the next recall point the tutor will probe (empty string if all recalled) */
-  toPointId: string;
-  /** Number of recall points remaining (still pending) */
-  pointsRemaining: number;
-  /** Number of points recalled so far */
-  recalledCount: number;
-}
-
-/**
  * Sent when a specific recall point has been marked as recalled.
  * Contains progress information about the session.
+ * T13: Renamed from PointRecalledPayload to align with engine event type.
  */
 export interface PointRecalledPayload {
   type: 'point_recalled';
@@ -246,33 +217,19 @@ export interface PointRecalledPayload {
  * Sent when all recall points have been reviewed and the session is complete.
  * Contains a summary of the session's performance metrics.
  * The WebSocket connection will be closed after this message.
+ *
+ * T13: Uses SessionCompletionSummary from core/session/types.ts instead of the
+ * old inline SessionSummary interface, adding rabbitholeCount and recalledPointIds.
  */
 export interface SessionCompletePayload {
   type: 'session_complete';
   /** Summary of the session's metrics and performance */
-  summary: SessionSummary;
+  summary: SessionCompletionSummary;
 }
 
-/**
- * Summary of a completed session's performance.
- * Provides key metrics for display to the user.
- */
-export interface SessionSummary {
-  /** Unique identifier for the session */
-  sessionId: string;
-  /** Total number of recall points reviewed */
-  totalPointsReviewed: number;
-  /** Number of successful recalls */
-  successfulRecalls: number;
-  /** Recall success rate (0.0 to 1.0) */
-  recallRate: number;
-  /** Total session duration in milliseconds */
-  durationMs: number;
-  /** Engagement score (0-100) */
-  engagementScore: number;
-  /** Estimated API cost in USD */
-  estimatedCostUsd: number;
-}
+// Import SessionCompletionSummary from core types so it's the single source of truth
+import type { SessionCompletionSummary } from '../../core/session/types';
+export type { SessionCompletionSummary };
 
 /**
  * T08: Sent when all recall points have been recalled.
@@ -373,13 +330,13 @@ export interface PongPayload {
 /**
  * Union type representing all possible messages from server to client.
  * Use this type when constructing outgoing WebSocket messages.
+ *
+ * T13: Removed EvaluationResultPayload and PointTransitionPayload (deprecated).
  */
 export type ServerMessage =
   | SessionStartedPayload
   | AssistantChunkPayload
   | AssistantCompletePayload
-  | EvaluationResultPayload
-  | PointTransitionPayload
   | PointRecalledPayload
   | SessionCompletePayload
   | SessionCompleteOverlayPayload
@@ -517,7 +474,8 @@ export function parseClientMessage(
     return { type: 'enter_rabbithole', rabbitholeEventId: msg.rabbitholeEventId, topic: msg.topic };
   }
 
-  // For other message types, return as-is
+  // For other message types (leave_session, exit_rabbithole, decline_rabbithole,
+  // dismiss_overlay, ping), return as-is — no additional fields required.
   return { type: message.type } as ClientMessage;
 }
 

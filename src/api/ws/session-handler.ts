@@ -67,7 +67,6 @@ import { SessionEngine } from '@/core/session/session-engine';
 import {
   type ClientMessage,
   type ServerMessage,
-  type SessionSummary,
   type WebSocketErrorCode,
   parseClientMessage,
   serializeServerMessage,
@@ -274,59 +273,105 @@ export class WebSocketSessionHandler {
         messageRepo: this.deps.messageRepo,
       });
 
-      // T08/T09: Wire engine events to forward to the WebSocket client.
-      // T08 added: session_complete_overlay, session_paused
-      // T09 added: rabbithole_detected, rabbithole_entered, rabbithole_exited
+      /**
+       * T13: Wire ALL engine events to WebSocket messages.
+       *
+       * Normal recall flow:
+       *   user speaks -> evaluator runs -> point_recalled event
+       *   -> handler sends point_recalled WS message
+       *   -> frontend: animates circle fill (T11)
+       *   -> agent asks about next unchecked point
+       *
+       * Rabbit hole flow:
+       *   user tangent -> rabbithole_detected event -> frontend shows prompt
+       *   -> user clicks Explore -> client sends enter_rabbithole
+       *   -> engine emits rabbithole_entered -> frontend transitions
+       *   -> user clicks Return -> client sends exit_rabbithole
+       *   -> engine emits rabbithole_exited -> frontend transitions back
+       *
+       * Auto-end flow (T08):
+       *   last point recalled -> session_complete_overlay event -> overlay shown
+       *   -> user clicks Continue -> client sends dismiss_overlay -> overlay dismissed
+       *   -> user clicks Done -> client sends leave_session -> session paused
+       */
       engine.setEventListener((event) => {
-        if (event.type === 'session_complete_overlay') {
-          // T08: Forward overlay event including new message and canContinue fields
-          const payload = event.data as {
-            sessionId: string;
-            recalledCount: number;
-            totalPoints: number;
-            message: string;
-            canContinue: boolean;
-          };
-          this.send(ws, {
-            type: 'session_complete_overlay',
-            sessionId: payload.sessionId,
-            recalledCount: payload.recalledCount,
-            totalPoints: payload.totalPoints,
-            message: payload.message,
-            canContinue: payload.canContinue,
-          });
-        } else if (event.type === 'session_paused') {
-          const payload = event.data as { sessionId: string; recalledCount: number; totalPoints: number };
-          this.send(ws, {
-            type: 'session_paused',
-            sessionId: payload.sessionId,
-            recalledCount: payload.recalledCount,
-            totalPoints: payload.totalPoints,
-          });
-        } else if (event.type === 'rabbithole_detected') {
-          // T09: Forward the detection event so the frontend can show the opt-in prompt
-          const payload = event.data as { topic: string; rabbitholeEventId: string };
-          this.send(ws, {
-            type: 'rabbithole_detected',
-            topic: payload.topic,
-            rabbitholeEventId: payload.rabbitholeEventId,
-          });
-        } else if (event.type === 'rabbithole_entered') {
-          // T09: Forward entered event so the frontend can show the RabbitholeIndicator
-          const payload = event.data as { topic: string };
-          this.send(ws, {
-            type: 'rabbithole_entered',
-            topic: payload.topic,
-          });
-        } else if (event.type === 'rabbithole_exited') {
-          // T09: Forward exited event so the frontend can return to normal session UI
-          const payload = event.data as { label: string; pointsRecalledDuring: number; completionPending: boolean };
-          this.send(ws, {
-            type: 'rabbithole_exited',
-            label: payload.label,
-            pointsRecalledDuring: payload.pointsRecalledDuring,
-            completionPending: payload.completionPending,
-          });
+        const d = event.data;
+        switch (d.type) {
+          case 'point_recalled':
+            this.send(ws, {
+              type: 'point_recalled',
+              pointId: d.pointId,
+              recalledCount: d.recalledCount,
+              totalPoints: d.totalPoints,
+            });
+            break;
+
+          case 'session_complete_overlay':
+            this.send(ws, {
+              type: 'session_complete_overlay',
+              sessionId: d.sessionId,
+              recalledCount: d.recalledCount,
+              totalPoints: d.totalPoints,
+              message: d.message,
+              canContinue: d.canContinue,
+            });
+            break;
+
+          case 'session_paused':
+            this.send(ws, {
+              type: 'session_paused',
+              sessionId: d.sessionId,
+              recalledCount: d.recalledCount,
+              totalPoints: d.totalPoints,
+            });
+            break;
+
+          case 'session_completed':
+            this.send(ws, {
+              type: 'session_complete',
+              summary: d.summary,
+            });
+            break;
+
+          case 'rabbithole_detected':
+            this.send(ws, {
+              type: 'rabbithole_detected',
+              topic: d.topic,
+              rabbitholeEventId: d.rabbitholeEventId,
+            });
+            break;
+
+          case 'rabbithole_entered':
+            this.send(ws, {
+              type: 'rabbithole_entered',
+              topic: d.topic,
+            });
+            break;
+
+          case 'rabbithole_exited':
+            this.send(ws, {
+              type: 'rabbithole_exited',
+              label: d.label,
+              pointsRecalledDuring: d.pointsRecalledDuring,
+              completionPending: d.completionPending,
+            });
+            break;
+
+          case 'rabbithole_declined':
+          case 'session_started':
+          case 'user_message':
+          case 'assistant_message':
+            // These events are not forwarded as separate WS messages:
+            // - session_started is sent explicitly after getOpeningMessage()
+            // - user/assistant messages are handled by the streaming flow
+            // - rabbithole_declined has no client-side representation
+            break;
+
+          default: {
+            // TypeScript exhaustiveness check
+            const _exhaustive: never = d;
+            console.warn(`[WS] Unhandled engine event type: ${(_exhaustive as { type: string }).type}`);
+          }
         }
       });
 
@@ -340,13 +385,14 @@ export class WebSocketSessionHandler {
       // Get session state for progress info
       const sessionState = engine.getSessionState();
 
-      // Send session_started message with real LLM-generated opening
+      // Send session_started message with real LLM-generated opening.
+      // T13: Uses recalledCount instead of currentPointIndex (checklist model).
       this.send(ws, {
         type: 'session_started',
         sessionId: session.id,
         openingMessage,
-        currentPointIndex: sessionState?.recalledCount ?? 0,
         totalPoints: sessionState?.totalPoints ?? session.targetRecallPointIds.length,
+        recalledCount: sessionState?.recalledCount ?? 0,
       });
 
       data.initialized = true;
@@ -403,9 +449,6 @@ export class WebSocketSessionHandler {
         case 'user_message':
           await this.handleUserMessage(ws, parsed.content);
           break;
-        case 'trigger_eval':
-          await this.handleTriggerEval(ws);
-          break;
         case 'leave_session':
           // T08: leave_session pauses the session (non-destructive) instead of abandoning it
           await this.handleLeaveSession(ws);
@@ -424,6 +467,10 @@ export class WebSocketSessionHandler {
         case 'decline_rabbithole':
           // T09: User declined the rabbit hole prompt — set cooldown
           this.handleDeclineRabbithole(ws);
+          break;
+        case 'dismiss_overlay':
+          // T13: User dismissed the completion overlay and wants to continue discussion
+          this.handleDismissOverlay(ws);
           break;
         default:
           // TypeScript exhaustiveness check
@@ -469,47 +516,10 @@ export class WebSocketSessionHandler {
       // Stream the real response back to the client
       await this.streamResponse(ws, result.response);
 
-      // Send point_recalled messages for any points recalled this turn
-      if (result.pointsRecalledThisTurn.length > 0) {
-        for (const pointId of result.pointsRecalledThisTurn) {
-          this.send(ws, {
-            type: 'point_recalled',
-            pointId,
-            recalledCount: result.recalledCount,
-            totalPoints: result.totalPoints,
-          });
-        }
-
-        // Send point transition if points were recalled but session isn't complete
-        if (!result.completed) {
-          const state = data.engine.getSessionState();
-          this.send(ws, {
-            type: 'point_transition',
-            fromPointId: result.pointsRecalledThisTurn[result.pointsRecalledThisTurn.length - 1] || '',
-            toPointId: state?.currentProbePoint?.id || '',
-            pointsRemaining: result.totalPoints - result.recalledCount,
-            recalledCount: result.recalledCount,
-          });
-        }
-      }
-
-      // If session completed, send completion summary
-      if (result.completed) {
-        const summary: SessionSummary = {
-          sessionId: data.sessionId,
-          totalPointsReviewed: result.totalPoints,
-          successfulRecalls: result.totalPoints, // Will be refined when we track individual outcomes
-          recallRate: 1.0, // Will be refined with actual metrics
-          durationMs: Date.now() - data.lastMessageTime,
-          engagementScore: 80, // Will be calculated from actual session data
-          estimatedCostUsd: 0.05, // Will be calculated from token usage
-        };
-
-        this.send(ws, {
-          type: 'session_complete',
-          summary,
-        });
-      }
+      // T13: point_recalled messages are now forwarded via the engine event listener
+      // (wired in handleOpen). No direct sends needed here.
+      // T13: point_transition is removed entirely — the checklist model replaces it.
+      // T13: session_complete is now sent via the engine event when finalizeSession() is called.
     } catch (error) {
       console.error(`[WS] Error processing user message:`, error);
       this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Unknown error');
@@ -517,24 +527,6 @@ export class WebSocketSessionHandler {
       // Mark streaming complete
       data.isStreaming = false;
     }
-  }
-
-  /**
-   * Handles a manual evaluation trigger request.
-   *
-   * T06 removes triggerEvaluation() from SessionEngine — evaluation now happens
-   * automatically after every user message via continuous evaluation.
-   * This handler is now a no-op. T13 will remove the trigger_eval WS type entirely.
-   *
-   * @param ws - The WebSocket connection
-   */
-  private async handleTriggerEval(
-    ws: ServerWebSocket<WebSocketSessionData>
-  ): Promise<void> {
-    const data = ws.data;
-    console.log(`[WS] trigger_eval received for session ${data.sessionId} — no-op (evaluation is continuous)`);
-    // No-op: evaluation runs automatically after every processUserMessage() call.
-    // T13 will remove this WS message type entirely.
   }
 
   /**
@@ -654,29 +646,14 @@ export class WebSocketSessionHandler {
 
     try {
       if (data.engine) {
-        // Capture progress state BEFORE calling finalize/pause — both reset currentSession to null.
+        // Capture allRecalled BEFORE calling finalize/pause — both reset currentSession to null.
         const allRecalled = data.engine.allPointsRecalled();
-        const recalledCount = data.engine.getRecalledCount();
-        const totalPoints = data.engine.getSessionState()?.totalPoints ?? 0;
 
         if (allRecalled) {
-          // All points recalled: finalize the session as 'completed', then send session_complete.
+          // All points recalled: finalize the session as 'completed'.
+          // T13: session_complete message is sent by the engine's session_completed event
+          // which is forwarded via the event listener wired in handleOpen().
           await data.engine.finalizeSession();
-
-          const summary: SessionSummary = {
-            sessionId: data.sessionId,
-            totalPointsReviewed: totalPoints,
-            successfulRecalls: recalledCount,
-            recallRate: totalPoints > 0 ? recalledCount / totalPoints : 1.0,
-            durationMs: Date.now() - data.lastMessageTime,
-            engagementScore: 80,
-            estimatedCostUsd: 0.05,
-          };
-
-          this.send(ws, {
-            type: 'session_complete',
-            summary,
-          });
         } else {
           // Not all recalled: pause the session (preserves checklist state for later resumption).
           // The 'session_paused' WS message is forwarded by the event listener in handleOpen().
@@ -692,6 +669,24 @@ export class WebSocketSessionHandler {
       // FIX 5: Close on the error path with a distinct reason so it's clear this was an error.
       ws.close(WS_CLOSE_CODES.SESSION_ENDED, 'Leave session failed');
     }
+  }
+
+  /**
+   * T13: Handles a dismiss_overlay request.
+   *
+   * The user clicked "Continue Discussion" on the completion overlay.
+   * The session remains active — no engine state change needed.
+   * The overlay is dismissed purely on the client side when the message is sent.
+   *
+   * @param ws - The WebSocket connection
+   */
+  private handleDismissOverlay(
+    ws: ServerWebSocket<WebSocketSessionData>
+  ): void {
+    const data = ws.data;
+    console.log(`[WS] Dismiss overlay for session ${data.sessionId} — continuing discussion`);
+    // No action required — the client dismisses the overlay on send,
+    // and the session engine continues normally.
   }
 
   /**

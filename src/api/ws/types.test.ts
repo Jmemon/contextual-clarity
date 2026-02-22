@@ -23,9 +23,11 @@ describe('WebSocket Types', () => {
   describe('isClientMessageType', () => {
     it('should return true for valid client message types', () => {
       expect(isClientMessageType('user_message')).toBe(true);
-      expect(isClientMessageType('trigger_eval')).toBe(true);
+      // T13: trigger_eval removed — should return false
+      expect(isClientMessageType('trigger_eval')).toBe(false);
       expect(isClientMessageType('leave_session')).toBe(true);  // T08: renamed from end_session
       expect(isClientMessageType('ping')).toBe(true);
+      expect(isClientMessageType('dismiss_overlay')).toBe(true);  // T13
     });
 
     it('should return false for invalid message types', () => {
@@ -54,9 +56,13 @@ describe('WebSocket Types', () => {
       }
     });
 
-    it('should parse valid trigger_eval', () => {
+    // T13: trigger_eval removed — evaluation is continuous since T06
+    it('should return error for deprecated trigger_eval', () => {
       const result = parseClientMessage(JSON.stringify({ type: 'trigger_eval' }));
-      expect(result.type).toBe('trigger_eval');
+      expect(result.type).toBe('error');
+      if (result.type === 'error') {
+        expect(result.code).toBe('UNKNOWN_MESSAGE_TYPE');
+      }
     });
 
     // T08: end_session renamed to leave_session (non-destructive pause)
@@ -127,12 +133,13 @@ describe('WebSocket Types', () => {
   // =========================================================================
   describe('serializeServerMessage', () => {
     it('should serialize session_started message', () => {
+      // T13: uses recalledCount instead of currentPointIndex
       const message: ServerMessage = {
         type: 'session_started',
         sessionId: 'sess_123',
         openingMessage: 'Welcome!',
-        currentPointIndex: 0,
         totalPoints: 5,
+        recalledCount: 0,
       };
       const serialized = serializeServerMessage(message);
       const parsed = JSON.parse(serialized);
@@ -217,13 +224,16 @@ describe('WebSocket Types', () => {
   describe('Constants', () => {
     it('should have all client message types', () => {
       expect(CLIENT_MESSAGE_TYPES).toContain('user_message');
-      expect(CLIENT_MESSAGE_TYPES).toContain('trigger_eval');
+      // T13: trigger_eval removed — evaluation is continuous
+      expect(CLIENT_MESSAGE_TYPES).not.toContain('trigger_eval');
       expect(CLIENT_MESSAGE_TYPES).toContain('leave_session');  // T08: renamed from end_session
       expect(CLIENT_MESSAGE_TYPES).toContain('ping');
-      // T09: three new rabbit hole message types
+      // T09: three rabbit hole message types
       expect(CLIENT_MESSAGE_TYPES).toContain('enter_rabbithole');
       expect(CLIENT_MESSAGE_TYPES).toContain('exit_rabbithole');
       expect(CLIENT_MESSAGE_TYPES).toContain('decline_rabbithole');
+      // T13: dismiss_overlay added
+      expect(CLIENT_MESSAGE_TYPES).toContain('dismiss_overlay');
       expect(CLIENT_MESSAGE_TYPES.length).toBe(7);
     });
 

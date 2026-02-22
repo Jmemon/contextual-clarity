@@ -2914,12 +2914,15 @@ describe('SessionEngine Comprehensive Tests', () => {
       const eventTypes = events.map(e => e.type);
 
       expect(eventTypes).toContain('session_started');
-      expect(eventTypes).toContain('point_started');
+      // T13: point_started removed — replaced by checklist model from T01
+      expect(eventTypes).not.toContain('point_started');
       expect(eventTypes).toContain('assistant_message');
       expect(eventTypes).toContain('user_message');
-      expect(eventTypes).toContain('point_evaluated');
+      // T13: point_evaluated removed — replaced by continuous evaluator
+      expect(eventTypes).not.toContain('point_evaluated');
       expect(eventTypes).toContain('point_recalled');
-      expect(eventTypes).toContain('point_completed');
+      // T13: point_completed removed — FSRS updates happen inside markPointRecalled()
+      expect(eventTypes).not.toContain('point_completed');
       // T08: session_completed no longer fires automatically — session_complete_overlay fires
       // instead, and session_completed/session_paused only fires after pauseSession() is called.
       expect(eventTypes).toContain('session_complete_overlay');
@@ -2957,10 +2960,7 @@ describe('SessionEngine Comprehensive Tests', () => {
       expect(sessionStarted).toBeDefined();
       expect((sessionStarted!.data as any).recallSetId).toBe(recallSet.id);
 
-      // Check point_started event
-      const pointStarted = events.find(e => e.type === 'point_started');
-      expect(pointStarted).toBeDefined();
-      expect((pointStarted!.data as any).pointId).toBe(recallPoints[0].id);
+      // T13: point_started removed — no longer emitted
 
       // Check user_message event
       const userMessage = events.find(e => e.type === 'user_message');

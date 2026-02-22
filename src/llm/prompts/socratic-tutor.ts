@@ -98,7 +98,7 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
 
   // Build the complete prompt by combining layers.
   // Section order: universal agent identity, Socratic method, checklist-aware
-  // points, guidelines, and finally optional per-set supplementary guidelines.
+  // points, guidelines, supplementary guidelines, and finally the T13 safety instruction.
   const promptSections: string[] = [
     // Section 1: Universal recall-session facilitator identity (domain-agnostic)
     buildUniversalAgentSection(),
@@ -115,8 +115,11 @@ export function buildSocraticTutorPrompt(params: SocraticTutorPromptParams): str
     // Section 5: Important guidelines and constraints
     buildGuidelinesSection(),
 
-    // Section 6: Optional per-set supplementary guidelines (LAST)
+    // Section 6: Optional per-set supplementary guidelines
     buildSupplementaryGuidelinesSection(recallSet),
+
+    // Section 7 (LAST): T13 safety instruction — prevents LLM from duplicating UI content
+    buildUISafetyInstructionSection(),
   ];
 
   // Filter out empty sections and join with double newlines for readability
@@ -312,6 +315,36 @@ When you receive evaluator observations (marked [EVALUATOR OBSERVATION]):
 - If user missed a key detail: "You're on the right track. What about [hint at missing piece]?"
 - Never repeat the evaluator's observations to the user verbatim.
 - Never reference the evaluator or the evaluation system to the user.`;
+}
+
+/**
+ * Section 7 (LAST): T13 UI-handled content safety instruction
+ *
+ * Prevents the LLM from generating text that duplicates what the UI handles
+ * through structured events (recall feedback, progress updates, praise, etc.).
+ * This section is always last so it overrides any conflicting instructions above.
+ */
+function buildUISafetyInstructionSection(): string {
+  return `## CRITICAL: UI-Handled Content — Do NOT Generate
+
+The following types of content are handled by the application's UI through structured events.
+You must NEVER include any of this in your text responses:
+
+- Progress updates: "You've recalled 3 out of 5 points!" or "Great progress!" or "Almost there!"
+- Congratulatory text: "Great job!", "Well done!", "Excellent!", "Perfect!", "Correct!"
+- Praise or encouragement: "That's exactly right!", "You nailed it!", "Brilliant answer!"
+- Meta-commentary about the session: "Let's move to the next point", "We've covered X, now let's discuss Y"
+- Numbered lists summarizing what's been covered vs what remains
+- Explicit point transitions: "Now let's talk about [next topic]"
+
+Your text should ONLY contain:
+- Questions probing recall ("What happens when..." / "Can you explain how..." / "Why does...")
+- Hints when the user is stuck ("Think about what happens at the cellular level...")
+- Brief, neutral acknowledgments before moving on ("Right." / "Yes." / "Mm-hmm.")
+- Explanations or clarifications when the user asks for them
+- Conversational responses during rabbit holes
+
+The system will handle all feedback, progress tracking, praise, and transitions through visual and audio UI elements.`;
 }
 
 /**

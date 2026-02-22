@@ -85,8 +85,11 @@ export {
 export {
   // Client -> Server message types
   type UserMessagePayload,
-  type TriggerEvalPayload,
   type LeaveSessionPayload,
+  type EnterRabbitholePayload,
+  type ExitRabbitholePayload,
+  type DeclineRabbitholePayload,
+  type DismissOverlayPayload,
   type PingPayload,
   type ClientMessage,
   type ClientMessageType,
@@ -95,18 +98,19 @@ export {
   type SessionStartedPayload,
   type AssistantChunkPayload,
   type AssistantCompletePayload,
-  type EvaluationResultPayload,
-  type PointTransitionPayload,
   type PointRecalledPayload,
   type SessionCompletePayload,
   type SessionCompleteOverlayPayload,
   type SessionPausedPayload,
+  type RabbitholeDetectedPayload,
+  type RabbitholeEnteredPayload,
+  type RabbitholeExitedPayload,
   type ErrorPayload,
   type PongPayload,
   type ServerMessage,
 
-  // Session summary type
-  type SessionSummary,
+  // Session completion summary (T13: replaces inline SessionSummary)
+  type SessionCompletionSummary,
 
   // Error handling
   type WebSocketErrorCode,

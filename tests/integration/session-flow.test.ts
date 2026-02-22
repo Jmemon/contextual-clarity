@@ -624,12 +624,12 @@ describe('Session Flow E2E', () => {
     // Verify events were emitted
     const eventTypes = events.map((e) => e.type);
     expect(eventTypes).toContain('session_started');
-    expect(eventTypes).toContain('point_started');
+    expect(eventTypes).not.toContain('point_started');   // T13: removed — no longer emitted
     expect(eventTypes).toContain('assistant_message');
     expect(eventTypes).toContain('user_message');
-    expect(eventTypes).toContain('point_evaluated');
+    expect(eventTypes).not.toContain('point_evaluated'); // T13: removed — no longer emitted
     expect(eventTypes).toContain('point_recalled');
-    expect(eventTypes).toContain('point_completed');
+    expect(eventTypes).not.toContain('point_completed'); // T13: removed — no longer emitted
   });
 
   it('should correctly get session state for UI display', async () => {

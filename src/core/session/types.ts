@@ -31,72 +31,113 @@ import type { SessionMetricsCollector } from './metrics-collector';
 import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
 
 /**
- * Types of events that can occur during a session.
+ * Complete catalog of session engine events.
  *
- * These events trace the lifecycle of a session from start to finish,
- * including point-level progression and message exchanges.
+ * These events are emitted by SessionEngine and consumed by:
+ * 1. WebSocketSessionHandler — translates to ServerMessage and sends to client
+ * 2. MetricsCollector — records event timing and outcomes
+ * 3. Any future event listeners (analytics, logging)
  *
- * Event flow for a typical session:
- * 1. session_started - Session initialized with target points
- * 2. point_started - Begin discussing first recall point
- * 3. assistant_message - AI asks initial question
- * 4. user_message - User responds
- * 5. assistant_message - AI follows up
- * 6. ... (conversation continues)
- * 7. point_evaluated - User's recall is assessed
- * 8. point_completed - FSRS state updated, ready for next point
- * 9. point_started - Begin next point (if any)
- * 10. ... (repeat for each point)
- * 11. session_completed - All points reviewed
+ * Event categories:
+ * - Session lifecycle: start, pause, complete overlay, complete
+ * - Recall point: recalled, near miss
+ * - Rabbit hole: detected, entered, exited, declined
+ * - Resources: show image, show resource
+ * - Messages: user, assistant, streaming start/end
+ *
+ * IMPORTANT: This is the SINGLE SOURCE OF TRUTH for all session events.
+ * If you add a new event type, you must also:
+ * 1. Add a corresponding entry in SessionEventData (below)
+ * 2. Add a corresponding ServerMessage payload in src/api/ws/types.ts
+ * 3. Handle it in src/api/ws/session-handler.ts
+ * 4. Handle it in web/src/hooks/use-session-websocket.ts
+ * 5. Render it in the appropriate frontend component
+ *
+ * REMOVED (T13): point_started, point_evaluated, point_completed
+ * - point_started: replaced by checklist model from T01
+ * - point_evaluated: replaced by point_recalled / near-miss feedback
+ * - point_completed: replaced by point_recalled + FSRS in markPointRecalled()
  */
 export type SessionEventType =
-  | 'session_started'          // Session initialized with target recall points
-  | 'point_started'            // Started discussing a new recall point
-  | 'point_recalled'           // A specific recall point was marked as recalled
-  | 'user_message'             // User sent a message
-  | 'assistant_message'        // AI tutor responded
-  | 'point_evaluated'          // Recall evaluation completed for current point
-  | 'point_completed'          // FSRS state updated, moving to next point
-  | 'session_completed'        // All target points reviewed (session finalized)
-  | 'session_complete_overlay' // T08: All points recalled — show completion overlay (before finalizing)
-  | 'session_paused'           // T08: Session paused via Leave Session
-  | 'rabbithole_detected'      // T09: A tangent was detected — user must opt in
-  | 'rabbithole_entered'       // T09: User opted into a rabbit hole
-  | 'rabbithole_exited';       // T09: User exited a rabbit hole
+  // === Session Lifecycle ===
+  | 'session_started'           // Session initialized, opening message generated
+  | 'session_paused'            // Session paused by user (Leave Session from T08)
+  | 'session_complete_overlay'  // All points recalled — show completion overlay (T08)
+  | 'session_completed'         // Session fully ended (user exited after completion or left)
+
+  // === Recall Point Events ===
+  | 'point_recalled'            // A specific recall point was marked as recalled (T01 — keep existing name)
+
+  // === Rabbit Hole Events ===
+  | 'rabbithole_detected'       // Tangent detected, prompt user to explore (T09)
+  | 'rabbithole_entered'        // User accepted, entering rabbit hole mode (T09)
+  | 'rabbithole_exited'         // User returned to main session (T09)
+  | 'rabbithole_declined'       // User declined to explore the tangent (T09)
+
+  // === Message Events ===
+  | 'user_message'              // User sent a message
+  | 'assistant_message';        // Agent response complete (full text)
 
 /**
- * Represents an event that occurred during a session.
+ * Summary of a completed session. Used in the session_completed event
+ * and the session_complete WS payload.
  *
- * Events provide visibility into session flow for:
- * - Debugging and logging
- * - Analytics and learning insights
- * - UI updates and progress indicators
- * - Integration with external systems
+ * Field naming convention: uses server-side names (totalPointsReviewed,
+ * successfulRecalls) consistently across backend AND frontend.
+ */
+export interface SessionCompletionSummary {
+  sessionId: string;
+  /** Total number of recall points that were reviewed in this session */
+  totalPointsReviewed: number;
+  /** Number of successfully recalled points */
+  successfulRecalls: number;
+  /** Recall success rate (0.0 to 1.0) */
+  recallRate: number;
+  /** Total session duration in milliseconds */
+  durationMs: number;
+  /** Number of rabbit holes entered during the session */
+  rabbitholeCount: number;
+  /** IDs of all recall points that were successfully recalled */
+  recalledPointIds: string[];
+  /** Engagement score (0-100) */
+  engagementScore: number;
+  /** Estimated API cost in USD */
+  estimatedCostUsd: number;
+}
+
+/**
+ * Typed event data payloads for each SessionEventType.
+ * Using a discriminated union on `type` ensures type safety at every handler.
  *
- * @example
- * ```typescript
- * const event: SessionEvent = {
- *   type: 'point_evaluated',
- *   data: {
- *     pointId: 'rp_xyz789',
- *     success: true,
- *     confidence: 0.85,
- *     rating: 'good',
- *   },
- *   timestamp: new Date(),
- * };
- * ```
+ * Each variant corresponds exactly to one SessionEventType value.
+ * When adding a new event type, add a corresponding variant here.
+ */
+export type SessionEventData =
+  | { type: 'session_started'; sessionId: string; recallSetId: string; targetPointCount: number; resumed?: boolean; existingMessageCount?: number }
+  | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
+  | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
+  | { type: 'session_completed'; sessionId: string; summary: SessionCompletionSummary }
+  | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
+  | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
+  | { type: 'rabbithole_entered'; topic: string }
+  | { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean }
+  | { type: 'rabbithole_declined'; topic?: string }
+  | { type: 'user_message'; content: string }
+  | { type: 'assistant_message'; content: string; isOpening?: boolean };
+
+/**
+ * A session event with typed payload.
+ * Replaces the previous definition that used `data: unknown`.
  */
 export interface SessionEvent {
   /** The type of event that occurred */
   type: SessionEventType;
 
   /**
-   * Event-specific data payload.
-   * The shape depends on the event type - see individual event handlers
-   * for documentation of expected data structures.
+   * Typed event-specific data payload.
+   * The shape is determined by `type` via the SessionEventData discriminated union.
    */
-  data: unknown;
+  data: SessionEventData;
 
   /** When the event occurred */
   timestamp: Date;
