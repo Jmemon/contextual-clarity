@@ -26,8 +26,8 @@ export function CreateRecallSet() {
   const handleSubmit = async (data: RecallSetFormData) => {
     const newSet = await createMutation.mutateAsync({
       name: data.name,
-      description: data.description || undefined,
-      discussionSystemPrompt: data.discussionSystemPrompt || undefined,
+      description: data.description,
+      discussionSystemPrompt: data.discussionSystemPrompt,
     });
     navigate(`/recall-sets/${newSet.id}`);
   };
@@ -68,7 +68,6 @@ export function CreateRecallSet() {
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           isLoading={createMutation.isPending}
-          error={createMutation.error?.message}
         />
       </Card>
     </div>

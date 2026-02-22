@@ -162,7 +162,7 @@ function getSuccessRateColor(rate: number | undefined): string {
  * @returns Badge status prop value
  */
 function getStatusBadge(
-  status: 'completed' | 'abandoned' | 'in_progress'
+  status: 'completed' | 'abandoned' | 'in_progress' | 'paused'
 ): { status: 'success' | 'warning' | 'info' | 'error'; label: string } {
   switch (status) {
     case 'completed':
@@ -171,6 +171,8 @@ function getStatusBadge(
       return { status: 'warning', label: 'Abandoned' };
     case 'in_progress':
       return { status: 'info', label: 'In Progress' };
+    case 'paused':
+      return { status: 'warning', label: 'Paused' };
     default:
       return { status: 'info', label: status };
   }
