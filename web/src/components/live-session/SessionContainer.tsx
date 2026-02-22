@@ -463,6 +463,7 @@ export function SessionContainer({
           {/* Voice-first input (with text fallback) */}
           <VoiceInput
             onSend={sendUserMessage}
+            sessionId={sessionId}
             disabled={controlsDisabled}
             placeholder="Type your response..."
           />
