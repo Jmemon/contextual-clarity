@@ -141,7 +141,7 @@ export function createApiRouter(): Hono {
         { path: '/api/dashboard', description: 'Dashboard data and analytics' },
         { path: '/api/analytics', description: 'Learning analytics and reports' },
         { path: '/api/recall-sets/:id/resources', description: 'Source resources for a recall set' },
-        { path: '/api/voice/token', description: 'Deepgram voice token endpoint' },
+        { path: '/api/voice/transcribe', description: 'Batch transcribe uploaded audio with optional pipeline processing' },
         { path: '/api/voice/correct', description: 'Apply spoken correction instruction to transcribed text' },
         { path: '/health', description: 'Health check endpoint' },
       ],
@@ -166,7 +166,7 @@ export function createApiRouter(): Hono {
   // Mount resource routes nested under recall-sets
   router.route('/recall-sets', resourcesRoutes());
 
-  // Mount voice routes (Deepgram token endpoint for voice input)
+  // Mount voice routes (transcription and correction endpoints)
   router.route('/voice', voiceRoutes());
 
   // Future: router.route('/analytics', analyticsRoutes());

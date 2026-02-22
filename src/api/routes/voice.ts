@@ -1,49 +1,64 @@
 /**
  * Voice API Routes
  *
- * Provides a token endpoint for Deepgram voice transcription.
- * The Deepgram API key stays server-side — this endpoint creates
- * short-lived (60s) project keys that the frontend uses to open
- * a direct WebSocket connection to Deepgram for real-time STT.
+ * Endpoints for voice input: batch transcription and correction.
  *
- * Endpoints:
- * - POST /voice/token - Create a short-lived Deepgram project key
+ * - POST /voice/transcribe - Upload audio, get back transcribed text
+ * - POST /voice/correct    - Apply a spoken correction instruction to text
+ *
+ * The Deepgram API key stays server-side. The frontend uploads audio to
+ * our server, which calls Deepgram's pre-recorded API and optionally
+ * runs the TranscriptionPipeline (terminology correction + notation detection).
  */
 
 import { Hono } from 'hono';
 import { success, error } from '../utils/response';
 import { getDeepgramApiKey } from '../../config';
-import { createDeepgramClient } from '../../core/voice';
+import { transcribeAudio, getTerminology } from '../../core/voice';
 import { processCorrection } from '../../core/transcription/correction-processor';
+import { TranscriptionPipeline } from '../../core/transcription/pipeline';
+import { AnthropicClient } from '../../llm/client';
+import { db } from '../../storage/db';
+import { SessionRepository } from '../../storage/repositories/session.repository';
+import { RecallSetRepository } from '../../storage/repositories/recall-set.repository';
+import { RecallPointRepository } from '../../storage/repositories/recall-point.repository';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Maximum audio upload size: 5MB (~40 minutes of webm/opus) */
+const MAX_AUDIO_SIZE = 5 * 1024 * 1024;
 
 // =============================================================================
 // Route Definitions
 // =============================================================================
 
-/**
- * Creates the voice router with all voice-related endpoints.
- *
- * Endpoints:
- * - POST /voice/token  - Create a short-lived Deepgram token
- * - POST /voice/correct - Apply a spoken correction instruction to existing text
- *
- * @returns Hono router instance with voice routes
- */
 export function voiceRoutes(): Hono {
   const router = new Hono();
 
-  // -------------------------------------------------------------------------
-  // POST /voice/token - Create a short-lived Deepgram token
-  // -------------------------------------------------------------------------
+  // Repositories for pipeline terminology lookup
+  const sessionRepo = new SessionRepository(db);
+  const recallSetRepo = new RecallSetRepository(db);
+  const recallPointRepo = new RecallPointRepository(db);
+
+  // ---------------------------------------------------------------------------
+  // POST /voice/transcribe - Batch transcribe uploaded audio
+  // ---------------------------------------------------------------------------
 
   /**
-   * Creates a temporary Deepgram API key for client-side WebSocket connections.
-   * The key expires after 60 seconds and has only `usage:write` scope
-   * (enough for transcription, but not account management).
+   * Accepts an audio file via multipart/form-data and returns the transcript.
+   * If sessionId is provided, also runs the TranscriptionPipeline (terminology
+   * correction + notation detection) using that session's recall set context.
    *
-   * Returns 503 Service Unavailable if DEEPGRAM_API_KEY is not configured.
+   * Form fields:
+   * - audio: File (required) — the audio blob from MediaRecorder
+   * - sessionId: string (optional) — if provided, runs pipeline with session context
+   *
+   * Returns 503 if DEEPGRAM_API_KEY is not configured.
+   * Returns 400 if audio file is missing or too large.
    */
-  router.post('/token', async (c) => {
+  router.post('/transcribe', async (c) => {
     const apiKey = getDeepgramApiKey();
 
     if (!apiKey) {
@@ -55,69 +70,124 @@ export function voiceRoutes(): Hono {
       );
     }
 
+    // Parse multipart form data
+    let formData: FormData;
     try {
-      const deepgram = createDeepgramClient(apiKey);
+      formData = await c.req.formData();
+    } catch {
+      return error(c, 'INVALID_REQUEST', 'Request must be multipart/form-data', 400);
+    }
 
-      // Get the first project associated with this API key
-      const { result: projects, error: projectsError } = await deepgram.manage.getProjects();
+    const audioFile = formData.get('audio');
+    const sessionId = formData.get('sessionId');
 
-      if (projectsError || !projects?.projects?.length) {
-        console.error('Failed to fetch Deepgram projects:', projectsError);
-        return error(
-          c,
-          'DEEPGRAM_ERROR',
-          'Failed to retrieve Deepgram project information',
-          500
-        );
+    // Validate audio file exists and is a File/Blob
+    if (!audioFile || !(audioFile instanceof File)) {
+      return error(c, 'INVALID_REQUEST', 'audio file is required', 400);
+    }
+
+    // Validate file size
+    if (audioFile.size > MAX_AUDIO_SIZE) {
+      return error(c, 'INVALID_REQUEST', `Audio file too large (max ${MAX_AUDIO_SIZE / 1024 / 1024}MB)`, 400);
+    }
+
+    // Validate file size is non-zero
+    if (audioFile.size === 0) {
+      return error(c, 'INVALID_REQUEST', 'Audio file is empty', 400);
+    }
+
+    try {
+      // Convert File to Buffer for Deepgram SDK
+      const arrayBuffer = await audioFile.arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
+
+      // Transcribe via Deepgram pre-recorded API
+      const rawText = await transcribeAudio(apiKey, audioBuffer);
+
+      // If no speech detected, return early
+      if (!rawText) {
+        return success(c, {
+          text: '',
+          rawText: '',
+          corrections: [],
+          hasNotation: false,
+        });
       }
 
-      const projectId = projects.projects[0]!.project_id;
+      // If no sessionId, return raw transcription (used for voice-edit instructions)
+      if (!sessionId || typeof sessionId !== 'string') {
+        return success(c, {
+          text: rawText,
+          rawText,
+          corrections: [],
+          hasNotation: false,
+        });
+      }
 
-      // Create a short-lived key with minimal scope (60 seconds TTL)
-      const { result: keyResult, error: keyError } = await deepgram.manage.createProjectKey(
-        projectId,
-        {
-          comment: 'Temporary voice input token',
-          scopes: ['usage:write'],
-          time_to_live_in_seconds: 60,
-        }
+      // --- Pipeline processing with session context ---
+
+      // Look up session -> recall set -> recall points for terminology
+      const session = await sessionRepo.findById(sessionId);
+      if (!session) {
+        // Session not found — return raw text rather than failing
+        console.warn(`[voice/transcribe] Session ${sessionId} not found, skipping pipeline`);
+        return success(c, {
+          text: rawText,
+          rawText,
+          corrections: [],
+          hasNotation: false,
+        });
+      }
+
+      const recallSet = await recallSetRepo.findById(session.recallSetId);
+      if (!recallSet) {
+        console.warn(`[voice/transcribe] RecallSet ${session.recallSetId} not found, skipping pipeline`);
+        return success(c, {
+          text: rawText,
+          rawText,
+          corrections: [],
+          hasNotation: false,
+        });
+      }
+
+      const recallPoints = await recallPointRepo.findByRecallSetId(recallSet.id);
+
+      // Get or extract terminology (cached per recallSetId)
+      const terminology = await getTerminology(
+        recallSet.id,
+        recallSet.name,
+        recallPoints.map((p) => ({ content: p.content, context: p.context }))
       );
 
-      if (keyError || !keyResult?.key) {
-        console.error('Failed to create Deepgram project key:', keyError);
-        return error(
-          c,
-          'DEEPGRAM_ERROR',
-          'Failed to create temporary voice token',
-          500
-        );
-      }
+      // Run pipeline: terminology correction + notation detection
+      const pipelineClient = new AnthropicClient({ maxTokens: 1024, temperature: 0 });
+      const pipeline = new TranscriptionPipeline(pipelineClient, {
+        recallSetTerminology: terminology,
+        enableNotationDetection: true,
+      });
 
-      const expiresAt = new Date(Date.now() + 60 * 1000).toISOString();
+      const processed = await pipeline.process(rawText);
 
       return success(c, {
-        token: keyResult.key,
-        expiresAt,
+        text: processed.displayText,
+        rawText,
+        corrections: processed.corrections,
+        hasNotation: processed.hasNotation,
       });
     } catch (err) {
-      console.error('Error creating voice token:', err);
-      return error(
-        c,
-        'INTERNAL_ERROR',
-        'Failed to create voice token',
-        500
-      );
+      console.error('Error transcribing audio:', err);
+      return error(c, 'INTERNAL_ERROR', 'Failed to transcribe audio', 500);
     }
   });
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // POST /voice/correct - Apply a spoken correction instruction to text
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
   /**
    * Accepts the current transcription text and a spoken correction instruction,
-   * then uses the correction processor (claude-haiku) to produce the corrected
-   * text.  This keeps the LLM call server-side so API keys are never exposed.
+   * then uses the correction processor (Claude Haiku) to produce the corrected
+   * text. This keeps the LLM call server-side so API keys are never exposed.
    *
    * Request body: { currentText: string, correctionInstruction: string }
    * Response:     { correctedText: string }
