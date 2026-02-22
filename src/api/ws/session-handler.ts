@@ -274,8 +274,9 @@ export class WebSocketSessionHandler {
         messageRepo: this.deps.messageRepo,
       });
 
-      // T08: Wire engine events to forward session_complete_overlay and session_paused
-      // to the WebSocket client so the frontend can show the completion overlay.
+      // T08/T09: Wire engine events to forward to the WebSocket client.
+      // T08 added: session_complete_overlay, session_paused
+      // T09 added: rabbithole_detected, rabbithole_entered, rabbithole_exited
       engine.setEventListener((event) => {
         if (event.type === 'session_complete_overlay') {
           const payload = event.data as { sessionId: string; recalledCount: number; totalPoints: number };
@@ -292,6 +293,30 @@ export class WebSocketSessionHandler {
             sessionId: payload.sessionId,
             recalledCount: payload.recalledCount,
             totalPoints: payload.totalPoints,
+          });
+        } else if (event.type === 'rabbithole_detected') {
+          // T09: Forward the detection event so the frontend can show the opt-in prompt
+          const payload = event.data as { topic: string; rabbitholeEventId: string };
+          this.send(ws, {
+            type: 'rabbithole_detected',
+            topic: payload.topic,
+            rabbitholeEventId: payload.rabbitholeEventId,
+          });
+        } else if (event.type === 'rabbithole_entered') {
+          // T09: Forward entered event so the frontend can show the RabbitholeIndicator
+          const payload = event.data as { topic: string };
+          this.send(ws, {
+            type: 'rabbithole_entered',
+            topic: payload.topic,
+          });
+        } else if (event.type === 'rabbithole_exited') {
+          // T09: Forward exited event so the frontend can return to normal session UI
+          const payload = event.data as { label: string; pointsRecalledDuring: number; completionPending: boolean };
+          this.send(ws, {
+            type: 'rabbithole_exited',
+            label: payload.label,
+            pointsRecalledDuring: payload.pointsRecalledDuring,
+            completionPending: payload.completionPending,
           });
         }
       });
@@ -378,6 +403,18 @@ export class WebSocketSessionHandler {
           break;
         case 'ping':
           this.handlePing(ws);
+          break;
+        case 'enter_rabbithole':
+          // T09: User opted into exploring a detected tangent
+          await this.handleEnterRabbithole(ws, parsed.rabbitholeEventId, parsed.topic);
+          break;
+        case 'exit_rabbithole':
+          // T09: User wants to return from the rabbit hole to the main session
+          await this.handleExitRabbithole(ws);
+          break;
+        case 'decline_rabbithole':
+          // T09: User declined the rabbit hole prompt — set cooldown
+          this.handleDeclineRabbithole(ws);
           break;
         default:
           // TypeScript exhaustiveness check
@@ -489,6 +526,92 @@ export class WebSocketSessionHandler {
     console.log(`[WS] trigger_eval received for session ${data.sessionId} — no-op (evaluation is continuous)`);
     // No-op: evaluation runs automatically after every processUserMessage() call.
     // T13 will remove this WS message type entirely.
+  }
+
+  /**
+   * T09: Handles the user opting into a detected rabbit hole.
+   *
+   * Creates the RabbitholeAgent, streams back the opening message, and
+   * switches the session into rabbit hole mode. The 'rabbithole_entered'
+   * server event is emitted by the engine and forwarded via the event listener.
+   *
+   * @param ws - The WebSocket connection
+   * @param rabbitholeEventId - The DB event ID for this rabbit hole
+   * @param topic - The topic to explore
+   */
+  private async handleEnterRabbithole(
+    ws: ServerWebSocket<WebSocketSessionData>,
+    rabbitholeEventId: string,
+    topic: string
+  ): Promise<void> {
+    const data = ws.data;
+    console.log(`[WS] Enter rabbithole for session ${data.sessionId}: "${topic}"`);
+
+    if (!data.initialized || !data.engine) {
+      this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
+      return;
+    }
+
+    try {
+      // enterRabbithole() creates the agent and emits 'rabbithole_entered' (forwarded by listener)
+      const openingMessage = await data.engine.enterRabbithole(topic, rabbitholeEventId);
+
+      // Stream the opening message back to the client
+      await this.streamResponse(ws, openingMessage);
+    } catch (error) {
+      console.error(`[WS] Error entering rabbit hole:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Failed to enter rabbit hole');
+    }
+  }
+
+  /**
+   * T09: Handles the user exiting a rabbit hole.
+   *
+   * Persists the conversation, restores normal session mode, and emits
+   * 'rabbithole_exited' (forwarded by the event listener). If all points
+   * were recalled during the rabbit hole, session_complete_overlay fires next.
+   *
+   * @param ws - The WebSocket connection
+   */
+  private async handleExitRabbithole(
+    ws: ServerWebSocket<WebSocketSessionData>
+  ): Promise<void> {
+    const data = ws.data;
+    console.log(`[WS] Exit rabbithole for session ${data.sessionId}`);
+
+    if (!data.initialized || !data.engine) {
+      this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
+      return;
+    }
+
+    try {
+      // exitRabbithole() persists conversation, resets mode, emits events (forwarded by listener)
+      await data.engine.exitRabbithole();
+    } catch (error) {
+      console.error(`[WS] Error exiting rabbit hole:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Failed to exit rabbit hole');
+    }
+  }
+
+  /**
+   * T09: Handles the user declining a rabbit hole prompt.
+   *
+   * Sets a 3-message cooldown so the user isn't immediately prompted again
+   * after saying no. No response is sent to the client for this action.
+   *
+   * @param ws - The WebSocket connection
+   */
+  private handleDeclineRabbithole(
+    ws: ServerWebSocket<WebSocketSessionData>
+  ): void {
+    const data = ws.data;
+    console.log(`[WS] Decline rabbithole for session ${data.sessionId}`);
+
+    if (!data.initialized || !data.engine) {
+      return; // Silently ignore if session not ready
+    }
+
+    data.engine.declineRabbithole();
   }
 
   /**

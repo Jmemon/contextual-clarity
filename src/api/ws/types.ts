@@ -94,6 +94,34 @@ export interface PingPayload {
 }
 
 /**
+ * T09: Client opts into a detected rabbit hole by providing the event ID and topic.
+ * The server will create a RabbitholeAgent and send back 'rabbithole_entered'.
+ */
+export interface EnterRabbitholePayload {
+  type: 'enter_rabbithole';
+  /** The rabbithole event ID returned in the 'rabbithole_detected' server message */
+  rabbitholeEventId: string;
+  /** The topic of the rabbit hole to explore */
+  topic: string;
+}
+
+/**
+ * T09: Client requests to exit the current rabbit hole and return to the session.
+ * The server will persist the conversation and emit 'rabbithole_exited'.
+ */
+export interface ExitRabbitholePayload {
+  type: 'exit_rabbithole';
+}
+
+/**
+ * T09: Client declines the rabbit hole prompt.
+ * The server will suppress future rabbit hole detections for 3 messages (cooldown).
+ */
+export interface DeclineRabbitholePayload {
+  type: 'decline_rabbithole';
+}
+
+/**
  * Union type representing all possible messages from client to server.
  * Use this type when parsing incoming WebSocket messages.
  */
@@ -101,7 +129,10 @@ export type ClientMessage =
   | UserMessagePayload
   | TriggerEvalPayload
   | LeaveSessionPayload
-  | PingPayload;
+  | PingPayload
+  | EnterRabbitholePayload
+  | ExitRabbitholePayload
+  | DeclineRabbitholePayload;
 
 /**
  * All valid client message types for validation.
@@ -111,6 +142,9 @@ export const CLIENT_MESSAGE_TYPES = [
   'trigger_eval',
   'leave_session',
   'ping',
+  'enter_rabbithole',
+  'exit_rabbithole',
+  'decline_rabbithole',
 ] as const;
 
 export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number];
@@ -271,6 +305,44 @@ export interface SessionPausedPayload {
 }
 
 /**
+ * T09: Sent when the rabbithole detector identifies a tangent in the conversation.
+ * The client should show a prompt asking the user if they want to explore.
+ * The user must explicitly opt in via 'enter_rabbithole' — never auto-enter.
+ */
+export interface RabbitholeDetectedPayload {
+  type: 'rabbithole_detected';
+  /** The detected tangent topic */
+  topic: string;
+  /** Stable event ID used when the client sends 'enter_rabbithole' or 'decline_rabbithole' */
+  rabbitholeEventId: string;
+}
+
+/**
+ * T09: Sent when the user has entered a rabbit hole (opted in via enter_rabbithole).
+ * The main session is now frozen; all user messages route to the RabbitholeAgent.
+ */
+export interface RabbitholeEnteredPayload {
+  type: 'rabbithole_entered';
+  /** The topic being explored */
+  topic: string;
+}
+
+/**
+ * T09: Sent when the user exits a rabbit hole (via exit_rabbithole).
+ * The main session resumes. If all points were recalled during the rabbit hole,
+ * completionPending will be true and the session_complete_overlay fires next.
+ */
+export interface RabbitholeExitedPayload {
+  type: 'rabbithole_exited';
+  /** Human-readable label for the rabbit hole that just ended */
+  label: string;
+  /** Number of recall points that were recalled WHILE in this rabbit hole */
+  pointsRecalledDuring: number;
+  /** True if all points were recalled during the rabbit hole — overlay fires next */
+  completionPending: boolean;
+}
+
+/**
  * Sent when an error occurs during the session.
  * Contains an error code and message for debugging and user display.
  */
@@ -308,6 +380,9 @@ export type ServerMessage =
   | SessionCompletePayload
   | SessionCompleteOverlayPayload
   | SessionPausedPayload
+  | RabbitholeDetectedPayload
+  | RabbitholeEnteredPayload
+  | RabbitholeExitedPayload
   | ErrorPayload
   | PongPayload;
 
@@ -422,6 +497,20 @@ export function parseClientMessage(
       };
     }
     return { type: 'user_message', content: message.content };
+  }
+
+  // T09: Validate enter_rabbithole — needs rabbitholeEventId and topic fields
+  if (message.type === 'enter_rabbithole') {
+    const msg = parsed as { type: unknown; rabbitholeEventId?: unknown; topic?: unknown };
+    if (typeof msg.rabbitholeEventId !== 'string' || typeof msg.topic !== 'string') {
+      return {
+        type: 'error',
+        code: 'MISSING_CONTENT',
+        message: 'enter_rabbithole must include "rabbitholeEventId" and "topic" fields',
+        recoverable: true,
+      };
+    }
+    return { type: 'enter_rabbithole', rabbitholeEventId: msg.rabbitholeEventId, topic: msg.topic };
   }
 
   // For other message types, return as-is

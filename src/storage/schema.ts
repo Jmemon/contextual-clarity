@@ -259,7 +259,7 @@ export const sessions = sqliteTable('sessions', {
   recalledPointIds: text('recalled_point_ids', { mode: 'json' })
     .$type<string[]>()
     .notNull()
-    .default('[]'),
+    .default([]),
 
   // Timestamp when the session started (milliseconds since epoch)
   startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
@@ -543,6 +543,12 @@ export const rabbitholeEvents = sqliteTable(
     status: text('status', { enum: ['active', 'returned', 'abandoned'] })
       .notNull()
       .default('active'),
+
+    // T09: Full conversation history from the RabbitholeAgent for this event.
+    // Stored as a JSON array of { role, content } objects. Null if the user
+    // declined or the agent was never activated for this detection event.
+    conversation: text('conversation', { mode: 'json' })
+      .$type<Array<{ role: string; content: string }>>(),
 
     // Timestamp when this rabbithole event was detected (milliseconds since epoch)
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),

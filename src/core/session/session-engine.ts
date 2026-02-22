@@ -89,6 +89,7 @@ import type {
   RecallOutcomeRepository,
   RabbitholeEventRepository,
 } from '../../storage/repositories';
+import { RabbitholeAgent } from './rabbithole-agent';
 
 /**
  * Generates a unique ID with a prefix.
@@ -220,10 +221,56 @@ export class SessionEngine {
 
   /**
    * T08: Set to true when all points are recalled while the user is in a rabbit hole.
-   * The completion overlay is deferred until the rabbit hole exits via onRabbitHoleExit().
-   * isInRabbitHole() currently returns false (stub), so the overlay fires immediately.
+   * The completion overlay is deferred until the rabbit hole exits via exitRabbithole().
    */
   private completionPending: boolean = false;
+
+  // ============================================================================
+  // T09: Rabbit Hole UX Mode State
+  // ============================================================================
+
+  /**
+   * T09: Current session mode.
+   * 'recall' = normal Socratic tutoring mode
+   * 'rabbithole' = user is exploring a tangent with the RabbitholeAgent
+   */
+  private currentMode: 'recall' | 'rabbithole' = 'recall';
+
+  /**
+   * T09: The active RabbitholeAgent instance, or null if not in a rabbit hole.
+   * Each rabbit hole gets its own dedicated agent instance with its own LLM client.
+   */
+  private activeRabbitholeAgent: RabbitholeAgent | null = null;
+
+  /**
+   * T09: The rabbithole event ID currently being explored, or null if not in a rabbit hole.
+   * Used to persist the conversation to the correct DB record on exit.
+   */
+  private activeRabbitholeEventId: string | null = null;
+
+  /**
+   * T09: The topic being explored in the current rabbit hole, or null if not active.
+   */
+  private activeRabbitholeTopic: string | null = null;
+
+  /**
+   * T09: Number of recall points that were recalled WHILE in the current rabbit hole.
+   * Reported in the rabbithole_exited event payload.
+   */
+  private rabbitholePointsRecalled: number = 0;
+
+  /**
+   * T09: Flag set to true when all points are recalled while inside a rabbit hole.
+   * Mirrors completionPending semantics — the overlay fires when the rabbit hole exits.
+   */
+  private completionPendingAfterRabbithole: boolean = false;
+
+  /**
+   * T09: Cooldown counter for rabbit hole detection.
+   * Set to 3 when the user declines a rabbit hole; decremented on each user message.
+   * While > 0, detectAndRecordRabbithole() is suppressed.
+   */
+  private rabbitholeDeclineCooldown: number = 0;
 
   /**
    * Creates a new SessionEngine instance.
@@ -563,6 +610,12 @@ export class SessionEngine {
   async processUserMessage(content: string): Promise<ProcessMessageResult> {
     this.validateActiveSession();
 
+    // T09: If the user is currently in a rabbit hole, route to the dedicated agent.
+    // The main session (Socratic tutor) is frozen while in rabbit hole mode.
+    if (this.currentMode === 'rabbithole') {
+      return this.processRabbitholeMessage(content);
+    }
+
     // Save the user message
     await this.saveMessage('user', content);
 
@@ -822,12 +875,182 @@ export class SessionEngine {
   }
 
   /**
-   * T08: Returns true if the user is currently inside a rabbit hole tangent.
-   * This is a stub — T09 will implement proper rabbit hole tracking.
-   * For now, always returns false so overlays fire immediately.
+   * T09: Returns true if the user is currently inside a rabbit hole tangent.
+   * Replaces the T08 stub — now checks the actual mode state.
    */
   private isInRabbitHole(): boolean {
-    return false;
+    return this.currentMode === 'rabbithole';
+  }
+
+  // ============================================================================
+  // T09: Rabbit Hole UX Mode Methods
+  // ============================================================================
+
+  /**
+   * T09: Enters a rabbit hole for the given topic.
+   *
+   * Called when the user opts in after a 'rabbithole_detected' event.
+   * Creates a dedicated RabbitholeAgent with its own AnthropicClient,
+   * switches mode to 'rabbithole', and emits 'rabbithole_entered'.
+   *
+   * @param topic - The tangent topic to explore
+   * @param eventId - The rabbithole event ID from the detection (for DB tracking)
+   * @returns The agent's opening message to display to the user
+   * @throws Error if no session is active
+   */
+  async enterRabbithole(topic: string, eventId: string): Promise<string> {
+    this.validateActiveSession();
+
+    if (this.currentMode === 'rabbithole') {
+      throw new Error('Already in a rabbit hole — sequential only, not nested');
+    }
+
+    // Switch mode before creating the agent
+    this.currentMode = 'rabbithole';
+    this.activeRabbitholeEventId = eventId;
+    this.activeRabbitholeTopic = topic;
+    this.rabbitholePointsRecalled = 0;
+
+    // Create the dedicated agent with a fresh AnthropicClient
+    this.activeRabbitholeAgent = new RabbitholeAgent({
+      topic,
+      recallSetName: this.currentRecallSet!.name,
+      recallSetDescription: this.currentRecallSet!.description,
+    });
+
+    // Emit the entered event BEFORE generating the opening message
+    this.emitEvent('rabbithole_entered', { topic });
+
+    // Generate and return the opening message from the agent
+    const openingMessage = await this.activeRabbitholeAgent.generateOpeningMessage();
+
+    return openingMessage;
+  }
+
+  /**
+   * T09: Exits the current rabbit hole and returns to the main recall session.
+   *
+   * Stores the full conversation to the DB, resets rabbit hole state,
+   * switches mode back to 'recall', and emits 'rabbithole_exited'.
+   *
+   * If all points were recalled during the rabbit hole (completionPendingAfterRabbithole),
+   * the session_complete_overlay event is fired immediately after exiting.
+   *
+   * @throws Error if not currently in a rabbit hole
+   */
+  async exitRabbithole(): Promise<void> {
+    if (this.currentMode !== 'rabbithole' || !this.activeRabbitholeAgent) {
+      throw new Error('Not currently in a rabbit hole');
+    }
+
+    const topic = this.activeRabbitholeTopic ?? 'Unknown topic';
+    const eventId = this.activeRabbitholeEventId;
+    const pointsRecalledDuring = this.rabbitholePointsRecalled;
+    const completionPending = this.completionPendingAfterRabbithole;
+
+    // Persist conversation to DB before clearing state
+    if (this.rabbitholeRepo && eventId) {
+      const conversation = this.activeRabbitholeAgent.getConversationHistory();
+      await this.rabbitholeRepo.updateConversation(eventId, conversation);
+
+      // Update status to 'returned' since the user exited intentionally
+      await this.rabbitholeRepo.update(eventId, {
+        returnMessageIndex: this.messages.length - 1,
+        status: 'returned',
+      });
+    }
+
+    // Reset rabbit hole state
+    this.currentMode = 'recall';
+    this.activeRabbitholeAgent = null;
+    this.activeRabbitholeEventId = null;
+    this.activeRabbitholeTopic = null;
+    this.rabbitholePointsRecalled = 0;
+    this.completionPendingAfterRabbithole = false;
+
+    // Emit exited event
+    this.emitEvent('rabbithole_exited', {
+      label: topic,
+      pointsRecalledDuring,
+      completionPending,
+    });
+
+    // T09/T08: If all points were recalled during the rabbit hole,
+    // now that we've exited, fire the deferred completion overlay.
+    if (completionPending && this.currentSession) {
+      this.emitEvent('session_complete_overlay', {
+        sessionId: this.currentSession.id,
+        recalledCount: this.getRecalledCount(),
+        totalPoints: this.targetPoints.length,
+      });
+    }
+  }
+
+  /**
+   * T09: Processes a user message while in rabbit hole mode.
+   *
+   * Routes the message to the RabbitholeAgent instead of the Socratic tutor.
+   * The continuous evaluator still runs silently — it can still mark points as
+   * recalled, but provides no steering feedback to the user.
+   *
+   * NOTE: Messages in rabbit hole mode are NOT saved to the main session message
+   * store (this.messages / DB session_messages table). The rabbit hole has its own
+   * conversation history in the RabbitholeAgent.
+   *
+   * @param content - The user's message content
+   * @returns Result containing the agent's response and session status
+   */
+  private async processRabbitholeMessage(content: string): Promise<ProcessMessageResult> {
+    if (!this.activeRabbitholeAgent) {
+      throw new Error('No active rabbit hole agent');
+    }
+
+    // Run the evaluator silently — can still mark points as recalled
+    // even during rabbit holes (T06 continuous evaluation continues)
+    const evalResult = await this.evaluateUncheckedPoints();
+
+    // Count points recalled during this rabbit hole
+    this.rabbitholePointsRecalled += evalResult.recalledPointIds.length;
+
+    // Mark each recalled point and record FSRS outcome
+    for (const pointId of evalResult.recalledPointIds) {
+      this.markPointRecalled(pointId);
+      const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
+      await this.recordRecallOutcome(pointId, {
+        success: true,
+        confidence,
+        reasoning: `Recalled during rabbit hole exploration (confidence: ${confidence})`,
+      });
+    }
+
+    // If all points are recalled while in a rabbit hole, defer the overlay
+    if (this.allPointsRecalled() && !this.completionPendingAfterRabbithole) {
+      this.completionPendingAfterRabbithole = true;
+      // Also set the main completionPending flag so onRabbitHoleExit() works
+      this.completionPending = true;
+    }
+
+    // Route to the RabbitholeAgent for the actual response
+    // The evaluator feedback is NOT injected here — the agent has its own persona
+    const response = await this.activeRabbitholeAgent.generateResponse(content);
+
+    return {
+      response,
+      completed: false, // Session never completes while in a rabbit hole
+      recalledCount: this.getRecalledCount(),
+      totalPoints: this.targetPoints.length,
+      pointsRecalledThisTurn: evalResult.recalledPointIds,
+    };
+  }
+
+  /**
+   * T09: Declines the current rabbit hole prompt.
+   *
+   * Sets a cooldown of 3 messages during which detection is suppressed,
+   * preventing rapid repeated prompts after the user says no.
+   */
+  declineRabbithole(): void {
+    this.rabbitholeDeclineCooldown = 3;
   }
 
   /**
@@ -1327,6 +1550,15 @@ export class SessionEngine {
     this.completionPending = false; // T08: reset deferred overlay flag
     this.llmClient.setSystemPrompt(undefined);
 
+    // T09: Reset rabbit hole UX mode state
+    this.currentMode = 'recall';
+    this.activeRabbitholeAgent = null;
+    this.activeRabbitholeEventId = null;
+    this.activeRabbitholeTopic = null;
+    this.rabbitholePointsRecalled = 0;
+    this.completionPendingAfterRabbithole = false;
+    this.rabbitholeDeclineCooldown = 0;
+
     // === Phase 2: Reset metrics collection state ===
     this.currentPointStartIndex = 0;
     if (this.metricsCollector) {
@@ -1356,6 +1588,17 @@ export class SessionEngine {
       return;
     }
 
+    // T09: Skip detection if the user recently declined a rabbit hole (cooldown)
+    if (this.rabbitholeDeclineCooldown > 0) {
+      this.rabbitholeDeclineCooldown--;
+      return;
+    }
+
+    // T09: Don't detect a new rabbit hole if we're already in one
+    if (this.currentMode === 'rabbithole') {
+      return;
+    }
+
     const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
     const messageIndex = this.messages.length - 1;
 
@@ -1375,7 +1618,7 @@ export class SessionEngine {
         this.metricsCollector.recordRabbithole(rabbitholeEvent);
       }
 
-      // Persist to database
+      // Persist to database with 'active' status — will be updated when user enters/declines
       if (this.rabbitholeRepo) {
         await this.rabbitholeRepo.create({
           id: rabbitholeEvent.id,
@@ -1391,12 +1634,11 @@ export class SessionEngine {
         });
       }
 
-      // Emit rabbithole detected event
-      this.emitEvent('point_evaluated', {
-        pointId: currentPoint.id,
-        rabbitholeDetected: true,
-        rabbitholeId: rabbitholeEvent.id,
-        rabbitholeTopic: rabbitholeEvent.topic,
+      // T09: Emit 'rabbithole_detected' (NOT 'point_evaluated') so the handler can
+      // forward it to the frontend as a prompt for the user to opt in.
+      this.emitEvent('rabbithole_detected', {
+        topic: rabbitholeEvent.topic,
+        rabbitholeEventId: rabbitholeEvent.id,
       });
     }
   }

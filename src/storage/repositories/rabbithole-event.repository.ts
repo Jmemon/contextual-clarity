@@ -145,7 +145,7 @@ export class RabbitholeEventRepository {
    */
   async update(
     id: string,
-    updates: Partial<Pick<DbRabbitholeEvent, 'returnMessageIndex' | 'depth' | 'status' | 'relatedRecallPointIds'>>
+    updates: Partial<Pick<DbRabbitholeEvent, 'returnMessageIndex' | 'depth' | 'status' | 'relatedRecallPointIds' | 'conversation'>>
   ): Promise<DbRabbitholeEvent | null> {
     const result = await this.db
       .update(rabbitholeEvents)
@@ -158,6 +158,24 @@ export class RabbitholeEventRepository {
     }
 
     return result[0];
+  }
+
+  /**
+   * T09: Convenience method to persist the RabbitholeAgent conversation on exit.
+   *
+   * Called by SessionEngine.exitRabbithole() after the user clicks
+   * "Return to session". Stores the complete message history so it can be
+   * reviewed or used for future analysis.
+   *
+   * @param id - The unique identifier of the rabbithole event
+   * @param conversation - Array of { role, content } objects from RabbitholeAgent
+   * @returns The updated event record, or null if not found
+   */
+  async updateConversation(
+    id: string,
+    conversation: Array<{ role: string; content: string }>
+  ): Promise<DbRabbitholeEvent | null> {
+    return this.update(id, { conversation });
   }
 
   /**

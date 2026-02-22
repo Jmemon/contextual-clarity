@@ -58,7 +58,10 @@ export type ClientMessage =
   | { type: 'user_message'; content: string }
   | { type: 'trigger_eval' }
   | { type: 'leave_session' }  // T08: replaces 'end_session' — pauses session instead of abandoning
-  | { type: 'ping' };
+  | { type: 'ping' }
+  | { type: 'enter_rabbithole'; rabbitholeEventId: string; topic: string }
+  | { type: 'exit_rabbithole' }
+  | { type: 'decline_rabbithole' };
 
 /**
  * Messages received from server via WebSocket.
@@ -73,6 +76,9 @@ export type ServerMessage =
   | { type: 'session_complete'; summary: SessionCompleteSummary }
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
+  | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
+  | { type: 'rabbithole_entered'; topic: string }
+  | { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
 
@@ -133,6 +139,16 @@ export interface CompleteOverlayData {
 }
 
 /**
+ * T09: Data for the rabbit hole prompt shown when a tangent is detected.
+ */
+export interface RabbitholePromptData {
+  /** The detected tangent topic */
+  topic: string;
+  /** Event ID used when accepting or declining */
+  rabbitholeEventId: string;
+}
+
+/**
  * Configuration options for the WebSocket hook.
  */
 export interface UseSessionWebSocketOptions {
@@ -148,6 +164,12 @@ export interface UseSessionWebSocketOptions {
   onCompleteOverlay?: (data: CompleteOverlayData) => void;
   /** T08: Callback when session is paused after leave_session */
   onSessionPaused?: (data: CompleteOverlayData) => void;
+  /** T09: Callback when a rabbit hole tangent is detected — show opt-in prompt */
+  onRabbitholeDetected?: (data: RabbitholePromptData) => void;
+  /** T09: Callback when the user enters a rabbit hole */
+  onRabbitholeEntered?: (topic: string) => void;
+  /** T09: Callback when the user exits a rabbit hole */
+  onRabbitholeExited?: (label: string, pointsRecalledDuring: number, completionPending: boolean) => void;
   /** Callback when an error occurs */
   onError?: (code: string, message: string) => void;
   /** Whether to auto-connect on mount (default: true) */
@@ -197,6 +219,20 @@ export interface UseSessionWebSocketReturn {
    * Lets SingleExchangeView skip the fade-in animation for the first message.
    */
   isOpeningMessage: boolean;
+
+  // ---- T09: Rabbit Hole UX Mode fields ----
+  /** T09: Whether the session is currently in rabbit hole mode */
+  isInRabbithole: boolean;
+  /** T09: Topic currently being explored in rabbit hole (null if not in rabbit hole) */
+  rabbitholeTopic: string | null;
+  /** T09: Pending prompt data when a rabbit hole is detected (null if no prompt) */
+  rabbitholePrompt: RabbitholePromptData | null;
+  /** T09: Enter a rabbit hole after the user opts in */
+  enterRabbithole: (rabbitholeEventId: string, topic: string) => void;
+  /** T09: Exit the current rabbit hole and return to the session */
+  exitRabbithole: () => void;
+  /** T09: Decline the current rabbit hole prompt */
+  declineRabbithole: () => void;
 }
 
 // ============================================================================
@@ -237,6 +273,9 @@ export function useSessionWebSocket(
     onSessionComplete,
     onCompleteOverlay,
     onSessionPaused,
+    onRabbitholeDetected,
+    onRabbitholeEntered,
+    onRabbitholeExited,
     onError,
     autoConnect = true,
   } = options;
@@ -267,6 +306,13 @@ export function useSessionWebSocket(
   // Ref to hold the active clear-timeout so it can be cancelled on rapid sends.
   const lastSentClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // T09: Rabbit hole UX mode state.
+  const [isInRabbithole, setIsInRabbithole] = useState(false);
+  const [rabbitholeTopic, setRabbitholeTopic] = useState<string | null>(null);
+  // rabbitholePrompt holds the detected event data shown in RabbitholePrompt.
+  // Cleared when the user accepts or declines.
+  const [rabbitholePrompt, setRabbitholePrompt] = useState<RabbitholePromptData | null>(null);
+
   // Refs for WebSocket instance and reconnection tracking
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -282,6 +328,9 @@ export function useSessionWebSocket(
     onSessionComplete,
     onCompleteOverlay,
     onSessionPaused,
+    onRabbitholeDetected,
+    onRabbitholeEntered,
+    onRabbitholeExited,
     onError,
   });
 
@@ -294,9 +343,12 @@ export function useSessionWebSocket(
       onSessionComplete,
       onCompleteOverlay,
       onSessionPaused,
+      onRabbitholeDetected,
+      onRabbitholeEntered,
+      onRabbitholeExited,
       onError,
     };
-  }, [onSessionStarted, onEvaluationResult, onPointTransition, onSessionComplete, onCompleteOverlay, onSessionPaused, onError]);
+  }, [onSessionStarted, onEvaluationResult, onPointTransition, onSessionComplete, onCompleteOverlay, onSessionPaused, onRabbitholeDetected, onRabbitholeEntered, onRabbitholeExited, onError]);
 
   /**
    * Clear any pending reconnection timeout.
@@ -431,6 +483,38 @@ export function useSessionWebSocket(
             recalledCount: message.recalledCount,
             totalPoints: message.totalPoints,
           });
+          break;
+
+        // T09: Server detected a rabbit hole — store the prompt data so the UI can show it.
+        // The user must explicitly accept or decline; never auto-enter.
+        case 'rabbithole_detected':
+          setRabbitholePrompt({
+            topic: message.topic,
+            rabbitholeEventId: message.rabbitholeEventId,
+          });
+          callbacksRef.current.onRabbitholeDetected?.({
+            topic: message.topic,
+            rabbitholeEventId: message.rabbitholeEventId,
+          });
+          break;
+
+        // T09: User entered a rabbit hole — update mode state and clear the prompt.
+        case 'rabbithole_entered':
+          setIsInRabbithole(true);
+          setRabbitholeTopic(message.topic);
+          setRabbitholePrompt(null);
+          callbacksRef.current.onRabbitholeEntered?.(message.topic);
+          break;
+
+        // T09: User exited a rabbit hole — restore normal session mode.
+        case 'rabbithole_exited':
+          setIsInRabbithole(false);
+          setRabbitholeTopic(null);
+          callbacksRef.current.onRabbitholeExited?.(
+            message.label,
+            message.pointsRecalledDuring,
+            message.completionPending
+          );
           break;
 
         case 'error':
@@ -633,6 +717,37 @@ export function useSessionWebSocket(
     sendMessage({ type: 'leave_session' });
   }, [sendMessage]);
 
+  /**
+   * T09: Enter a rabbit hole after the user opts in.
+   * Sends 'enter_rabbithole' to the server with the event ID and topic.
+   * Also clears the pending prompt immediately for responsive UI.
+   */
+  const enterRabbithole = useCallback(
+    (rabbitholeEventId: string, topic: string) => {
+      setRabbitholePrompt(null); // Clear prompt optimistically
+      sendMessage({ type: 'enter_rabbithole', rabbitholeEventId, topic });
+    },
+    [sendMessage]
+  );
+
+  /**
+   * T09: Exit the current rabbit hole and return to the main session.
+   * Sends 'exit_rabbithole' to the server.
+   */
+  const exitRabbithole = useCallback(() => {
+    sendMessage({ type: 'exit_rabbithole' });
+  }, [sendMessage]);
+
+  /**
+   * T09: Decline the current rabbit hole prompt.
+   * Sends 'decline_rabbithole' to the server (sets 3-message cooldown)
+   * and clears the pending prompt from local state.
+   */
+  const declineRabbithole = useCallback(() => {
+    setRabbitholePrompt(null); // Clear prompt immediately
+    sendMessage({ type: 'decline_rabbithole' });
+  }, [sendMessage]);
+
   // Auto-connect on mount if enabled and sessionId is provided
   useEffect(() => {
     if (autoConnect && sessionId) {
@@ -666,6 +781,13 @@ export function useSessionWebSocket(
     latestAssistantMessage,
     lastSentUserMessage,
     isOpeningMessage,
+    // T09 rabbit hole mode fields
+    isInRabbithole,
+    rabbitholeTopic,
+    rabbitholePrompt,
+    enterRabbithole,
+    exitRabbithole,
+    declineRabbithole,
   };
 }
 

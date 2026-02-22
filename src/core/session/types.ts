@@ -59,7 +59,10 @@ export type SessionEventType =
   | 'point_completed'          // FSRS state updated, moving to next point
   | 'session_completed'        // All target points reviewed (session finalized)
   | 'session_complete_overlay' // T08: All points recalled — show completion overlay (before finalizing)
-  | 'session_paused';          // T08: Session paused via Leave Session
+  | 'session_paused'           // T08: Session paused via Leave Session
+  | 'rabbithole_detected'      // T09: A tangent was detected — user must opt in
+  | 'rabbithole_entered'       // T09: User opted into a rabbit hole
+  | 'rabbithole_exited';       // T09: User exited a rabbit hole
 
 /**
  * Represents an event that occurred during a session.

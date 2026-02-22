@@ -56,3 +56,10 @@ export type { SessionControlsProps } from './SessionControls';
 // Progress display
 export { SessionProgress } from './SessionProgress';
 export type { SessionProgressProps } from './SessionProgress';
+
+// T09: Rabbit hole UX mode components
+export { RabbitholePrompt } from './RabbitholePrompt';
+export type { RabbitholePromptProps } from './RabbitholePrompt';
+
+export { RabbitholeIndicator } from './RabbitholeIndicator';
+export type { RabbitholeIndicatorProps } from './RabbitholeIndicator';

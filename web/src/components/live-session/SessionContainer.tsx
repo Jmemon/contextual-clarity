@@ -22,6 +22,8 @@ import { VoiceInput } from './VoiceInput';
 import { SessionProgress } from './SessionProgress';
 import { SessionControls } from './SessionControls';
 import { SessionCompleteOverlay } from './SessionCompleteOverlay';
+import { RabbitholePrompt } from './RabbitholePrompt';
+import { RabbitholeIndicator } from './RabbitholeIndicator';
 
 // ============================================================================
 // Types
@@ -298,6 +300,13 @@ export function SessionContainer({
     latestAssistantMessage,
     lastSentUserMessage,
     isOpeningMessage,
+    // T09: rabbit hole mode fields
+    isInRabbithole,
+    rabbitholeTopic,
+    rabbitholePrompt,
+    enterRabbithole,
+    exitRabbithole,
+    declineRabbithole,
   } = useSessionWebSocket(sessionId, {
     onSessionStarted: handleSessionStarted,
     onPointTransition: handlePointTransition,
@@ -375,15 +384,24 @@ export function SessionContainer({
         </div>
       </header>
 
-      {/* Progress bar below header */}
-      {totalPoints > 0 && (
-        <div className="px-6 py-2 bg-clarity-900/30">
-          <SessionProgress
-            currentPoint={recalledCount}
-            totalPoints={totalPoints}
-            showBar={true}
-          />
-        </div>
+      {/* T09: RabbitholeIndicator replaces SessionProgress bar during rabbit hole mode.
+           Signals to the user they're in a separate exploration context. */}
+      {isInRabbithole && rabbitholeTopic ? (
+        <RabbitholeIndicator
+          topic={rabbitholeTopic}
+          onReturn={exitRabbithole}
+        />
+      ) : (
+        /* Progress bar below header — hidden during rabbit hole mode */
+        totalPoints > 0 && (
+          <div className="px-6 py-2 bg-clarity-900/30">
+            <SessionProgress
+              currentPoint={recalledCount}
+              totalPoints={totalPoints}
+              showBar={true}
+            />
+          </div>
+        )
       )}
 
       {/* T08: Session complete overlay — shown when all recall points recalled.
@@ -414,6 +432,17 @@ export function SessionContainer({
           isOpeningMessage={isOpeningMessage}
           className="flex-1"
         />
+
+        {/* T09: Rabbit hole opt-in prompt — shown inline when a tangent is detected.
+             Dismissed when the user accepts (enter_rabbithole) or declines. */}
+        {rabbitholePrompt && !isInRabbithole && (
+          <RabbitholePrompt
+            topic={rabbitholePrompt.topic}
+            onExplore={() => enterRabbithole(rabbitholePrompt.rabbitholeEventId, rabbitholePrompt.topic)}
+            onDecline={declineRabbithole}
+            className="mt-3"
+          />
+        )}
 
         {/* Input and controls */}
         <div className="border-t border-clarity-700 pt-6 mt-4">

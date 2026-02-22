@@ -1,0 +1,1 @@
+ALTER TABLE `rabbithole_events` ADD `conversation` text;
