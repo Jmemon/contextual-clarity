@@ -2,21 +2,21 @@
  * Voice Input Component for Live Sessions
  *
  * Voice-first input that supports two modes:
- * - Voice (default): tap mic to record, server transcribes, review before sending
- * - Text (fallback): standard text input
+ * - Voice (default): idle (mic button) -> recording (waveform + send) -> transcribing (spinner) -> idle (auto-sent)
+ * - Text (fallback): standard textarea + send
  *
  * State-based rendering:
  * - Idle: mic button + keyboard switch
  * - Recording: waveform + send button (stops recording and transcribes)
  * - Transcribing: loading spinner
- * - Review: editable text + voice-edit mic + send button
  * - Error: error message + text fallback
  * - Text mode: standard input + mic switch + send
  *
- * Mobile: swipe-up (50px) to send. Desktop: Enter to send.
+ * The hook auto-sends transcribed text via the onSend callback —
+ * no review state is needed.
  */
 
-import { useState, useRef, useCallback, type FormEvent, type KeyboardEvent, type HTMLAttributes, type TouchEvent } from 'react';
+import { useState, useRef, useCallback, type FormEvent, type KeyboardEvent, type HTMLAttributes } from 'react';
 import { useVoiceInput } from '@/hooks/use-voice-input';
 import { Waveform } from './Waveform';
 
@@ -94,32 +94,19 @@ export function VoiceInput({
   const [textInputValue, setTextInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Touch tracking for swipe-up gesture (mobile send)
-  const touchStartYRef = useRef<number | null>(null);
-
-  // Voice input hook — batch transcription
+  // Voice input hook — batch transcription, auto-sends via onSend callback
   const {
     state: voiceState,
-    transcribedText,
     errorMessage,
     waveformData,
-    isVoiceEdit,
     startRecording,
     stopAndSend,
-    startVoiceEdit,
-    setTranscribedText,
     reset: resetVoice,
-  } = useVoiceInput({ sessionId });
+  } = useVoiceInput({ sessionId, onSend });
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
-
-  const handleVoiceSend = useCallback(() => {
-    if (disabled || !transcribedText.trim()) return;
-    onSend(transcribedText.trim());
-    resetVoice();
-  }, [disabled, transcribedText, onSend, resetVoice]);
 
   const handleTextSubmit = useCallback((e: FormEvent) => {
     e.preventDefault();
@@ -136,28 +123,6 @@ export function VoiceInput({
       handleTextSubmit(e);
     }
   }, [handleTextSubmit]);
-
-  const handleReviewKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleVoiceSend();
-    }
-  }, [handleVoiceSend]);
-
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    touchStartYRef.current = e.touches[0]?.clientY ?? null;
-  }, []);
-
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
-    if (touchStartYRef.current === null) return;
-    const touchEndY = e.changedTouches[0]?.clientY ?? touchStartYRef.current;
-    const deltaY = touchStartYRef.current - touchEndY;
-    touchStartYRef.current = null;
-
-    if (deltaY > 50 && voiceState === 'review') {
-      handleVoiceSend();
-    }
-  }, [voiceState, handleVoiceSend]);
 
   const switchToText = useCallback(() => {
     resetVoice();
@@ -230,8 +195,6 @@ export function VoiceInput({
   return (
     <div
       className={`${className}`}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
       {...props}
     >
       {/* Idle state: mic button + keyboard switch */}
@@ -293,7 +256,7 @@ export function VoiceInput({
           </div>
 
           <p className="text-clarity-500 text-xs text-center">
-            {isVoiceEdit ? 'Speak your edit instruction... tap send when done' : 'Listening... tap send when done'}
+            Listening... tap send when done
           </p>
         </div>
       )}
@@ -306,74 +269,6 @@ export function VoiceInput({
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
           <span className="ml-3 text-clarity-400 text-sm">Transcribing...</span>
-        </div>
-      )}
-
-      {/* Review state: editable transcription + voice-edit mic + send */}
-      {voiceState === 'review' && (
-        <div className="space-y-3">
-          <textarea
-            value={transcribedText}
-            onChange={(e) => setTranscribedText(e.target.value)}
-            onKeyDown={handleReviewKeyDown}
-            rows={2}
-            className="
-              w-full px-4 py-3
-              bg-clarity-700/50 text-white
-              rounded-xl
-              focus:outline-none focus:ring-2 focus:ring-clarity-500
-              resize-none min-h-[48px] max-h-[120px]
-            "
-            aria-label="Review transcription"
-          />
-
-          <div className="flex items-center justify-between">
-            {/* Voice-edit button */}
-            <button
-              type="button"
-              onClick={startVoiceEdit}
-              disabled={disabled}
-              className="
-                p-2 text-clarity-400 hover:text-white
-                transition-colors disabled:opacity-50
-                flex items-center gap-2 text-sm
-              "
-              aria-label="Record edit instruction"
-            >
-              <MicIcon className="w-4 h-4" />
-              <span>Edit with voice</span>
-            </button>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={resetVoice}
-                className="px-4 py-2 text-clarity-400 hover:text-white text-sm transition-colors"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleVoiceSend}
-                disabled={disabled || !transcribedText.trim()}
-                className="
-                  px-4 py-2 bg-clarity-600 text-white rounded-xl
-                  hover:bg-clarity-500
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  transition-all flex items-center gap-2
-                "
-                aria-label="Send transcription"
-              >
-                <SendIcon className="w-4 h-4" />
-                <span>Send</span>
-              </button>
-            </div>
-          </div>
-
-          <p className="text-clarity-500 text-xs text-center">
-            Tap text to edit | Swipe up to send
-          </p>
         </div>
       )}
 
