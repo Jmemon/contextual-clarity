@@ -219,6 +219,10 @@ export function SessionProgress({
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
 
       oscillator.start(audioCtx.currentTime);
+      // FIX 2: Close the AudioContext after the oscillator finishes so we don't
+      // accumulate open contexts. Browsers cap concurrent AudioContext instances
+      // (~6 in Chrome); without this, chimes stop after 6 recalls.
+      oscillator.onended = () => { audioCtx.close(); };
       oscillator.stop(audioCtx.currentTime + 0.3);
     } catch {
       // Audio not available — fail silently
@@ -229,24 +233,42 @@ export function SessionProgress({
    * Animate newly-recalled circles left-to-right.
    * When recalledCount increases by N (e.g. after a rabbit hole exits and buffered
    * recalls are flushed), animate each circle 150ms apart with a chime per circle.
+   *
+   * FIX 1: All spawned timers are tracked in `timerIds` and cancelled in the
+   * cleanup function so no timer fires against an unmounted component or a
+   * stale recalledCount value.
+   *
+   * FIX 5: A single null-clear fires after ALL circles have finished animating
+   * (last circle start + 300ms) instead of one per circle. The per-circle
+   * approach caused circle N's 300ms clear to interrupt circle N+1's animation
+   * window when multiple circles animated 150ms apart.
    */
   useEffect(() => {
-    if (recalledCount > prevRecalledCount.current) {
-      const oldCount = prevRecalledCount.current;
-      const newCount = recalledCount;
-      prevRecalledCount.current = recalledCount;
+    if (recalledCount <= prevRecalledCount.current) return;
 
-      for (let i = oldCount; i < newCount; i++) {
-        const delay = (i - oldCount) * 150;
-        setTimeout(() => {
-          setAnimatingIndex(i);
-          // Use isMutedRef to avoid stale closure from the time the effect ran
-          playRecallChime();
-          // Clear the scale-up after 300ms so the circle settles back
-          setTimeout(() => setAnimatingIndex(null), 300);
-        }, delay);
-      }
+    const oldCount = prevRecalledCount.current;
+    prevRecalledCount.current = recalledCount;
+    const timerIds: ReturnType<typeof setTimeout>[] = [];
+
+    for (let i = oldCount; i < recalledCount; i++) {
+      const delay = (i - oldCount) * 150;
+      const outerTimer = setTimeout(() => {
+        setAnimatingIndex(i);
+        // Use isMutedRef to avoid stale closure from the time the effect ran
+        playRecallChime();
+      }, delay);
+      timerIds.push(outerTimer);
     }
+
+    // One final clear after all circles have had their full 300ms animation window.
+    const totalDuration = (recalledCount - oldCount - 1) * 150 + 300;
+    const clearTimer = setTimeout(() => setAnimatingIndex(null), totalDuration);
+    timerIds.push(clearTimer);
+
+    return () => {
+      timerIds.forEach(clearTimeout);
+      setAnimatingIndex(null);
+    };
   }, [recalledCount, playRecallChime]);
 
   return (

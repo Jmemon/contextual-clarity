@@ -65,14 +65,9 @@ function useSessionTimer() {
     return () => clearInterval(interval);
   }, [startTime]);
 
-  // Format as MM:SS
-  const formatTime = () => {
-    const minutes = Math.floor(elapsedSeconds / 60);
-    const seconds = elapsedSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  return { elapsedSeconds, formattedTime: formatTime() };
+  // FIX 4 (YAGNI): formatTime and formattedTime removed — they were computed every
+  // render tick but never consumed. The timer display moved into SessionProgress.
+  return { elapsedSeconds };
 }
 
 // ============================================================================

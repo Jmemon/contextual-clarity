@@ -245,11 +245,6 @@ export interface UseSessionWebSocketReturn {
    * Each entry is the `label` field from the `rabbithole_exited` payload.
    */
   rabbitholeLabels: string[];
-  /**
-   * Number of `point_recalled` events buffered during the current rabbit hole.
-   * Flushed into `recalledCount` when the rabbit hole exits.
-   */
-  pendingRecallAnimations: number;
 }
 
 // ============================================================================
@@ -340,13 +335,11 @@ export function useSessionWebSocket(
   // Populated from the `label` field of `rabbithole_exited` events.
   const [rabbitholeLabels, setRabbitholeLabels] = useState<string[]>([]);
 
-  // T11: Recall animations buffered while the user is inside a rabbit hole.
-  // point_recalled events during a rabbit hole increment this instead of recalledCount
-  // so the circles animate in sequence after the rabbit hole exits.
-  const [pendingRecallAnimations, setPendingRecallAnimations] = useState(0);
+  // FIX 3 (YAGNI): Removed pendingRecallAnimations state — it was exported but never consumed.
+  // pendingRef is kept because it drives the buffering logic in handleMessage.
 
   // Ref to track pending count without stale closure when reading inside handleMessage.
-  // Using a ref avoids needing pendingRecallAnimations in the useCallback dep array.
+  // Using a ref avoids needing the pending count in the useCallback dep array.
   const pendingRef = useRef(0);
 
   // Ref to track isInRabbithole inside handleMessage without stale closure.
@@ -506,7 +499,6 @@ export function useSessionWebSocket(
           if (isInRabbitholeRef.current) {
             // Buffer the recall — don't update recalledCount visually yet.
             pendingRef.current += 1;
-            setPendingRecallAnimations(pendingRef.current);
           } else {
             setRecalledCount(message.recalledCount);
           }
@@ -560,7 +552,6 @@ export function useSessionWebSocket(
           setRabbitholePrompt(null);
           // Reset pending buffer for this new rabbit hole entry
           pendingRef.current = 0;
-          setPendingRecallAnimations(0);
           callbacksRef.current.onRabbitholeEntered?.(message.topic);
           break;
 
@@ -575,7 +566,6 @@ export function useSessionWebSocket(
           if (pendingRef.current > 0) {
             setRecalledCount(prev => prev + pendingRef.current);
             pendingRef.current = 0;
-            setPendingRecallAnimations(0);
           }
           // Add the explored rabbit hole's label as a pill in SessionProgress.
           if (message.label) {
@@ -873,7 +863,6 @@ export function useSessionWebSocket(
     declineRabbithole,
     // T11 visual progress fields
     rabbitholeLabels,
-    pendingRecallAnimations,
   };
 }
 
