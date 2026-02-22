@@ -228,8 +228,9 @@ export interface UseSessionWebSocketReturn {
    */
   latestAssistantMessage: string;
   /**
-   * The user message that was just sent. Set on send; cleared ~500ms later.
-   * SingleExchangeView uses this for the brief "user_sent" flash phase.
+   * The user message that was just sent. Set on send; cleared when AI streaming
+   * begins (first assistant_chunk). SingleExchangeView uses this for the
+   * awaiting_response phase.
    */
   lastSentUserMessage: string | null;
   /**
@@ -329,8 +330,6 @@ export function useSessionWebSocket(
   // isOpeningMessage is true while the first AI message is shown so the view
   // can skip the fade-in animation on initial render.
   const [isOpeningMessage, setIsOpeningMessage] = useState(true);
-  // Ref to hold the active clear-timeout so it can be cancelled on rapid sends.
-  const lastSentClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FIX 8: Ref to track the current rabbitholePrompt inside sendUserMessage without
   // requiring it as a useCallback dependency (avoids recreating the function on every prompt change).
   const rabbitholePromptRef = useRef<RabbitholePromptData | null>(null);
@@ -468,6 +467,8 @@ export function useSessionWebSocket(
           break;
 
         case 'assistant_chunk':
+          // Clear the user's sent message once AI starts streaming
+          setLastSentUserMessage(null);
           // Append chunk to streaming content
           setStreamingContent((prev) => prev + message.content);
           break;
@@ -483,6 +484,8 @@ export function useSessionWebSocket(
               timestamp: new Date(),
             },
           ]);
+          // Clear user's sent message (safety net if chunks were skipped)
+          setLastSentUserMessage(null);
           setStreamingContent('');
           setIsWaitingForResponse(false);
           // T12: Update the single-exchange display text and clear opening flag
@@ -729,9 +732,8 @@ export function useSessionWebSocket(
   /**
    * Send a user message to the session.
    *
-   * T12: Also sets lastSentUserMessage briefly (500ms) so SingleExchangeView
-   * can display the user_sent flash phase. Cancels any pending clear timeout
-   * on rapid successive sends.
+   * Also sets lastSentUserMessage so SingleExchangeView can display the user's
+   * message until AI streaming begins (cleared on first assistant_chunk).
    *
    * FIX 8: If a rabbit hole prompt is currently visible (rabbitholePromptRef.current
    * is non-null), implicitly dismiss it and send a decline_rabbithole message to the
@@ -764,16 +766,8 @@ export function useSessionWebSocket(
       sendMessage({ type: 'user_message', content: content.trim() });
       setIsWaitingForResponse(true);
 
-      // T12: Set the flash message and auto-clear after 500ms.
-      // Cancel any previous pending clear so rapid sends don't clear too early.
-      if (lastSentClearTimeoutRef.current) {
-        clearTimeout(lastSentClearTimeoutRef.current);
-      }
+      // Set the user message — stays visible in SingleExchangeView until AI streaming begins.
       setLastSentUserMessage(content.trim());
-      lastSentClearTimeoutRef.current = setTimeout(() => {
-        setLastSentUserMessage(null);
-        lastSentClearTimeoutRef.current = null;
-      }, 500);
     },
     [sendMessage]
   );
@@ -832,13 +826,9 @@ export function useSessionWebSocket(
       connect();
     }
 
-    // Cleanup on unmount — also clear the lastSent timeout to avoid state
-    // updates after the component has been destroyed.
+    // Cleanup on unmount
     return () => {
       disconnect();
-      if (lastSentClearTimeoutRef.current) {
-        clearTimeout(lastSentClearTimeoutRef.current);
-      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, autoConnect, connect, disconnect]);
