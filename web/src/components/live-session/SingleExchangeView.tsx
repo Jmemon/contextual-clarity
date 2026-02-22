@@ -2,8 +2,9 @@
  * SingleExchangeView Component for Live Sessions (T12)
  *
  * Replaces the scrolling MessageList with a single-exchange view. At any given
- * moment only one piece of content is visible: the AI's current text, a brief
- * user-message flash, a loading indicator, or the streaming AI response.
+ * moment only one piece of content is visible: the AI's current text, an
+ * awaiting-response view (agent prompt + user reply + loading dots), or the
+ * streaming AI response.
  *
  * Each exchange replaces the previous — there is no visible history. This forces
  * genuine recall because the user cannot re-read earlier exchanges.
@@ -12,7 +13,7 @@
  * this is purely a visual change.
  *
  * Phase transitions:
- *   showing_ai  → user sends  → user_sent (200ms) → loading → ai_streaming → showing_ai
+ *   showing_ai  → user sends  → awaiting_response → ai_streaming → showing_ai
  *
  * @example
  * ```tsx
@@ -37,12 +38,11 @@ import { FormattedText } from '../shared/FormattedText';
 
 /**
  * The phase the single-exchange view is currently in.
- * - showing_ai:   AI's completed message is displayed.
- * - user_sent:    User's message briefly flashes (then fades upward ~400ms).
- * - loading:      Waiting for AI; pulsing bounce dots shown.
- * - ai_streaming: AI response is streaming in with a blinking cursor.
+ * - showing_ai:         AI's completed message is displayed.
+ * - awaiting_response:  User sent a message; shows agent prompt + user reply + loading dots.
+ * - ai_streaming:       AI response is streaming in with a blinking cursor.
  */
-export type ExchangePhase = 'showing_ai' | 'user_sent' | 'loading' | 'ai_streaming';
+export type ExchangePhase = 'showing_ai' | 'awaiting_response' | 'ai_streaming';
 
 export interface SingleExchangeViewProps {
   /** The most-recently completed AI message (from assistant_complete). */
@@ -75,11 +75,10 @@ export interface SingleExchangeViewProps {
 /**
  * Single-exchange view for live sessions.
  *
- * Renders one of four phases:
- * 1. showing_ai   — AI text with "Agent" label (fade-in except for opening msg)
- * 2. user_sent    — User text briefly visible, animating upward and fading out
- * 3. loading      — Three pulsing bounce dots with "Agent" label
- * 4. ai_streaming — AI text streaming in with a blinking cursor
+ * Renders one of three phases:
+ * 1. showing_ai         — AI text with "Agent" label (fade-in except for opening msg)
+ * 2. awaiting_response  — Agent prompt + user reply + loading dots while waiting for AI
+ * 3. ai_streaming       — AI text streaming in with a blinking cursor
  *
  * Empty state ("Starting session...") is shown before the first message arrives.
  */
@@ -93,13 +92,8 @@ export function SingleExchangeView({
   className = '',
 }: SingleExchangeViewProps) {
   // Derived phase from the combination of incoming props.
-  // Priority: user_sent > loading > ai_streaming > showing_ai
+  // Priority: ai_streaming > awaiting_response > showing_ai
   const [phase, setPhase] = useState<ExchangePhase>('showing_ai');
-
-  // Track the user message that is currently being animated so it remains
-  // visible in the DOM while the exit animation plays (even after the prop
-  // clears to null).
-  const [visibleUserMessage, setVisibleUserMessage] = useState<string | null>(null);
 
   // Used to ensure we don't apply fade-in on the very first render of the
   // opening message, but do apply it on all subsequent AI messages.
@@ -110,30 +104,15 @@ export function SingleExchangeView({
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    if (userMessageSent !== null) {
-      // A new user message was just sent — show the brief user flash phase.
-      setVisibleUserMessage(userMessageSent);
-      setPhase('user_sent');
-    } else if (isLoading) {
-      setPhase('loading');
-    } else if (isStreaming) {
+    if (isStreaming) {
       setPhase('ai_streaming');
+    } else if (userMessageSent !== null || isLoading) {
+      // User sent a message and we're waiting for AI — show both messages + dots
+      setPhase('awaiting_response');
     } else {
       setPhase('showing_ai');
     }
   }, [userMessageSent, isLoading, isStreaming]);
-
-  // When the user_sent phase ends (userMessageSent clears) allow the
-  // visibleUserMessage to be cleaned up after the exit animation completes.
-  useEffect(() => {
-    if (userMessageSent === null && phase === 'user_sent') {
-      // Give the CSS animation time to finish before wiping the stored message.
-      const timer = setTimeout(() => {
-        setVisibleUserMessage(null);
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [userMessageSent, phase]);
 
   // Mark that we have displayed the first message so subsequent ones can
   // use the fade-in animation.
@@ -159,8 +138,7 @@ export function SingleExchangeView({
     !currentAssistantMessage &&
     !streamingContent &&
     !isLoading &&
-    !userMessageSent &&
-    !visibleUserMessage;
+    !userMessageSent;
 
   return (
     <div className={`flex flex-col justify-center max-w-3xl mx-auto w-full ${className}`}>
@@ -195,49 +173,55 @@ export function SingleExchangeView({
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* Phase: user_sent — brief flash of the user's message               */}
+      {/* Phase: awaiting_response — agent message + user message + dots      */}
       {/* ------------------------------------------------------------------ */}
-      {phase === 'user_sent' && visibleUserMessage && (
-        // animate-user-flash: slides the message up 16px and fades it out over
-        // 400ms, providing a clear visual signal that the message was sent
-        // before the loading/streaming phase takes over.
-        <div
-          key={`user-${visibleUserMessage}`}
-          className="animate-user-flash"
-        >
-          {/* "You" role label — matches the spec for the user_sent phase */}
-          <p className="text-blue-300 text-xs font-medium mb-3 uppercase tracking-wide">You</p>
-          <FormattedText
-            content={visibleUserMessage}
-            className="text-lg leading-relaxed text-blue-100"
-          />
-        </div>
-      )}
+      {phase === 'awaiting_response' && (
+        <div className="flex flex-col gap-6">
+          {/* Agent's last message (the prompt the user responded to) */}
+          {currentAssistantMessage && (
+            <div>
+              <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
+                Agent
+              </p>
+              <FormattedText
+                content={currentAssistantMessage}
+                className="text-lg leading-relaxed text-white"
+              />
+            </div>
+          )}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Phase: loading — pulsing bounce dots                               */}
-      {/* ------------------------------------------------------------------ */}
-      {phase === 'loading' && (
-        <div>
-          {/* "Agent" role label */}
-          <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
-            Agent
-          </p>
+          {/* User's sent message */}
+          {userMessageSent && (
+            <div>
+              <p className="text-blue-300 text-xs font-medium uppercase tracking-wider mb-3">
+                You
+              </p>
+              <FormattedText
+                content={userMessageSent}
+                className="text-lg leading-relaxed text-blue-100"
+              />
+            </div>
+          )}
 
-          {/* Three staggered bounce dots */}
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
-              style={{ animationDelay: '0ms' }}
-            />
-            <span
-              className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
-              style={{ animationDelay: '150ms' }}
-            />
-            <span
-              className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
-              style={{ animationDelay: '300ms' }}
-            />
+          {/* Loading dots — AI is thinking */}
+          <div>
+            <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
+              Agent
+            </p>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
+                style={{ animationDelay: '0ms' }}
+              />
+              <span
+                className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <span
+                className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
+            </div>
           </div>
         </div>
       )}

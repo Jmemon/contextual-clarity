@@ -324,8 +324,8 @@ export function useSessionWebSocket(
   // latestAssistantMessage holds only the most recent completed AI text; the
   // full history is still in `messages` for the evaluator.
   const [latestAssistantMessage, setLatestAssistantMessage] = useState('');
-  // lastSentUserMessage is briefly set when the user sends a message so
-  // SingleExchangeView can display the user_sent flash phase.
+  // lastSentUserMessage is set when the user sends a message so
+  // SingleExchangeView can display the awaiting_response phase.
   const [lastSentUserMessage, setLastSentUserMessage] = useState<string | null>(null);
   // isOpeningMessage is true while the first AI message is shown so the view
   // can skip the fade-in animation on initial render.
