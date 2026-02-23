@@ -126,7 +126,7 @@ test.describe('Error States', () => {
 
       // Should show not found
       await expect(
-        page.getByText(/not found|doesn't exist|404|error/i)
+        page.getByText(/not found|doesn't exist|404|error/i).first()
       ).toBeVisible({ timeout: 10000 });
     });
 
@@ -225,7 +225,7 @@ test.describe('Error States', () => {
 
       // Should show error
       await expect(
-        page.getByText(/error|failed|validation|something went wrong/i)
+        page.getByText(/error|failed|validation|something went wrong/i).first()
       ).toBeVisible({ timeout: 10000 });
     });
 
