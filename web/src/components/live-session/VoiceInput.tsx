@@ -16,7 +16,7 @@
  * no review state is needed.
  */
 
-import { useState, useRef, useCallback, type FormEvent, type KeyboardEvent, type HTMLAttributes } from 'react';
+import { useState, useRef, useCallback, useEffect, type FormEvent, type KeyboardEvent, type HTMLAttributes } from 'react';
 import { useVoiceInput } from '@/hooks/use-voice-input';
 import { Waveform } from './Waveform';
 
@@ -123,6 +123,19 @@ export function VoiceInput({
       handleTextSubmit(e);
     }
   }, [handleTextSubmit]);
+
+  // Enter key sends audio while recording
+  useEffect(() => {
+    if (voiceState !== 'recording') return;
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        stopAndSend();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [voiceState, stopAndSend]);
 
   const switchToText = useCallback(() => {
     resetVoice();
@@ -256,7 +269,7 @@ export function VoiceInput({
           </div>
 
           <p className="text-clarity-500 text-xs text-center">
-            Listening... tap send when done
+            Listening... press Enter or tap send when done
           </p>
         </div>
       )}
