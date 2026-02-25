@@ -60,9 +60,16 @@ import type { SessionRepository } from '@/storage/repositories/session.repositor
 import type { RecallSetRepository } from '@/storage/repositories/recall-set.repository';
 import type { RecallPointRepository } from '@/storage/repositories/recall-point.repository';
 import type { SessionMessageRepository } from '@/storage/repositories/session-message.repository';
+import type {
+  SessionMetricsRepository,
+  RecallOutcomeRepository,
+  RabbitholeEventRepository,
+} from '@/storage/repositories';
 import type { FSRSScheduler } from '@/core/fsrs/scheduler';
 import type { RecallEvaluator } from '@/core/scoring/recall-evaluator';
 import type { AnthropicClient } from '@/llm/client';
+import type { SessionMetricsCollector } from '@/core/session/metrics-collector';
+import type { RabbitholeDetector } from '@/core/analysis/rabbithole-detector';
 import { SessionEngine } from '@/core/session/session-engine';
 import {
   type ClientMessage,
@@ -181,6 +188,16 @@ export interface WebSocketHandlerDependencies {
   evaluator: RecallEvaluator;
   /** Anthropic client for generating tutor responses */
   llmClient: AnthropicClient;
+  /** Phase 2: Metrics collector instance (creates fresh per session) */
+  metricsCollector?: SessionMetricsCollector;
+  /** Phase 2: Rabbit hole detector instance */
+  rabbitholeDetector?: RabbitholeDetector;
+  /** Phase 2: Session metrics repository */
+  metricsRepo?: SessionMetricsRepository;
+  /** Phase 2: Recall outcome repository */
+  recallOutcomeRepo?: RecallOutcomeRepository;
+  /** Phase 2: Rabbithole event repository */
+  rabbitholeRepo?: RabbitholeEventRepository;
 }
 
 // ============================================================================
@@ -271,6 +288,12 @@ export class WebSocketSessionHandler {
         recallPointRepo: this.deps.recallPointRepo,
         sessionRepo: this.deps.sessionRepo,
         messageRepo: this.deps.messageRepo,
+        // Phase 2: Metrics and rabbit hole detection
+        metricsCollector: this.deps.metricsCollector,
+        rabbitholeDetector: this.deps.rabbitholeDetector,
+        metricsRepo: this.deps.metricsRepo,
+        recallOutcomeRepo: this.deps.recallOutcomeRepo,
+        rabbitholeRepo: this.deps.rabbitholeRepo,
       });
 
       /**

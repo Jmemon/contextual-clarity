@@ -59,10 +59,15 @@ import {
   RecallSetRepository,
   RecallPointRepository,
   SessionMessageRepository,
+  SessionMetricsRepository,
+  RecallOutcomeRepository,
+  RabbitholeEventRepository,
 } from '@/storage/repositories';
 import { FSRSScheduler } from '@/core/fsrs/scheduler';
 import { RecallEvaluator } from '@/core/scoring/recall-evaluator';
 import { AnthropicClient } from '@/llm/client';
+import { SessionMetricsCollector } from '@/core/session/metrics-collector';
+import { RabbitholeDetector } from '@/core/analysis/rabbithole-detector';
 import {
   config as appConfig,
   validateConfig,
@@ -424,6 +429,9 @@ function createWsDependencies(): WebSocketHandlerDependencies {
   // Create a dedicated LLM client for the evaluator (separate instance per spec requirement)
   const evaluatorClient = new AnthropicClient();
 
+  // Dedicated LLM client for rabbit hole detection (separate from tutor and evaluator)
+  const detectorClient = new AnthropicClient();
+
   // Create the FSRS scheduler for spaced repetition
   const scheduler = new FSRSScheduler();
 
@@ -439,6 +447,12 @@ function createWsDependencies(): WebSocketHandlerDependencies {
     scheduler,
     evaluator,
     llmClient,
+    // Phase 2: Metrics and rabbit hole detection
+    metricsCollector: new SessionMetricsCollector(),
+    rabbitholeDetector: new RabbitholeDetector(detectorClient),
+    metricsRepo: new SessionMetricsRepository(db),
+    recallOutcomeRepo: new RecallOutcomeRepository(db),
+    rabbitholeRepo: new RabbitholeEventRepository(db),
   };
 }
 
