@@ -45,27 +45,27 @@ export function RabbitholeIndicator({
 }: RabbitholeIndicatorProps) {
   return (
     <div
-      className={`flex items-center justify-between px-6 py-2 bg-emerald-500/8 border-b border-emerald-900/50 ${className}`}
+      className={`flex items-center justify-between px-6 py-2 bg-emerald-950/40 border-b border-[#1e2e26] ${className}`}
       role="banner"
       aria-label="Rabbit hole mode active"
       {...props}
     >
       {/* Left: icon + label */}
       <div className="flex items-center gap-2">
-        <svg className="w-4 h-4 text-emerald-500/70 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <svg className="w-4 h-4 text-emerald-600/60 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
         </svg>
-        <span className="text-emerald-300/70 text-sm">
+        <span className="text-stone-400 text-sm">
           Exploring:{' '}
-          <span className="font-medium text-emerald-200/80">{topic}</span>
+          <span className="font-medium text-stone-200">{topic}</span>
         </span>
       </div>
 
       {/* Right: return button */}
       <button
         onClick={onReturn}
-        className="px-3 py-1.5 text-xs font-medium bg-emerald-900/30 text-emerald-200/70 border border-emerald-800/30 rounded-lg hover:bg-emerald-800/30 hover:text-emerald-100 transition-colors"
+        className="px-3 py-1.5 text-xs font-medium bg-[#1a2a22] text-stone-300 border border-[#2a3a32] rounded-lg hover:bg-[#243830] hover:text-white transition-colors"
         aria-label="Return to recall session"
       >
         Return to session
