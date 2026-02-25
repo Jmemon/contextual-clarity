@@ -317,6 +317,8 @@ export function SessionContainer({
     declineRabbithole,
     // T11: explored rabbit hole labels for SessionProgress pills
     rabbitholeLabels,
+    // Task 3: recalled point labels for tappable popover indicators
+    recalledLabels,
   } = useSessionWebSocket(sessionId, {
     onSessionStarted: handleSessionStarted,
     onSessionComplete: handleSessionComplete,
@@ -392,6 +394,7 @@ export function SessionContainer({
             isInRabbithole={isInRabbithole}
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
+            recalledLabels={recalledLabels}
           />
         </div>
       )}

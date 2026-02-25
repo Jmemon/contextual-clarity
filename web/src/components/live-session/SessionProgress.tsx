@@ -42,6 +42,9 @@ export interface SessionProgressProps extends HTMLAttributes<HTMLDivElement> {
 
   /** Callback when mute toggle is clicked */
   onToggleMute: () => void;
+
+  /** Labels of recalled points in recall order, for tappable display */
+  recalledLabels: string[];
 }
 
 // ============================================================================
@@ -62,38 +65,89 @@ function formatElapsedTime(seconds: number): string {
 // ============================================================================
 
 /**
- * Renders a row of anonymous circles representing recall points.
- * Filled circles = recalled. Unfilled = pending.
- * Circles fill LEFT to RIGHT regardless of which actual point was recalled,
- * preserving anonymity about which specific topics remain.
+ * Popover shown above a recalled point circle when tapped.
+ * Displays the topic keyword label. Clicking outside dismisses it.
+ */
+function PointPopover({
+  label,
+  onDismiss,
+}: {
+  label: string;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-point-popover]')) {
+        onDismiss();
+      }
+    };
+    document.addEventListener('click', handler, { capture: true });
+    return () => document.removeEventListener('click', handler, { capture: true });
+  }, [onDismiss]);
+
+  return (
+    <div
+      data-point-popover
+      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-700 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-50"
+    >
+      {label}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-700 rotate-45 -mt-1" />
+    </div>
+  );
+}
+
+/**
+ * Renders a row of recall point indicators as tappable buttons.
+ * Filled (recalled) circles can be tapped to show a popover with the topic keyword.
+ * Unfilled circles are disabled. Tapping outside any popover dismisses it.
  */
 function PointIcons({
   totalPoints,
   recalledCount,
   animatingIndex,
+  recalledLabels,
 }: {
   totalPoints: number;
   recalledCount: number;
   animatingIndex: number | null;
+  recalledLabels: string[];
 }) {
+  const [activePopover, setActivePopover] = useState<number | null>(null);
+
+  const handleClick = useCallback((index: number, isRecalled: boolean) => {
+    if (!isRecalled) return;
+    setActivePopover(prev => prev === index ? null : index);
+  }, []);
+
+  const dismissPopover = useCallback(() => setActivePopover(null), []);
+
   return (
     <div className="flex items-center gap-1.5">
       {Array.from({ length: totalPoints }, (_, i) => {
         const isRecalled = i < recalledCount;
         const isAnimating = i === animatingIndex;
+        const label = isRecalled ? recalledLabels[i] : undefined;
 
         return (
-          <div
-            key={i}
-            className={[
-              'w-2.5 h-2.5 rounded-full transition-all duration-300',
-              isRecalled
-                ? 'bg-green-400 shadow-sm shadow-green-400/30'
-                : 'bg-clarity-600 border border-clarity-500',
-              isAnimating ? 'scale-150' : 'scale-100',
-            ].join(' ')}
-            aria-label={isRecalled ? 'Point recalled' : 'Point pending'}
-          />
+          <div key={i} className="relative">
+            <button
+              type="button"
+              onClick={() => handleClick(i, isRecalled)}
+              className={[
+                'w-2.5 h-2.5 rounded-full transition-all duration-300',
+                isRecalled
+                  ? 'bg-green-400 shadow-sm shadow-green-400/30 cursor-pointer'
+                  : 'bg-clarity-600 border border-clarity-500 cursor-default',
+                isAnimating ? 'scale-150 shadow-[0_0_8px_rgba(74,222,128,0.6)]' : 'scale-100',
+              ].join(' ')}
+              aria-label={isRecalled ? `Point recalled: ${label ?? 'tap to view'}` : 'Point pending'}
+              disabled={!isRecalled}
+            />
+            {activePopover === i && label && (
+              <PointPopover label={label} onDismiss={dismissPopover} />
+            )}
+          </div>
         );
       })}
     </div>
@@ -173,6 +227,7 @@ export function SessionProgress({
   isInRabbithole,
   isMuted,
   onToggleMute,
+  recalledLabels,
   className = '',
   ...props
 }: SessionProgressProps) {
@@ -296,6 +351,7 @@ export function SessionProgress({
             totalPoints={totalPoints}
             recalledCount={recalledCount}
             animatingIndex={animatingIndex}
+            recalledLabels={recalledLabels}
           />
 
           {/* Center: Elapsed time — monospace tabular-nums prevents width shifts */}
