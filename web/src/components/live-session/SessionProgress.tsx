@@ -5,11 +5,11 @@
  * progress display. Design goals:
  *  - Show HOW MANY points recalled but NOT WHICH topics remain (anonymity)
  *  - Animate each newly-recalled circle (scale-up 1.5× for 300ms)
- *  - Play a pleasant Web Audio API chime on each recall
+ *  - Trigger haptic vibration on each recall (mobile)
  *  - Show elapsed time in MM:SS (monospace, tabular-nums)
  *  - Show explored rabbit hole labels as amber pills
  *  - Smooth hide/show animation during rabbit hole mode (slide-up + fade)
- *  - Mute toggle persisted in localStorage
+ *  - Vibration toggle persisted in localStorage
  *
  * Layout (left → right):
  *   [○ ○ ● ● ○]   03:42   [Adenosine] [Tolerance]   🔊
@@ -177,30 +177,31 @@ function RabbitholeLabels({ labels }: { labels: string[] }) {
 }
 
 /**
- * Small mute/unmute toggle button with SVG speaker icons.
- * Speaker-with-waves = unmuted; speaker-with-X = muted.
+ * Toggle button for haptic vibration feedback.
+ * Vibrating-phone icon = enabled; phone-with-slash icon = disabled.
  */
 function MuteToggle({ isMuted, onToggle }: { isMuted: boolean; onToggle: () => void }) {
   return (
     <button
       onClick={onToggle}
       className="text-clarity-400 hover:text-clarity-200 transition-colors p-1"
-      aria-label={isMuted ? 'Unmute recall sounds' : 'Mute recall sounds'}
-      title={isMuted ? 'Unmute' : 'Mute'}
+      aria-label={isMuted ? 'Enable vibration' : 'Disable vibration'}
+      title={isMuted ? 'Vibration off' : 'Vibration on'}
     >
       {isMuted ? (
-        /* Speaker with X icon (muted) */
+        /* Vibration off icon — phone with slash */
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-          <line x1="23" y1="9" x2="17" y2="15" />
-          <line x1="17" y1="9" x2="23" y2="15" />
+          <rect x="7" y="4" width="10" height="16" rx="1" />
+          <line x1="2" y1="2" x2="22" y2="22" />
         </svg>
       ) : (
-        /* Speaker with waves icon (unmuted) */
+        /* Vibration on icon — phone with vibration lines */
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          <rect x="7" y="4" width="10" height="16" rx="1" />
+          <path d="M4 10v4" />
+          <path d="M20 10v4" />
+          <path d="M1 8v8" />
+          <path d="M23 8v8" />
         </svg>
       )}
     </button>
@@ -245,49 +246,23 @@ export function SessionProgress({
   }, [isMuted]);
 
   /**
-   * Play a short, pleasant chime using the Web Audio API.
-   * Generates a sine-wave tone (A5→E6) with quick exponential decay (~300ms).
-   * Uses isMutedRef (not isMuted) to avoid stale closure in setTimeout callbacks.
-   *
-   * TODO: Replace with a real MP3 file at /sounds/recall-chime.mp3 for a more
-   * polished sound. The Audio element approach is commented below for reference.
+   * Trigger haptic feedback for a recall event.
+   * Uses the Vibration API on supported devices (mobile).
+   * Falls back to a no-op on desktop.
    */
-  const playRecallChime = useCallback(() => {
+  const triggerRecallFeedback = useCallback(() => {
     if (isMutedRef.current) return;
     try {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtx) return;
-
-      const audioCtx = new AudioCtx();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-
-      // A5 → E6 rising arpeggio feel, quick decay
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.1);
-      gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-
-      oscillator.start(audioCtx.currentTime);
-      // FIX 2: Close the AudioContext after the oscillator finishes so we don't
-      // accumulate open contexts. Browsers cap concurrent AudioContext instances
-      // (~6 in Chrome); without this, chimes stop after 6 recalls.
-      oscillator.onended = () => { audioCtx.close(); };
-      oscillator.stop(audioCtx.currentTime + 0.3);
+      navigator?.vibrate?.(50);
     } catch {
-      // Audio not available — fail silently
+      // Vibration API not available — fail silently
     }
   }, []);
 
   /**
    * Animate newly-recalled circles left-to-right.
    * When recalledCount increases by N (e.g. after a rabbit hole exits and buffered
-   * recalls are flushed), animate each circle 150ms apart with a chime per circle.
+   * recalls are flushed), animate each circle 150ms apart with a haptic pulse per circle.
    *
    * FIX 1: All spawned timers are tracked in `timerIds` and cancelled in the
    * cleanup function so no timer fires against an unmounted component or a
@@ -310,7 +285,7 @@ export function SessionProgress({
       const outerTimer = setTimeout(() => {
         setAnimatingIndex(i);
         // Use isMutedRef to avoid stale closure from the time the effect ran
-        playRecallChime();
+        triggerRecallFeedback();
       }, delay);
       timerIds.push(outerTimer);
     }
@@ -324,7 +299,7 @@ export function SessionProgress({
       timerIds.forEach(clearTimeout);
       setAnimatingIndex(null);
     };
-  }, [recalledCount, playRecallChime]);
+  }, [recalledCount, triggerRecallFeedback]);
 
   return (
     <div
