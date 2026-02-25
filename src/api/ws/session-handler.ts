@@ -139,6 +139,8 @@ export interface WebSocketSessionData {
   currentResponseChunks: string[];
   /** Current chunk index being sent */
   currentChunkIndex: number;
+  /** Serializes async message processing to prevent concurrent handler execution per connection */
+  processingLock: Promise<void>;
 }
 
 /**
@@ -161,6 +163,7 @@ export function createInitialSessionData(
     isStreaming: false,
     currentResponseChunks: [],
     currentChunkIndex: 0,
+    processingLock: Promise.resolve(),
   };
 }
 
@@ -467,7 +470,20 @@ export class WebSocketSessionHandler {
     // Reset error count on successful parse
     data.consecutiveErrors = 0;
 
-    // Route to appropriate handler based on message type
+    // Pings are lightweight and safe to handle immediately without the lock.
+    if (parsed.type === 'ping') {
+      this.handlePing(ws);
+      return;
+    }
+
+    // Serialize all async message handlers via a per-connection processing lock.
+    // This prevents concurrent execution of e.g. user_message + enter_rabbithole,
+    // which would cause two streamResponse() calls to interleave on the same socket.
+    const prev = data.processingLock;
+    let resolve!: () => void;
+    data.processingLock = new Promise<void>((r) => (resolve = r));
+    await prev;
+
     try {
       switch (parsed.type) {
         case 'user_message':
@@ -476,9 +492,6 @@ export class WebSocketSessionHandler {
         case 'leave_session':
           // T08: leave_session pauses the session (non-destructive) instead of abandoning it
           await this.handleLeaveSession(ws);
-          break;
-        case 'ping':
-          this.handlePing(ws);
           break;
         case 'enter_rabbithole':
           // T09: User opted into exploring a detected tangent
@@ -504,6 +517,8 @@ export class WebSocketSessionHandler {
     } catch (error) {
       console.error(`[WS] Error handling message:`, error);
       this.sendError(ws, 'SESSION_ENGINE_ERROR', String(error));
+    } finally {
+      resolve();
     }
   }
 

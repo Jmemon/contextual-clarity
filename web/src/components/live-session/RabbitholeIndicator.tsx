@@ -52,9 +52,10 @@ export function RabbitholeIndicator({
     >
       {/* Left: icon + label */}
       <div className="flex items-center gap-2">
-        <span className="text-emerald-400 text-base" aria-hidden="true">
-          &#x1F407;
-        </span>
+        <svg className="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
         <span className="text-emerald-200 text-sm">
           Exploring:{' '}
           <span className="font-medium text-emerald-100">{topic}</span>

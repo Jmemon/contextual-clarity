@@ -372,9 +372,11 @@ export function SessionContainer({
   }
 
   return (
-    <div className={`flex flex-col h-full ${className}`} {...props}>
+    <div className={`flex flex-col h-full transition-colors duration-500 ${isInRabbithole ? 'bg-emerald-950/40' : ''} ${className}`} {...props}>
       {/* Header with timer and progress */}
-      <header className="flex items-center justify-between px-6 py-4 bg-slate-950/70 border-b border-slate-700">
+      <header className={`flex items-center justify-between px-6 py-4 border-b transition-colors duration-500 ${
+        isInRabbithole ? 'bg-emerald-950/60 border-emerald-800/40' : 'bg-slate-950/70 border-slate-700'
+      }`}>
         {/* Session info */}
         <div className="flex items-center gap-4">
           <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white text-sm font-bold">
@@ -405,7 +407,7 @@ export function SessionContainer({
            Hides automatically during rabbit hole mode (slide-up + fade handled inside the component).
            totalPoints guard ensures we don't render an empty circle row before the session starts. */}
       {totalPoints > 0 && (
-        <div className="px-6 py-2 bg-slate-950/30">
+        <div className={`px-6 py-2 transition-colors duration-500 ${isInRabbithole ? 'bg-emerald-950/40' : 'bg-slate-950/30'}`}>
           <SessionProgress
             totalPoints={totalPoints}
             recalledCount={recalledCount}
@@ -446,7 +448,7 @@ export function SessionContainer({
 
       {/* Main content area */}
       <main className={`flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden transition-colors duration-500 ${
-        isInRabbithole ? 'bg-emerald-500/[0.03]' : ''
+        isInRabbithole ? 'bg-emerald-950/30' : ''
       }`}>
         {/*
           T12: Single-exchange view replaces the scrolling MessageList.
@@ -476,7 +478,7 @@ export function SessionContainer({
         )}
 
         {/* Input and controls */}
-        <div className="border-t border-slate-700 pt-6 mt-4">
+        <div className={`border-t pt-6 mt-4 transition-colors duration-500 ${isInRabbithole ? 'border-emerald-800/40' : 'border-slate-700'}`}>
           {/* Session controls — "I've got it!" removed (T06: continuous evaluation).
               T08: "End Session" renamed to "Leave Session" (non-destructive pause). */}
           <SessionControls
