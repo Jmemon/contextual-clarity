@@ -7,7 +7,7 @@
  *  - Animate each newly-recalled circle (scale-up 1.5× for 300ms)
  *  - Trigger haptic vibration on each recall (mobile)
  *  - Show elapsed time in MM:SS (monospace, tabular-nums)
- *  - Show explored rabbit hole labels as amber pills
+ *  - Show explored rabbit hole labels as emerald pills
  *  - Smooth hide/show animation during rabbit hole mode (slide-up + fade)
  *  - Vibration toggle persisted in localStorage
  *
@@ -155,7 +155,7 @@ function PointIcons({
 }
 
 /**
- * Renders a list of explored rabbit hole labels as small amber-colored pills.
+ * Renders a list of explored rabbit hole labels as small emerald-colored pills.
  * Only shows rabbit holes that have been fully explored (entered and exited).
  * Returns null if no rabbit holes have been explored.
  */
@@ -167,7 +167,7 @@ function RabbitholeLabels({ labels }: { labels: string[] }) {
       {labels.map((label, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 rounded-full"
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 rounded-full"
         >
           {label}
         </span>

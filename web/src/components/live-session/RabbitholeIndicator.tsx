@@ -45,19 +45,19 @@ export function RabbitholeIndicator({
 }: RabbitholeIndicatorProps) {
   return (
     <div
-      className={`flex items-center justify-between px-6 py-2 bg-amber-500/15 border-b border-amber-500/25 ${className}`}
+      className={`flex items-center justify-between px-6 py-2 bg-emerald-500/15 border-b border-emerald-500/25 ${className}`}
       role="banner"
       aria-label="Rabbit hole mode active"
       {...props}
     >
       {/* Left: icon + label */}
       <div className="flex items-center gap-2">
-        <span className="text-amber-400 text-base" aria-hidden="true">
+        <span className="text-emerald-400 text-base" aria-hidden="true">
           &#x1F407;
         </span>
-        <span className="text-amber-200 text-sm">
+        <span className="text-emerald-200 text-sm">
           Exploring:{' '}
-          <span className="font-medium text-amber-100">{topic}</span>
+          <span className="font-medium text-emerald-100">{topic}</span>
         </span>
       </div>
 

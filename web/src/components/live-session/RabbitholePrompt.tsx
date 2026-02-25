@@ -49,21 +49,21 @@ export function RabbitholePrompt({
 }: RabbitholePromptProps) {
   return (
     <div
-      className={`flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 ${className}`}
+      className={`flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 ${className}`}
       role="status"
       aria-label="Rabbit hole detected"
       {...props}
     >
       {/* Icon */}
-      <span className="text-amber-400 text-lg mt-0.5 flex-shrink-0" aria-hidden="true">
+      <span className="text-emerald-400 text-lg mt-0.5 flex-shrink-0" aria-hidden="true">
         &#x1F407;
       </span>
 
       {/* Message and actions */}
       <div className="flex-1 min-w-0">
-        <p className="text-amber-200 text-sm">
+        <p className="text-emerald-200 text-sm">
           Looks like you&apos;re curious about{' '}
-          <span className="font-medium text-amber-100">{topic}</span>
+          <span className="font-medium text-emerald-100">{topic}</span>
           {'. '}Want to explore?
         </p>
 
@@ -71,7 +71,7 @@ export function RabbitholePrompt({
           {/* Primary: Explore */}
           <button
             onClick={onExplore}
-            className="px-3 py-1.5 text-xs font-medium bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-black rounded-lg hover:bg-emerald-400 transition-colors"
           >
             Explore
           </button>

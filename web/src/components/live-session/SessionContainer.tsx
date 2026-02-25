@@ -424,7 +424,9 @@ export function SessionContainer({
       )}
 
       {/* Main content area */}
-      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
+      <main className={`flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden transition-colors duration-500 ${
+        isInRabbithole ? 'bg-emerald-500/[0.03]' : ''
+      }`}>
         {/*
           T12: Single-exchange view replaces the scrolling MessageList.
           Only one AI turn is visible at a time — no history shown to the user.
