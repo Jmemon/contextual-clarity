@@ -207,6 +207,8 @@ export interface PointRecalledPayload {
   type: 'point_recalled';
   /** ID of the recall point that was recalled */
   pointId: string;
+  /** Short topic keyword extracted from the recall point content */
+  label: string;
   /** Number of points recalled so far */
   recalledCount: number;
   /** Total number of recall points in the session */

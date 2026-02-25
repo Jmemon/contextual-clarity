@@ -74,7 +74,7 @@ export type ServerMessage =
   | { type: 'session_started'; sessionId: string; openingMessage: string; totalPoints: number; recalledCount: number }
   | { type: 'assistant_chunk'; content: string }
   | { type: 'assistant_complete'; fullContent: string }
-  | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
+  | { type: 'point_recalled'; pointId: string; label: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
@@ -261,6 +261,14 @@ export interface UseSessionWebSocketReturn {
    * Each entry is the `label` field from the `rabbithole_exited` payload.
    */
   rabbitholeLabels: string[];
+
+  // ---- T2: Recalled point labels ----
+  /**
+   * Short topic labels extracted from recalled points' content.
+   * Populated from the `label` field of `point_recalled` events.
+   * Enables the frontend to display topic keywords for each recalled item.
+   */
+  recalledLabels: string[];
 }
 
 // ============================================================================
@@ -348,12 +356,19 @@ export function useSessionWebSocket(
   // Populated from the `label` field of `rabbithole_exited` events.
   const [rabbitholeLabels, setRabbitholeLabels] = useState<string[]>([]);
 
+  // T2: Labels of recalled points, extracted from point_recalled events.
+  // Used by the frontend to display topic keywords for recalled items.
+  const [recalledLabels, setRecalledLabels] = useState<string[]>([]);
+
   // FIX 3 (YAGNI): Removed pendingRecallAnimations state — it was exported but never consumed.
   // pendingRef is kept because it drives the buffering logic in handleMessage.
 
   // Ref to track pending count without stale closure when reading inside handleMessage.
   // Using a ref avoids needing the pending count in the useCallback dep array.
   const pendingRef = useRef(0);
+
+  // T2: Ref to buffer recalled labels while inside a rabbit hole, flushed on exit.
+  const pendingLabelsRef = useRef<string[]>([]);
 
   // Ref to track isInRabbithole inside handleMessage without stale closure.
   // Using a ref avoids needing isInRabbithole in the useCallback dep array.
@@ -499,12 +514,15 @@ export function useSessionWebSocket(
           // increment while inside a rabbit hole so the circles animate in sequence
           // after the rabbit hole exits. Use isInRabbitholeRef (not state) to avoid
           // stale closure inside this useCallback.
+          // T2: Also track recalled labels for topic keyword display.
           setTotalPoints(message.totalPoints);
           if (isInRabbitholeRef.current) {
-            // Buffer the recall — don't update recalledCount visually yet.
+            // Buffer the recall — don't update recalledCount or labels visually yet.
             pendingRef.current += 1;
+            pendingLabelsRef.current.push(message.label);
           } else {
             setRecalledCount(message.recalledCount);
+            setRecalledLabels(prev => [...prev, message.label]);
           }
           break;
 
@@ -550,8 +568,9 @@ export function useSessionWebSocket(
           setIsInRabbithole(true);
           setRabbitholeTopic(message.topic);
           setRabbitholePrompt(null);
-          // Reset pending buffer for this new rabbit hole entry
+          // Reset pending buffers for this new rabbit hole entry
           pendingRef.current = 0;
+          pendingLabelsRef.current = [];
           callbacksRef.current.onRabbitholeEntered?.(message.topic);
           break;
 
@@ -561,11 +580,14 @@ export function useSessionWebSocket(
           setIsInRabbithole(false);
           setRabbitholeTopic(null);
           // Flush buffered recalls: increment recalledCount by all points recalled
-          // during the rabbit hole. The SessionProgress animation effect handles
-          // playing N sequential circle-fill animations 150ms apart.
+          // during the rabbit hole. Also flush any buffered recalled labels.
+          // The SessionProgress animation effect handles playing N sequential
+          // circle-fill animations 150ms apart.
           if (pendingRef.current > 0) {
             setRecalledCount(prev => prev + pendingRef.current);
+            setRecalledLabels(prev => [...prev, ...pendingLabelsRef.current]);
             pendingRef.current = 0;
+            pendingLabelsRef.current = [];
           }
           // Add the explored rabbit hole's label as a pill in SessionProgress.
           if (message.label) {
@@ -860,6 +882,8 @@ export function useSessionWebSocket(
     dismissOverlay,
     // T11 visual progress fields
     rabbitholeLabels,
+    // T2 recalled point labels
+    recalledLabels,
   };
 }
 

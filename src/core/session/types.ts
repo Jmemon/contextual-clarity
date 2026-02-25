@@ -117,7 +117,7 @@ export type SessionEventData =
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_completed'; sessionId: string; summary: SessionCompletionSummary }
-  | { type: 'point_recalled'; pointId: string; recalledCount: number; totalPoints: number }
+  | { type: 'point_recalled'; pointId: string; label: string; recalledCount: number; totalPoints: number }
   | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
   | { type: 'rabbithole_entered'; topic: string }
   | { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean }

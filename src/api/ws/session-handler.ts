@@ -324,6 +324,7 @@ export class WebSocketSessionHandler {
             this.send(ws, {
               type: 'point_recalled',
               pointId: d.pointId,
+              label: d.label,
               recalledCount: d.recalledCount,
               totalPoints: d.totalPoints,
             });

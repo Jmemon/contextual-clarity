@@ -1109,9 +1109,22 @@ export class SessionEngine {
   }
 
   /**
+   * Extracts a short topic label from recall point content.
+   * Takes the first sentence or first 50 characters, whichever is shorter.
+   * Used to provide human-readable keywords in point_recalled events.
+   */
+  private extractPointLabel(pointId: string): string {
+    const point = this.targetPoints.find(p => p.id === pointId);
+    if (!point) return 'Unknown';
+    const content = point.content;
+    const firstSentence = content.split(/[.\n?]/)[0].trim();
+    return firstSentence.length > 50 ? firstSentence.substring(0, 47) + '...' : firstSentence;
+  }
+
+  /**
    * Marks a recall point as recalled. Idempotent — if the point is already recalled, this is a no-op.
    * Also advances currentProbeIndex past this point if it was the current probe target.
-   * Emits a point_recalled event with progress data.
+   * Emits a point_recalled event with progress data and a short topic label.
    */
   markPointRecalled(pointId: string): void {
     if (this.pointChecklist.get(pointId) !== 'pending') return; // already recalled or unknown ID
@@ -1121,6 +1134,7 @@ export class SessionEngine {
     this.emitEvent({
       type: 'point_recalled',
       pointId,
+      label: this.extractPointLabel(pointId),
       recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
     });
