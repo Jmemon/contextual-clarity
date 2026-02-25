@@ -99,6 +99,8 @@ export interface SessionCompletionSummary {
   rabbitholeCount: number;
   /** IDs of all recall points that were successfully recalled */
   recalledPointIds: string[];
+  /** Short topic labels for each recalled point (same order as recalledPointIds) */
+  recalledPointLabels: string[];
   /** Engagement score (0-100) */
   engagementScore: number;
   /** Estimated API cost in USD */

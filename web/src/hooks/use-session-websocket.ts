@@ -108,6 +108,8 @@ export interface SessionCompleteSummary {
   rabbitholeCount: number;
   /** IDs of all recall points that were successfully recalled */
   recalledPointIds: string[];
+  /** Short topic labels for each recalled point */
+  recalledPointLabels: string[];
   /** Estimated API cost in USD */
   estimatedCostUsd: number;
 }

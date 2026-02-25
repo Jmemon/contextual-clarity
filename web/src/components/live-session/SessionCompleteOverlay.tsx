@@ -39,6 +39,8 @@ export interface SessionCompleteOverlayProps extends HTMLAttributes<HTMLDivEleme
   message?: string;
   /** Whether to show the "Continue Discussion" button (server-controlled) */
   canContinue?: boolean;
+  /** Short topic labels for each recalled point */
+  recalledPointLabels?: string[];
 }
 
 // ============================================================================
@@ -59,6 +61,7 @@ export function SessionCompleteOverlay({
   onDone,
   message,
   canContinue = true,
+  recalledPointLabels,
   className = '',
   ...props
 }: SessionCompleteOverlayProps) {
@@ -127,6 +130,26 @@ export function SessionCompleteOverlay({
             <p className="text-clarity-400 text-sm mt-1">Total</p>
           </div>
         </div>
+
+        {/* Recalled topics list */}
+        {recalledPointLabels && recalledPointLabels.length > 0 && (
+          <div className="max-h-32 overflow-y-auto mb-6 text-left">
+            <p className="text-clarity-400 text-xs font-medium mb-2 uppercase tracking-wider">Points Recalled</p>
+            <div className="flex flex-wrap gap-1.5">
+              {recalledPointLabels.map((label, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-green-500/10 text-green-300 border border-green-500/20 rounded-full"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex flex-col gap-3">

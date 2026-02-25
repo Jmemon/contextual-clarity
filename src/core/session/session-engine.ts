@@ -1422,6 +1422,7 @@ export class SessionEngine {
         durationMs: 0, // Calculated at the WS layer
         rabbitholeCount: 0, // Tracked by metrics collector
         recalledPointIds: this.getRecalledPointIds(),
+        recalledPointLabels: this.getRecalledPointIds().map(id => this.extractPointLabel(id)),
         engagementScore: 80,
         estimatedCostUsd: 0.05,
       },

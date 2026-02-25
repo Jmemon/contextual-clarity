@@ -142,6 +142,26 @@ function SessionCompleteScreen({ summary, sessionId }: { summary: SessionComplet
         </div>
       </div>
 
+      {/* Points recalled list */}
+      {summary.recalledPointLabels && summary.recalledPointLabels.length > 0 && (
+        <div className="bg-slate-800/40 rounded-xl p-4 w-full max-w-md mb-8 text-left">
+          <p className="text-clarity-400 text-sm mb-3">Points Recalled</p>
+          <div className="max-h-40 overflow-y-auto flex flex-wrap gap-1.5">
+            {summary.recalledPointLabels.map((label, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-green-500/10 text-green-300 border border-green-500/20 rounded-full"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex gap-4">
         <Link
@@ -420,6 +440,7 @@ export function SessionContainer({
           onDone={leaveSession}
           message={overlayData.message}
           canContinue={overlayData.canContinue}
+          recalledPointLabels={recalledLabels}
         />
       )}
 
