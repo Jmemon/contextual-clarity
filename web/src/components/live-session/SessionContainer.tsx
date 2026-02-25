@@ -372,7 +372,7 @@ export function SessionContainer({
   }
 
   return (
-    <div className={`flex flex-col h-full transition-colors duration-500 ${isInRabbithole ? 'bg-emerald-950/40' : ''} ${className}`} {...props}>
+    <div className={`flex flex-col h-full min-h-screen transition-colors duration-500 ${isInRabbithole ? 'bg-[#072015]' : ''} ${className}`} {...props}>
       {/* Header with timer and progress */}
       <header className={`flex items-center justify-between px-6 py-4 border-b transition-colors duration-500 ${
         isInRabbithole ? 'bg-emerald-950/60 border-emerald-800/40' : 'bg-slate-950/70 border-slate-700'
@@ -384,7 +384,7 @@ export function SessionContainer({
           </div>
           <div>
             <p className="text-white font-medium">Live Session</p>
-            <p className="text-clarity-400 text-sm">
+            <p className={`text-sm transition-colors duration-500 ${isInRabbithole ? 'text-emerald-400' : 'text-clarity-400'}`}>
               {connectionState === 'connected' ? 'Connected' :
                connectionState === 'connecting' ? 'Connecting...' :
                connectionState === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
@@ -463,6 +463,7 @@ export function SessionContainer({
           userMessageSent={lastSentUserMessage}
           isLoading={isWaitingForResponse && !streamingContent}
           isOpeningMessage={isOpeningMessage}
+          isInRabbithole={isInRabbithole}
           className="flex-1"
         />
 
@@ -485,6 +486,7 @@ export function SessionContainer({
             onLeaveSession={leaveSession}
             disabled={controlsDisabled}
             isSessionComplete={sessionState === 'completed'}
+            isInRabbithole={isInRabbithole}
             className="mb-4"
           />
 

@@ -64,6 +64,8 @@ export interface SingleExchangeViewProps {
    * entry on session start.
    */
   isOpeningMessage: boolean;
+  /** Whether the session is in rabbit hole mode — shifts accents to emerald */
+  isInRabbithole?: boolean;
   /** Additional CSS classes for the root element. */
   className?: string;
 }
@@ -89,8 +91,12 @@ export function SingleExchangeView({
   userMessageSent,
   isLoading,
   isOpeningMessage,
+  isInRabbithole = false,
   className = '',
 }: SingleExchangeViewProps) {
+  // Accent color for labels and loading indicators — emerald during rabbit hole
+  const labelColor = isInRabbithole ? 'text-emerald-400' : 'text-clarity-400';
+  const dotColor = isInRabbithole ? 'bg-emerald-400' : 'bg-clarity-400';
   // Derived phase from the combination of incoming props.
   // Priority: ai_streaming > awaiting_response > showing_ai
   const [phase, setPhase] = useState<ExchangePhase>('showing_ai');
@@ -147,7 +153,7 @@ export function SingleExchangeView({
       {/* ------------------------------------------------------------------ */}
       {isEmpty && (
         <div className="flex items-center justify-center h-full">
-          <p className="text-clarity-400 text-lg">Starting session...</p>
+          <p className={`${labelColor} text-lg`}>Starting session...</p>
         </div>
       )}
 
@@ -160,7 +166,7 @@ export function SingleExchangeView({
           className={shouldAnimate ? 'animate-fade-in' : ''}
         >
           {/* "Agent" role label */}
-          <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
+          <p className={`${labelColor} text-xs font-medium uppercase tracking-wider mb-3`}>
             Agent
           </p>
 
@@ -180,7 +186,7 @@ export function SingleExchangeView({
           {/* Agent's last message (the prompt the user responded to) */}
           {currentAssistantMessage && (
             <div>
-              <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
+              <p className={`${labelColor} text-xs font-medium uppercase tracking-wider mb-3`}>
                 Agent
               </p>
               <FormattedText
@@ -205,20 +211,20 @@ export function SingleExchangeView({
 
           {/* Loading dots — AI is thinking */}
           <div>
-            <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
+            <p className={`${labelColor} text-xs font-medium uppercase tracking-wider mb-3`}>
               Agent
             </p>
             <div className="flex items-center gap-1.5">
               <span
-                className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
+                className={`w-2.5 h-2.5 ${dotColor} rounded-full animate-bounce`}
                 style={{ animationDelay: '0ms' }}
               />
               <span
-                className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
+                className={`w-2.5 h-2.5 ${dotColor} rounded-full animate-bounce`}
                 style={{ animationDelay: '150ms' }}
               />
               <span
-                className="w-2.5 h-2.5 bg-clarity-400 rounded-full animate-bounce"
+                className={`w-2.5 h-2.5 ${dotColor} rounded-full animate-bounce`}
                 style={{ animationDelay: '300ms' }}
               />
             </div>
@@ -232,7 +238,7 @@ export function SingleExchangeView({
       {phase === 'ai_streaming' && (
         <div>
           {/* "Agent" role label */}
-          <p className="text-clarity-400 text-xs font-medium uppercase tracking-wider mb-3">
+          <p className={`${labelColor} text-xs font-medium uppercase tracking-wider mb-3`}>
             Agent
           </p>
 

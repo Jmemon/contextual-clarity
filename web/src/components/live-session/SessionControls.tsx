@@ -35,6 +35,8 @@ export interface SessionControlsProps extends HTMLAttributes<HTMLDivElement> {
   disabled?: boolean;
   /** Whether the session has completed */
   isSessionComplete?: boolean;
+  /** Whether the session is in rabbit hole mode — shifts accent to emerald */
+  isInRabbithole?: boolean;
 }
 
 // ============================================================================
@@ -50,6 +52,7 @@ export function SessionControls({
   onLeaveSession,
   disabled = false,
   isSessionComplete = false,
+  isInRabbithole = false,
   className = '',
   ...props
 }: SessionControlsProps) {
@@ -66,7 +69,10 @@ export function SessionControls({
         size="md"
         onClick={onLeaveSession}
         disabled={disabled}
-        className="bg-slate-700 border-slate-600 text-clarity-200 hover:bg-slate-600 hover:text-white"
+        className={isInRabbithole
+          ? 'bg-emerald-900/40 border-emerald-700/40 text-emerald-200 hover:bg-emerald-800/40 hover:text-white'
+          : 'bg-slate-700 border-slate-600 text-clarity-200 hover:bg-slate-600 hover:text-white'
+        }
       >
         Leave Session
       </Button>
