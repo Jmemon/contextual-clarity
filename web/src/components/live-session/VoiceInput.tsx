@@ -94,9 +94,9 @@ export function VoiceInput({
   ...props
 }: VoiceInputProps) {
   // Accent color classes swap from clarity (blue) to emerald during rabbit hole mode
-  const accentBg = isInRabbithole ? 'bg-emerald-600' : 'bg-clarity-600';
-  const accentHover = isInRabbithole ? 'hover:bg-emerald-500' : 'hover:bg-clarity-500';
-  const accentRing = isInRabbithole ? 'focus:ring-emerald-500' : 'focus:ring-clarity-500';
+  const accentBg = isInRabbithole ? 'bg-emerald-700/80' : 'bg-clarity-600';
+  const accentHover = isInRabbithole ? 'hover:bg-emerald-600/80' : 'hover:bg-clarity-500';
+  const accentRing = isInRabbithole ? 'focus:ring-emerald-600/50' : 'focus:ring-clarity-500';
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [textInputValue, setTextInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -185,7 +185,7 @@ export function VoiceInput({
             type="button"
             onClick={switchToVoice}
             disabled={disabled}
-            className={`p-3 ${isInRabbithole ? 'text-emerald-400' : 'text-clarity-400'} hover:text-white transition-colors disabled:opacity-50`}
+            className={`p-3 ${isInRabbithole ? 'text-emerald-500/60' : 'text-clarity-400'} hover:text-white transition-colors disabled:opacity-50`}
             aria-label="Switch to voice input"
           >
             <MicIcon className="w-5 h-5" />
@@ -224,7 +224,7 @@ export function VoiceInput({
             type="button"
             onClick={switchToText}
             disabled={disabled}
-            className={`p-3 ${isInRabbithole ? 'text-emerald-400' : 'text-clarity-400'} hover:text-white transition-colors disabled:opacity-50`}
+            className={`p-3 ${isInRabbithole ? 'text-emerald-500/60' : 'text-clarity-400'} hover:text-white transition-colors disabled:opacity-50`}
             aria-label="Switch to text input"
           >
             <KeyboardIcon className="w-5 h-5" />
@@ -275,7 +275,7 @@ export function VoiceInput({
             </button>
           </div>
 
-          <p className={`text-xs text-center ${isInRabbithole ? 'text-emerald-500' : 'text-clarity-500'}`}>
+          <p className={`text-xs text-center ${isInRabbithole ? 'text-emerald-600/50' : 'text-clarity-500'}`}>
             Listening... press Enter or tap send when done
           </p>
         </div>
@@ -284,11 +284,11 @@ export function VoiceInput({
       {/* Transcribing state: loading spinner */}
       {voiceState === 'transcribing' && (
         <div className="flex items-center justify-center py-4">
-          <svg className={`animate-spin h-6 w-6 ${isInRabbithole ? 'text-emerald-400' : 'text-clarity-400'}`} viewBox="0 0 24 24" fill="none">
+          <svg className={`animate-spin h-6 w-6 ${isInRabbithole ? 'text-emerald-500/60' : 'text-clarity-400'}`} viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          <span className={`ml-3 text-sm ${isInRabbithole ? 'text-emerald-400' : 'text-clarity-400'}`}>Transcribing...</span>
+          <span className={`ml-3 text-sm ${isInRabbithole ? 'text-emerald-500/60' : 'text-clarity-400'}`}>Transcribing...</span>
         </div>
       )}
 

@@ -95,8 +95,8 @@ export function SingleExchangeView({
   className = '',
 }: SingleExchangeViewProps) {
   // Accent color for labels and loading indicators — emerald during rabbit hole
-  const labelColor = isInRabbithole ? 'text-emerald-400' : 'text-clarity-400';
-  const dotColor = isInRabbithole ? 'bg-emerald-400' : 'bg-clarity-400';
+  const labelColor = isInRabbithole ? 'text-emerald-500/70' : 'text-clarity-400';
+  const dotColor = isInRabbithole ? 'bg-emerald-500/60' : 'bg-clarity-400';
   // Derived phase from the combination of incoming props.
   // Priority: ai_streaming > awaiting_response > showing_ai
   const [phase, setPhase] = useState<ExchangePhase>('showing_ai');

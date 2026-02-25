@@ -70,7 +70,7 @@ export function SessionControls({
         onClick={onLeaveSession}
         disabled={disabled}
         className={isInRabbithole
-          ? 'bg-emerald-900/40 border-emerald-700/40 text-emerald-200 hover:bg-emerald-800/40 hover:text-white'
+          ? 'bg-emerald-900/25 border-emerald-800/30 text-emerald-300/60 hover:bg-emerald-800/30 hover:text-emerald-100'
           : 'bg-slate-700 border-slate-600 text-clarity-200 hover:bg-slate-600 hover:text-white'
         }
       >

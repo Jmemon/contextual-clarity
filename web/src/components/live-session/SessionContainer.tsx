@@ -372,19 +372,21 @@ export function SessionContainer({
   }
 
   return (
-    <div className={`flex flex-col h-full min-h-screen transition-colors duration-500 ${isInRabbithole ? 'bg-[#072015]' : ''} ${className}`} {...props}>
+    <div className={`flex flex-col h-full min-h-screen transition-colors duration-500 ${isInRabbithole ? 'bg-[#0a1a14]' : ''} ${className}`} {...props}>
       {/* Header with timer and progress */}
       <header className={`flex items-center justify-between px-6 py-4 border-b transition-colors duration-500 ${
-        isInRabbithole ? 'bg-emerald-950/60 border-emerald-800/40' : 'bg-slate-950/70 border-slate-700'
+        isInRabbithole ? 'bg-[#0d1f17] border-emerald-900/50' : 'bg-slate-950/70 border-slate-700'
       }`}>
         {/* Session info */}
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white text-sm font-bold">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold transition-colors duration-500 ${
+            isInRabbithole ? 'bg-emerald-900/60' : 'bg-slate-800'
+          }`}>
             CC
           </div>
           <div>
             <p className="text-white font-medium">Live Session</p>
-            <p className={`text-sm transition-colors duration-500 ${isInRabbithole ? 'text-emerald-400' : 'text-clarity-400'}`}>
+            <p className={`text-sm transition-colors duration-500 ${isInRabbithole ? 'text-emerald-500/50' : 'text-clarity-400'}`}>
               {connectionState === 'connected' ? 'Connected' :
                connectionState === 'connecting' ? 'Connecting...' :
                connectionState === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
@@ -396,7 +398,9 @@ export function SessionContainer({
         <div className="flex items-center gap-6">
           <Link
             to="/"
-            className="px-4 py-2 bg-slate-800/60 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm"
+            className={`px-4 py-2 text-white rounded-lg transition-colors text-sm ${
+              isInRabbithole ? 'bg-emerald-900/40 hover:bg-emerald-800/40' : 'bg-slate-800/60 hover:bg-slate-600'
+            }`}
           >
             Exit
           </Link>
@@ -407,7 +411,7 @@ export function SessionContainer({
            Hides automatically during rabbit hole mode (slide-up + fade handled inside the component).
            totalPoints guard ensures we don't render an empty circle row before the session starts. */}
       {totalPoints > 0 && (
-        <div className={`px-6 py-2 transition-colors duration-500 ${isInRabbithole ? 'bg-emerald-950/40' : 'bg-slate-950/30'}`}>
+        <div className={`px-6 py-2 transition-colors duration-500 ${isInRabbithole ? 'bg-emerald-950/25' : 'bg-slate-950/30'}`}>
           <SessionProgress
             totalPoints={totalPoints}
             recalledCount={recalledCount}
@@ -447,9 +451,7 @@ export function SessionContainer({
       )}
 
       {/* Main content area */}
-      <main className={`flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden transition-colors duration-500 ${
-        isInRabbithole ? 'bg-emerald-950/30' : ''
-      }`}>
+      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
         {/*
           T12: Single-exchange view replaces the scrolling MessageList.
           Only one AI turn is visible at a time — no history shown to the user.
@@ -479,7 +481,7 @@ export function SessionContainer({
         )}
 
         {/* Input and controls */}
-        <div className={`border-t pt-6 mt-4 transition-colors duration-500 ${isInRabbithole ? 'border-emerald-800/40' : 'border-slate-700'}`}>
+        <div className={`border-t pt-6 mt-4 transition-colors duration-500 ${isInRabbithole ? 'border-emerald-900/50' : 'border-slate-700'}`}>
           {/* Session controls — "I've got it!" removed (T06: continuous evaluation).
               T08: "End Session" renamed to "Leave Session" (non-destructive pause). */}
           <SessionControls
