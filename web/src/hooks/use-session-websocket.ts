@@ -813,6 +813,16 @@ export function useSessionWebSocket(
   const enterRabbithole = useCallback(
     (rabbitholeEventId: string, topic: string) => {
       setRabbitholePrompt(null); // Clear prompt optimistically
+      // Optimistically switch to rabbit hole mode immediately so the UI theme
+      // shifts as soon as the user taps "Explore", not after the server confirms.
+      setIsInRabbithole(true);
+      setRabbitholeTopic(topic);
+      // Clear the current conversation so the user sees a clean loading state
+      // while the rabbit hole agent generates its opening message.
+      setLatestAssistantMessage('');
+      setStreamingContent('');
+      setLastSentUserMessage(null);
+      setIsWaitingForResponse(true);
       sendMessage({ type: 'enter_rabbithole', rabbitholeEventId, topic });
     },
     [sendMessage]

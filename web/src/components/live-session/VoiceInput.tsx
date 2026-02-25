@@ -33,6 +33,8 @@ export interface VoiceInputProps extends Omit<HTMLAttributes<HTMLDivElement>, 'o
   disabled?: boolean;
   /** Placeholder text for text input mode */
   placeholder?: string;
+  /** Whether the session is currently in rabbit hole mode — shifts accent to emerald */
+  isInRabbithole?: boolean;
 }
 
 type InputMode = 'voice' | 'text';
@@ -87,9 +89,14 @@ export function VoiceInput({
   sessionId,
   disabled = false,
   placeholder = 'Type your response...',
+  isInRabbithole = false,
   className = '',
   ...props
 }: VoiceInputProps) {
+  // Accent color classes swap from clarity (blue) to emerald during rabbit hole mode
+  const accentBg = isInRabbithole ? 'bg-emerald-600' : 'bg-clarity-600';
+  const accentHover = isInRabbithole ? 'hover:bg-emerald-500' : 'hover:bg-clarity-500';
+  const accentRing = isInRabbithole ? 'focus:ring-emerald-500' : 'focus:ring-clarity-500';
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [textInputValue, setTextInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -164,15 +171,15 @@ export function VoiceInput({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="
+            className={`
               flex-1 px-4 py-3
               bg-slate-800/60 text-white placeholder-clarity-400
               rounded-xl
-              focus:outline-none focus:ring-2 focus:ring-clarity-500
+              focus:outline-none focus:ring-2 ${accentRing}
               disabled:opacity-50 disabled:cursor-not-allowed
               resize-none min-h-[48px] max-h-[120px]
-              transition-opacity
-            "
+              transition-all
+            `}
           />
           <button
             type="button"
@@ -186,12 +193,12 @@ export function VoiceInput({
           <button
             type="submit"
             disabled={disabled || !textInputValue.trim()}
-            className="
-              p-3 bg-clarity-600 text-white rounded-xl
-              hover:bg-clarity-500
+            className={`
+              p-3 ${accentBg} text-white rounded-xl
+              ${accentHover}
               disabled:opacity-50 disabled:cursor-not-allowed
               transition-all
-            "
+            `}
             aria-label="Send message"
           >
             <SendIcon className="w-5 h-5" />
@@ -227,14 +234,14 @@ export function VoiceInput({
             type="button"
             onClick={startRecording}
             disabled={disabled}
-            className="
+            className={`
               w-14 h-14 rounded-full
-              bg-clarity-600 text-white
+              ${accentBg} text-white
               flex items-center justify-center
-              hover:bg-clarity-500
+              ${accentHover}
               disabled:opacity-50 disabled:cursor-not-allowed
               transition-all
-            "
+            `}
             aria-label="Start recording"
           >
             <MicIcon className="w-6 h-6" />
@@ -255,13 +262,13 @@ export function VoiceInput({
             <button
               type="button"
               onClick={stopAndSend}
-              className="
+              className={`
                 w-14 h-14 rounded-full
-                bg-clarity-600 text-white
+                ${accentBg} text-white
                 flex items-center justify-center
-                hover:bg-clarity-500
+                ${accentHover}
                 transition-colors
-              "
+              `}
               aria-label="Send recording"
             >
               <SendIcon className="w-6 h-6" />
@@ -300,7 +307,7 @@ export function VoiceInput({
             <button
               type="button"
               onClick={switchToText}
-              className="px-4 py-2 bg-clarity-600 text-white rounded-lg text-sm hover:bg-clarity-500 transition-colors"
+              className={`px-4 py-2 ${accentBg} text-white rounded-lg text-sm ${accentHover} transition-colors`}
             >
               Use Keyboard
             </button>

@@ -494,6 +494,7 @@ export function SessionContainer({
             sessionId={sessionId}
             disabled={controlsDisabled}
             placeholder="Type your response..."
+            isInRabbithole={isInRabbithole}
           />
         </div>
       </main>
