@@ -72,11 +72,11 @@ export {
   type RecallPointStats,
 } from './recall-outcome.repository';
 
-// RabbitholeEvent repository and types
+// Branch repository and types (replaces former RabbitholeEventRepository)
 export {
-  RabbitholeEventRepository,
-  type TopicStats,
-} from './rabbithole-event.repository';
+  BranchRepository,
+  type CreateBranchInput,
+} from './branch.repository';
 
 // Resource repository and types
 export {
