@@ -306,11 +306,14 @@ export const sessionMessages = sqliteTable('session_messages', {
   // Token count for the message (useful for API cost tracking and context management)
   tokenCount: integer('token_count'),
 
-  // null = trunk message; otherwise FK to the branch this message belongs to
-  // Note: no .references() here to avoid circular FK with the branches table,
-  // which itself references sessionMessages.id via branchPointMessageId.
+  // null = trunk message; otherwise the branch this message belongs to.
+  // No .references() declared here because `branches` is defined later in
+  // this file and Drizzle's TypeScript inference would produce a circular
+  // type reference. Application code must maintain referential integrity.
   branchId: text('branch_id'),
-});
+},
+  (table) => [index('session_messages_branch_id_idx').on(table.branchId)]
+);
 
 /**
  * Type exports for use throughout the application

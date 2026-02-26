@@ -23,3 +23,5 @@ CREATE INDEX `branches_session_id_idx` ON `branches` (`session_id`);
 CREATE INDEX `branches_parent_branch_id_idx` ON `branches` (`parent_branch_id`);
 --> statement-breakpoint
 ALTER TABLE `session_messages` ADD `branch_id` text;
+--> statement-breakpoint
+CREATE INDEX `session_messages_branch_id_idx` ON `session_messages` (`branch_id`);
