@@ -57,12 +57,11 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'rec
  * T13: Added 'dismiss_overlay' for dismissing the completion overlay.
  */
 export type ClientMessage =
-  | { type: 'user_message'; content: string }
+  | { type: 'user_message'; content: string; branchId?: string }
   | { type: 'leave_session' }  // T08: replaces 'end_session' — pauses session instead of abandoning
   | { type: 'ping' }
-  | { type: 'enter_rabbithole'; rabbitholeEventId: string; topic: string }
-  | { type: 'exit_rabbithole' }
-  | { type: 'decline_rabbithole' }
+  | { type: 'activate_branch'; branchId: string }
+  | { type: 'close_branch'; branchId: string }
   | { type: 'dismiss_overlay' };  // T13: dismiss completion overlay, continue discussion
 
 /**
@@ -72,15 +71,16 @@ export type ClientMessage =
  */
 export type ServerMessage =
   | { type: 'session_started'; sessionId: string; openingMessage: string; totalPoints: number; recalledCount: number }
-  | { type: 'assistant_chunk'; content: string }
-  | { type: 'assistant_complete'; fullContent: string }
+  | { type: 'assistant_chunk'; content: string; branchId?: string }
+  | { type: 'assistant_complete'; fullContent: string; branchId?: string }
   | { type: 'point_recalled'; pointId: string; label: string; recalledCount: number; totalPoints: number }
   | { type: 'session_complete'; summary: SessionCompleteSummary }
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
-  | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
-  | { type: 'rabbithole_entered'; topic: string }
-  | { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean }
+  | { type: 'branch_detected'; branchId: string; topic: string; parentBranchId?: string; depth: number }
+  | { type: 'branch_activated'; branchId: string }
+  | { type: 'branch_closed'; branchId: string; summary: string }
+  | { type: 'branch_summary_injected'; branchId: string }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
 
@@ -159,14 +159,19 @@ export interface CompleteOverlayData {
   canContinue: boolean;
 }
 
-/**
- * T09: Data for the rabbit hole prompt shown when a tangent is detected.
- */
-export interface RabbitholePromptData {
-  /** The detected tangent topic */
+/** Per-branch UI state tracked by the WS hook */
+export interface BranchState {
+  branchId: string;
   topic: string;
-  /** Event ID used when accepting or declining */
-  rabbitholeEventId: string;
+  parentBranchId: string | null;
+  depth: number;
+  status: 'detected' | 'active' | 'closed';
+  latestAssistantMessage: string;
+  streamingContent: string;
+  lastSentUserMessage: string | null;
+  isWaitingForResponse: boolean;
+  hasUnread: boolean;
+  summary: string | null;
 }
 
 /**
@@ -177,19 +182,16 @@ export interface UseSessionWebSocketOptions {
   onSessionStarted?: (sessionId: string, openingMessage: string) => void;
   /** Callback when evaluation result is received */
   onEvaluationResult?: (result: EvaluationResult) => void;
-  // NOTE: onPointTransition was removed in T13 — point_transition event no longer exists
   /** Callback when session completes (finalized as 'completed') */
   onSessionComplete?: (summary: SessionCompleteSummary) => void;
   /** T08: Callback when all points recalled — triggers completion overlay in UI */
   onCompleteOverlay?: (data: CompleteOverlayData) => void;
   /** T08: Callback when session is paused after leave_session */
   onSessionPaused?: () => void;
-  /** T09: Callback when a rabbit hole tangent is detected — show opt-in prompt */
-  onRabbitholeDetected?: (data: RabbitholePromptData) => void;
-  /** T09: Callback when the user enters a rabbit hole */
-  onRabbitholeEntered?: (topic: string) => void;
-  /** T09: Callback when the user exits a rabbit hole */
-  onRabbitholeExited?: (label: string, pointsRecalledDuring: number, completionPending: boolean) => void;
+  /** Callback when a new branch (tangent) is detected by the server */
+  onBranchDetected?: (branchId: string, topic: string) => void;
+  /** Callback when a branch is closed and its summary is available */
+  onBranchClosed?: (branchId: string, summary: string) => void;
   /** Callback when an error occurs */
   onError?: (code: string, message: string) => void;
   /** Whether to auto-connect on mount (default: true) */
@@ -241,28 +243,22 @@ export interface UseSessionWebSocketReturn {
    */
   isOpeningMessage: boolean;
 
-  // ---- T09: Rabbit Hole UX Mode fields ----
-  /** T09: Whether the session is currently in rabbit hole mode */
-  isInRabbithole: boolean;
-  /** T09: Topic currently being explored in rabbit hole (null if not in rabbit hole) */
-  rabbitholeTopic: string | null;
-  /** T09: Pending prompt data when a rabbit hole is detected (null if no prompt) */
-  rabbitholePrompt: RabbitholePromptData | null;
-  /** T09: Enter a rabbit hole after the user opts in */
-  enterRabbithole: (rabbitholeEventId: string, topic: string) => void;
-  /** T09: Exit the current rabbit hole and return to the session */
-  exitRabbithole: () => void;
-  /** T09: Decline the current rabbit hole prompt */
-  declineRabbithole: () => void;
+  // ---- Branch (tangent) state fields ----
+  /** ID of the currently focused branch, or null if viewing the trunk */
+  activeBranchId: string | null;
+  /** Map of all live branches keyed by branchId */
+  branches: Map<string, BranchState>;
+  /** Summaries of branches that have been closed (for display in recap / progress) */
+  branchSummaries: Array<{ branchId: string; summary: string; topic: string }>;
+  /** Switch the active view to a specific branch (activates it on server if first time) */
+  activateBranch: (branchId: string) => void;
+  /** Request the server to close a branch */
+  closeBranch: (branchId: string) => void;
+  /** Switch back to the main trunk view */
+  switchToTrunk: () => void;
+
   /** T13: Dismiss the completion overlay and continue the discussion */
   dismissOverlay: () => void;
-
-  // ---- T11: Visual Progress fields ----
-  /**
-   * Labels of rabbit holes that have been fully explored (entered and exited).
-   * Each entry is the `label` field from the `rabbithole_exited` payload.
-   */
-  rabbitholeLabels: string[];
 
   // ---- T2: Recalled point labels ----
   /**
@@ -310,9 +306,8 @@ export function useSessionWebSocket(
     onSessionComplete,
     onCompleteOverlay,
     onSessionPaused,
-    onRabbitholeDetected,
-    onRabbitholeEntered,
-    onRabbitholeExited,
+    onBranchDetected,
+    onBranchClosed,
     onError,
     autoConnect = true,
   } = options;
@@ -340,43 +335,23 @@ export function useSessionWebSocket(
   // isOpeningMessage is true while the first AI message is shown so the view
   // can skip the fade-in animation on initial render.
   const [isOpeningMessage, setIsOpeningMessage] = useState(true);
-  // FIX 8: Ref to track the current rabbitholePrompt inside sendUserMessage without
-  // requiring it as a useCallback dependency (avoids recreating the function on every prompt change).
-  const rabbitholePromptRef = useRef<RabbitholePromptData | null>(null);
-
-  // T09: Rabbit hole UX mode state.
-  const [isInRabbithole, setIsInRabbithole] = useState(false);
-  const [rabbitholeTopic, setRabbitholeTopic] = useState<string | null>(null);
-  // rabbitholePrompt holds the detected event data shown in RabbitholePrompt.
-  // Cleared when the user accepts or declines.
-  const [rabbitholePrompt, setRabbitholePrompt] = useState<RabbitholePromptData | null>(null);
-  // FIX 8: Keep rabbitholePromptRef in sync so sendUserMessage can read the latest value
-  // without needing rabbitholePrompt as a useCallback dependency.
-  rabbitholePromptRef.current = rabbitholePrompt;
-
-  // T11: Labels of rabbit holes that have been explored (entered and exited).
-  // Populated from the `label` field of `rabbithole_exited` events.
-  const [rabbitholeLabels, setRabbitholeLabels] = useState<string[]>([]);
-
   // T2: Labels of recalled points, extracted from point_recalled events.
   // Used by the frontend to display topic keywords for recalled items.
   const [recalledLabels, setRecalledLabels] = useState<string[]>([]);
 
-  // FIX 3 (YAGNI): Removed pendingRecallAnimations state — it was exported but never consumed.
-  // pendingRef is kept because it drives the buffering logic in handleMessage.
+  // Branch state — tracks all live branches and which one the user is viewing.
+  // activeBranchId is null when viewing the trunk (main conversation).
+  const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
+  const [branches, setBranches] = useState<Map<string, BranchState>>(new Map());
+  const [branchSummaries, setBranchSummaries] = useState<Array<{ branchId: string; summary: string; topic: string }>>([]);
 
-  // Ref to track pending count without stale closure when reading inside handleMessage.
-  // Using a ref avoids needing the pending count in the useCallback dep array.
-  const pendingRef = useRef(0);
+  // Refs for accessing current branch state in callbacks without stale closures.
+  const activeBranchIdRef = useRef<string | null>(null);
+  const branchesRef = useRef<Map<string, BranchState>>(new Map());
 
-  // T2: Ref to buffer recalled labels while inside a rabbit hole, flushed on exit.
-  const pendingLabelsRef = useRef<string[]>([]);
-
-  // Ref to track isInRabbithole inside handleMessage without stale closure.
-  // Using a ref avoids needing isInRabbithole in the useCallback dep array.
-  const isInRabbitholeRef = useRef(false);
-  // Keep isInRabbitholeRef in sync with the state value on every render.
-  isInRabbitholeRef.current = isInRabbithole;
+  // Keep refs in sync with state values.
+  useEffect(() => { activeBranchIdRef.current = activeBranchId; }, [activeBranchId]);
+  useEffect(() => { branchesRef.current = branches; }, [branches]);
 
   // Refs for WebSocket instance and reconnection tracking
   const wsRef = useRef<WebSocket | null>(null);
@@ -392,9 +367,8 @@ export function useSessionWebSocket(
     onSessionComplete,
     onCompleteOverlay,
     onSessionPaused,
-    onRabbitholeDetected,
-    onRabbitholeEntered,
-    onRabbitholeExited,
+    onBranchDetected,
+    onBranchClosed,
     onError,
   });
 
@@ -406,12 +380,11 @@ export function useSessionWebSocket(
       onSessionComplete,
       onCompleteOverlay,
       onSessionPaused,
-      onRabbitholeDetected,
-      onRabbitholeEntered,
-      onRabbitholeExited,
+      onBranchDetected,
+      onBranchClosed,
       onError,
     };
-  }, [onSessionStarted, onEvaluationResult, onSessionComplete, onCompleteOverlay, onSessionPaused, onRabbitholeDetected, onRabbitholeEntered, onRabbitholeExited, onError]);
+  }, [onSessionStarted, onEvaluationResult, onSessionComplete, onCompleteOverlay, onSessionPaused, onBranchDetected, onBranchClosed, onError]);
 
   /**
    * Clear any pending reconnection timeout.
@@ -483,49 +456,73 @@ export function useSessionWebSocket(
           callbacksRef.current.onSessionStarted?.(message.sessionId, message.openingMessage);
           break;
 
-        case 'assistant_chunk':
-          // Clear the user's sent message once AI starts streaming
-          setLastSentUserMessage(null);
-          // Append chunk to streaming content
-          setStreamingContent((prev) => prev + message.content);
+        case 'assistant_chunk': {
+          const chunkBranchId = message.branchId ?? null;
+          if (chunkBranchId) {
+            // Route streaming content to the target branch
+            setBranches(prev => {
+              const next = new Map(prev);
+              const branch = next.get(chunkBranchId);
+              if (branch) {
+                next.set(chunkBranchId, {
+                  ...branch,
+                  streamingContent: branch.streamingContent + message.content,
+                  hasUnread: chunkBranchId !== activeBranchIdRef.current,
+                });
+              }
+              return next;
+            });
+          } else {
+            // Trunk: existing logic — clear user message and append to streaming content
+            setLastSentUserMessage(null);
+            setStreamingContent((prev) => prev + message.content);
+          }
           break;
+        }
 
-        case 'assistant_complete':
-          // Finalize the assistant message (full history)
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: generateMessageId(),
-              role: 'assistant',
-              content: message.fullContent,
-              timestamp: new Date(),
-            },
-          ]);
-          // Clear user's sent message (safety net if chunks were skipped)
-          setLastSentUserMessage(null);
-          setStreamingContent('');
-          setIsWaitingForResponse(false);
-          // T12: Update the single-exchange display text and clear opening flag
-          // so subsequent messages use the fade-in animation.
-          setLatestAssistantMessage(message.fullContent);
-          setIsOpeningMessage(false);
+        case 'assistant_complete': {
+          const completeBranchId = message.branchId ?? null;
+          if (completeBranchId) {
+            // Finalize the branch's assistant message
+            setBranches(prev => {
+              const next = new Map(prev);
+              const branch = next.get(completeBranchId);
+              if (branch) {
+                next.set(completeBranchId, {
+                  ...branch,
+                  latestAssistantMessage: branch.streamingContent || message.fullContent,
+                  streamingContent: '',
+                  isWaitingForResponse: false,
+                });
+              }
+              return next;
+            });
+          } else {
+            // Trunk: existing logic — finalize assistant message in full history
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: generateMessageId(),
+                role: 'assistant',
+                content: message.fullContent,
+                timestamp: new Date(),
+              },
+            ]);
+            setLastSentUserMessage(null);
+            setStreamingContent('');
+            setIsWaitingForResponse(false);
+            setLatestAssistantMessage(message.fullContent);
+            setIsOpeningMessage(false);
+          }
           break;
+        }
 
         case 'point_recalled':
-          // T11: Update totalPoints always. For recalledCount, buffer the animation
-          // increment while inside a rabbit hole so the circles animate in sequence
-          // after the rabbit hole exits. Use isInRabbitholeRef (not state) to avoid
-          // stale closure inside this useCallback.
-          // T2: Also track recalled labels for topic keyword display.
+          // Update progress counts and labels immediately. With branches replacing
+          // rabbit holes, there is no need to buffer recall animations.
           setTotalPoints(message.totalPoints);
-          if (isInRabbitholeRef.current) {
-            // Buffer the recall — don't update recalledCount or labels visually yet.
-            pendingRef.current += 1;
-            pendingLabelsRef.current.push(message.label);
-          } else {
-            setRecalledCount(message.recalledCount);
-            setRecalledLabels(prev => [...prev, message.label]);
-          }
+          setRecalledCount(message.recalledCount);
+          setRecalledLabels(prev => [...prev, message.label]);
           break;
 
         case 'session_complete':
@@ -551,55 +548,54 @@ export function useSessionWebSocket(
           callbacksRef.current.onSessionPaused?.();
           break;
 
-        // T09: Server detected a rabbit hole — store the prompt data so the UI can show it.
-        // The user must explicitly accept or decline; never auto-enter.
-        case 'rabbithole_detected':
-          setRabbitholePrompt({
-            topic: message.topic,
-            rabbitholeEventId: message.rabbitholeEventId,
+        // Server detected a tangent — create a new branch in 'detected' status.
+        // The user can choose to activate (explore) it or ignore it.
+        case 'branch_detected': {
+          const { branchId, topic, parentBranchId, depth } = message;
+          setBranches(prev => {
+            const next = new Map(prev);
+            next.set(branchId, {
+              branchId, topic, parentBranchId: parentBranchId ?? null, depth,
+              status: 'detected',
+              latestAssistantMessage: '', streamingContent: '',
+              lastSentUserMessage: null, isWaitingForResponse: false,
+              hasUnread: true, summary: null,
+            });
+            return next;
           });
-          callbacksRef.current.onRabbitholeDetected?.({
-            topic: message.topic,
-            rabbitholeEventId: message.rabbitholeEventId,
+          callbacksRef.current.onBranchDetected?.(branchId, topic);
+          break;
+        }
+
+        // Server confirmed a branch is now active (agent running).
+        case 'branch_activated': {
+          setBranches(prev => {
+            const next = new Map(prev);
+            const branch = next.get(message.branchId);
+            if (branch) next.set(message.branchId, { ...branch, status: 'active' });
+            return next;
           });
           break;
+        }
 
-        // T09: User entered a rabbit hole — update mode state and clear the prompt.
-        // T11: Also reset the pending recall buffer so we start fresh for this rabbit hole.
-        case 'rabbithole_entered':
-          setIsInRabbithole(true);
-          setRabbitholeTopic(message.topic);
-          setRabbitholePrompt(null);
-          // Reset pending buffers for this new rabbit hole entry
-          pendingRef.current = 0;
-          pendingLabelsRef.current = [];
-          callbacksRef.current.onRabbitholeEntered?.(message.topic);
+        // Server closed a branch — remove from live branches, archive to summaries.
+        case 'branch_closed': {
+          const { branchId, summary } = message;
+          const branch = branchesRef.current.get(branchId);
+          setBranches(prev => {
+            const next = new Map(prev);
+            next.delete(branchId);
+            return next;
+          });
+          setBranchSummaries(prev => [...prev, { branchId, summary, topic: branch?.topic ?? 'Unknown' }]);
+          if (activeBranchIdRef.current === branchId) setActiveBranchId(null);
+          callbacksRef.current.onBranchClosed?.(branchId, summary);
           break;
+        }
 
-        // T09: User exited a rabbit hole — restore normal session mode.
-        // T11: Flush buffered recall animations and add the rabbit hole label.
-        case 'rabbithole_exited':
-          setIsInRabbithole(false);
-          setRabbitholeTopic(null);
-          // Flush buffered recalls: increment recalledCount by all points recalled
-          // during the rabbit hole. Also flush any buffered recalled labels.
-          // The SessionProgress animation effect handles playing N sequential
-          // circle-fill animations 150ms apart.
-          if (pendingRef.current > 0) {
-            setRecalledCount(prev => prev + pendingRef.current);
-            setRecalledLabels(prev => [...prev, ...pendingLabelsRef.current]);
-            pendingRef.current = 0;
-            pendingLabelsRef.current = [];
-          }
-          // Add the explored rabbit hole's label as a pill in SessionProgress.
-          if (message.label) {
-            setRabbitholeLabels(prev => [...prev, message.label]);
-          }
-          callbacksRef.current.onRabbitholeExited?.(
-            message.label,
-            message.pointsRecalledDuring,
-            message.completionPending
-          );
+        // Branch summary was injected into the trunk context on the server side.
+        // No client action needed — the summary is already tracked in branchSummaries.
+        case 'branch_summary_injected':
           break;
 
         case 'error':
@@ -756,42 +752,45 @@ export function useSessionWebSocket(
   /**
    * Send a user message to the session.
    *
+   * If the user is currently viewing a branch (activeBranchId is set), the message
+   * is tagged with branchId so the server routes it to the branch agent. Otherwise
+   * the message is sent to the trunk.
+   *
    * Also sets lastSentUserMessage so SingleExchangeView can display the user's
    * message until AI streaming begins (cleared on first assistant_chunk).
-   *
-   * FIX 8: If a rabbit hole prompt is currently visible (rabbitholePromptRef.current
-   * is non-null), implicitly dismiss it and send a decline_rabbithole message to the
-   * server before sending the user's message. This prevents the prompt from lingering
-   * after the user has already moved on.
    */
   const sendUserMessage = useCallback(
     (content: string) => {
       if (!content.trim()) return;
+      const trimmed = content.trim();
 
-      // FIX 8: Auto-dismiss any pending rabbit hole prompt when the user sends a message.
-      // This signals to the server that the user is not interested in the tangent.
-      if (rabbitholePromptRef.current !== null) {
-        setRabbitholePrompt(null);
-        sendMessage({ type: 'decline_rabbithole' });
-      }
-
-      // Add user message to the full history list
+      // Add user message to the full history list (trunk history)
       setMessages((prev) => [
         ...prev,
         {
           id: generateMessageId(),
           role: 'user',
-          content: content.trim(),
+          content: trimmed,
           timestamp: new Date(),
         },
       ]);
 
-      // Send to server
-      sendMessage({ type: 'user_message', content: content.trim() });
-      setIsWaitingForResponse(true);
-
-      // Set the user message — stays visible in SingleExchangeView until AI streaming begins.
-      setLastSentUserMessage(content.trim());
+      const branchId = activeBranchIdRef.current;
+      if (branchId) {
+        // Route to the active branch — set branch-level waiting state
+        setBranches(prev => {
+          const next = new Map(prev);
+          const branch = next.get(branchId);
+          if (branch) next.set(branchId, { ...branch, lastSentUserMessage: trimmed, isWaitingForResponse: true });
+          return next;
+        });
+        sendMessage({ type: 'user_message', content: trimmed, branchId });
+      } else {
+        // Trunk: existing logic
+        sendMessage({ type: 'user_message', content: trimmed });
+        setIsWaitingForResponse(true);
+        setLastSentUserMessage(trimmed);
+      }
     },
     [sendMessage]
   );
@@ -806,45 +805,47 @@ export function useSessionWebSocket(
   }, [sendMessage]);
 
   /**
-   * T09: Enter a rabbit hole after the user opts in.
-   * Sends 'enter_rabbithole' to the server with the event ID and topic.
-   * Also clears the pending prompt immediately for responsive UI.
+   * Switch the active view to a branch. If the branch is still in 'detected' status,
+   * this sends an activate_branch message to the server to spin up the branch agent.
+   * If the branch is already active, this just switches the UI view.
    */
-  const enterRabbithole = useCallback(
-    (rabbitholeEventId: string, topic: string) => {
-      setRabbitholePrompt(null); // Clear prompt optimistically
-      // Optimistically switch to rabbit hole mode immediately so the UI theme
-      // shifts as soon as the user taps "Explore", not after the server confirms.
-      setIsInRabbithole(true);
-      setRabbitholeTopic(topic);
-      // Clear the current conversation so the user sees a clean loading state
-      // while the rabbit hole agent generates its opening message.
-      setLatestAssistantMessage('');
-      setStreamingContent('');
-      setLastSentUserMessage(null);
-      setIsWaitingForResponse(true);
-      sendMessage({ type: 'enter_rabbithole', rabbitholeEventId, topic });
-    },
-    [sendMessage]
-  );
+  const activateBranch = useCallback((branchId: string) => {
+    setActiveBranchId(branchId);
+    const branch = branchesRef.current.get(branchId);
+    if (branch?.status === 'detected') {
+      // First activation — tell server to create the branch agent
+      setBranches(prev => {
+        const next = new Map(prev);
+        const b = next.get(branchId);
+        if (b) next.set(branchId, { ...b, isWaitingForResponse: true, hasUnread: false });
+        return next;
+      });
+      wsRef.current?.send(JSON.stringify({ type: 'activate_branch', branchId }));
+    } else {
+      // Already active — just switch view and clear unread badge
+      setBranches(prev => {
+        const next = new Map(prev);
+        const b = next.get(branchId);
+        if (b) next.set(branchId, { ...b, hasUnread: false });
+        return next;
+      });
+    }
+  }, []);
 
   /**
-   * T09: Exit the current rabbit hole and return to the main session.
-   * Sends 'exit_rabbithole' to the server.
+   * Request the server to close a specific branch. The server will send back
+   * a branch_closed event which triggers cleanup in the handler above.
    */
-  const exitRabbithole = useCallback(() => {
-    sendMessage({ type: 'exit_rabbithole' });
-  }, [sendMessage]);
+  const closeBranch = useCallback((branchId: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'close_branch', branchId }));
+  }, []);
 
   /**
-   * T09: Decline the current rabbit hole prompt.
-   * Sends 'decline_rabbithole' to the server (sets 3-message cooldown)
-   * and clears the pending prompt from local state.
+   * Switch the active view back to the main trunk (no branch selected).
    */
-  const declineRabbithole = useCallback(() => {
-    setRabbitholePrompt(null); // Clear prompt immediately
-    sendMessage({ type: 'decline_rabbithole' });
-  }, [sendMessage]);
+  const switchToTrunk = useCallback(() => {
+    setActiveBranchId(null);
+  }, []);
 
   /**
    * T13: Dismiss the completion overlay and continue discussion.
@@ -883,17 +884,15 @@ export function useSessionWebSocket(
     latestAssistantMessage,
     lastSentUserMessage,
     isOpeningMessage,
-    // T09 rabbit hole mode fields
-    isInRabbithole,
-    rabbitholeTopic,
-    rabbitholePrompt,
-    enterRabbithole,
-    exitRabbithole,
-    declineRabbithole,
+    // Branch (tangent) state
+    activeBranchId,
+    branches,
+    branchSummaries,
+    activateBranch,
+    closeBranch,
+    switchToTrunk,
     // T13: Dismiss completion overlay
     dismissOverlay,
-    // T11 visual progress fields
-    rabbitholeLabels,
     // T2 recalled point labels
     recalledLabels,
   };
