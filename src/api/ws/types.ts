@@ -6,7 +6,7 @@
  *
  * 1. **User Input**: Messages from the client to the server
  * 2. **Streaming Responses**: LLM responses streamed as chunks
- * 3. **Session Events**: Recall events, rabbit hole transitions, completion
+ * 3. **Session Events**: Recall events, branch transitions, completion
  * 4. **Connection Management**: Ping/pong keepalive and error handling
  *
  * Protocol Flow:
@@ -61,6 +61,8 @@ export interface UserMessagePayload {
   type: 'user_message';
   /** The text content of the user's message */
   content: string;
+  /** Target branch ID; null/undefined = trunk */
+  branchId?: string;
 }
 
 /**
@@ -81,32 +83,18 @@ export interface PingPayload {
   type: 'ping';
 }
 
-/**
- * T09: Client opts into a detected rabbit hole by providing the event ID and topic.
- * The server will create a RabbitholeAgent and send back 'rabbithole_entered'.
- */
-export interface EnterRabbitholePayload {
-  type: 'enter_rabbithole';
-  /** The rabbithole event ID returned in the 'rabbithole_detected' server message */
-  rabbitholeEventId: string;
-  /** The topic of the rabbit hole to explore */
-  topic: string;
+/** Client activates a detected branch (first tab click) */
+export interface ActivateBranchPayload {
+  type: 'activate_branch';
+  /** The branch ID to activate */
+  branchId: string;
 }
 
-/**
- * T09: Client requests to exit the current rabbit hole and return to the session.
- * The server will persist the conversation and emit 'rabbithole_exited'.
- */
-export interface ExitRabbitholePayload {
-  type: 'exit_rabbithole';
-}
-
-/**
- * T09: Client declines the rabbit hole prompt.
- * The server will suppress future rabbit hole detections for 3 messages (cooldown).
- */
-export interface DeclineRabbitholePayload {
-  type: 'decline_rabbithole';
+/** Client explicitly closes a branch (marks as done) */
+export interface CloseBranchPayload {
+  type: 'close_branch';
+  /** The branch ID to close */
+  branchId: string;
 }
 
 /**
@@ -121,15 +109,14 @@ export interface DismissOverlayPayload {
  * Union type representing all possible messages from client to server.
  * Use this type when parsing incoming WebSocket messages.
  *
- * T13: Removed 'trigger_eval' (evaluation is continuous since T06).
+ * Replaced rabbithole messages with branch messages for multiplexed tab UX.
  */
 export type ClientMessage =
   | UserMessagePayload
   | LeaveSessionPayload
   | PingPayload
-  | EnterRabbitholePayload
-  | ExitRabbitholePayload
-  | DeclineRabbitholePayload
+  | ActivateBranchPayload
+  | CloseBranchPayload
   | DismissOverlayPayload;
 
 /**
@@ -140,9 +127,8 @@ export const CLIENT_MESSAGE_TYPES = [
   'user_message',
   'leave_session',
   'ping',
-  'enter_rabbithole',
-  'exit_rabbithole',
-  'decline_rabbithole',
+  'activate_branch',
+  'close_branch',
   'dismiss_overlay',
 ] as const;
 
@@ -183,6 +169,8 @@ export interface AssistantChunkPayload {
   content: string;
   /** Sequence number for this chunk (0-indexed) */
   chunkIndex: number;
+  /** Branch ID if streaming a branch response; undefined = trunk */
+  branchId?: string;
 }
 
 /**
@@ -196,6 +184,8 @@ export interface AssistantCompletePayload {
   fullContent: string;
   /** Total number of chunks that were sent */
   totalChunks: number;
+  /** Branch ID if completing a branch response; undefined = trunk */
+  branchId?: string;
 }
 
 /**
@@ -267,42 +257,46 @@ export interface SessionPausedPayload {
   totalPoints: number;
 }
 
-/**
- * T09: Sent when the rabbithole detector identifies a tangent in the conversation.
- * The client should show a prompt asking the user if they want to explore.
- * The user must explicitly opt in via 'enter_rabbithole' — never auto-enter.
- */
-export interface RabbitholeDetectedPayload {
-  type: 'rabbithole_detected';
+/** Sent when a tangent is detected — a new tab should appear in the branch bar */
+export interface BranchDetectedPayload {
+  type: 'branch_detected';
+  /** Unique branch ID */
+  branchId: string;
   /** The detected tangent topic */
   topic: string;
-  /** Stable event ID used when the client sends 'enter_rabbithole' or 'decline_rabbithole' */
-  rabbitholeEventId: string;
+  /** Parent branch ID if nested; undefined = branched from trunk */
+  parentBranchId?: string;
+  /** How far from the main topic (1 = off trunk, 2 = nested, etc.) */
+  depth: number;
 }
 
-/**
- * T09: Sent when the user has entered a rabbit hole (opted in via enter_rabbithole).
- * The main session is now frozen; all user messages route to the RabbitholeAgent.
- */
-export interface RabbitholeEnteredPayload {
-  type: 'rabbithole_entered';
+/** Confirms a branch agent is ready after the client sent activate_branch */
+export interface BranchActivatedPayload {
+  type: 'branch_activated';
+  /** The branch that was activated */
+  branchId: string;
   /** The topic being explored */
   topic: string;
 }
 
-/**
- * T09: Sent when the user exits a rabbit hole (via exit_rabbithole).
- * The main session resumes. If all points were recalled during the rabbit hole,
- * completionPending will be true and the session_complete_overlay fires next.
- */
-export interface RabbitholeExitedPayload {
-  type: 'rabbithole_exited';
-  /** Human-readable label for the rabbit hole that just ended */
-  label: string;
-  /** Number of recall points that were recalled WHILE in this rabbit hole */
-  pointsRecalledDuring: number;
-  /** True if all points were recalled during the rabbit hole — overlay fires next */
-  completionPending: boolean;
+/** Sent when a branch is closed (AI-detected conclusion or user-closed) */
+export interface BranchClosedPayload {
+  type: 'branch_closed';
+  /** The branch that was closed */
+  branchId: string;
+  /** Summary of the branch conversation */
+  summary: string;
+}
+
+/** Sent when a closed branch's summary is available for the parent context */
+export interface BranchSummaryInjectedPayload {
+  type: 'branch_summary_injected';
+  /** The branch whose summary was injected */
+  branchId: string;
+  /** The summary text */
+  summary: string;
+  /** The message ID in the parent where the branch forked */
+  branchPointMessageId: string;
 }
 
 /**
@@ -333,7 +327,7 @@ export interface PongPayload {
  * Union type representing all possible messages from server to client.
  * Use this type when constructing outgoing WebSocket messages.
  *
- * T13: Removed EvaluationResultPayload and PointTransitionPayload (deprecated).
+ * Replaced rabbithole payloads with branch payloads for multiplexed tab UX.
  */
 export type ServerMessage =
   | SessionStartedPayload
@@ -343,9 +337,10 @@ export type ServerMessage =
   | SessionCompletePayload
   | SessionCompleteOverlayPayload
   | SessionPausedPayload
-  | RabbitholeDetectedPayload
-  | RabbitholeEnteredPayload
-  | RabbitholeExitedPayload
+  | BranchDetectedPayload
+  | BranchActivatedPayload
+  | BranchClosedPayload
+  | BranchSummaryInjectedPayload
   | ErrorPayload
   | PongPayload;
 
@@ -459,25 +454,41 @@ export function parseClientMessage(
         recoverable: true,
       };
     }
-    return { type: 'user_message', content: message.content };
+    const msg = parsed as { branchId?: unknown };
+    const branchId = typeof msg.branchId === 'string' ? msg.branchId : undefined;
+    return { type: 'user_message', content: message.content, branchId };
   }
 
-  // T09: Validate enter_rabbithole — needs rabbitholeEventId and topic fields
-  if (message.type === 'enter_rabbithole') {
-    const msg = parsed as { type: unknown; rabbitholeEventId?: unknown; topic?: unknown };
-    if (typeof msg.rabbitholeEventId !== 'string' || typeof msg.topic !== 'string') {
+  // Validate activate_branch — needs branchId
+  if (message.type === 'activate_branch') {
+    const msg = parsed as { branchId?: unknown };
+    if (typeof msg.branchId !== 'string') {
       return {
         type: 'error',
         code: 'MISSING_CONTENT',
-        message: 'enter_rabbithole must include "rabbitholeEventId" and "topic" fields',
+        message: 'activate_branch must include a "branchId" field',
         recoverable: true,
       };
     }
-    return { type: 'enter_rabbithole', rabbitholeEventId: msg.rabbitholeEventId, topic: msg.topic };
+    return { type: 'activate_branch', branchId: msg.branchId };
   }
 
-  // For other message types (leave_session, exit_rabbithole, decline_rabbithole,
-  // dismiss_overlay, ping), return as-is — no additional fields required.
+  // Validate close_branch — needs branchId
+  if (message.type === 'close_branch') {
+    const msg = parsed as { branchId?: unknown };
+    if (typeof msg.branchId !== 'string') {
+      return {
+        type: 'error',
+        code: 'MISSING_CONTENT',
+        message: 'close_branch must include a "branchId" field',
+        recoverable: true,
+      };
+    }
+    return { type: 'close_branch', branchId: msg.branchId };
+  }
+
+  // For other message types (leave_session, dismiss_overlay, ping),
+  // return as-is — no additional fields required.
   return { type: message.type } as ClientMessage;
 }
 
