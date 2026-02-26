@@ -421,7 +421,7 @@ export interface SessionDetail {
     recallPointsFailed: number;
     avgConfidence: number;
     totalMessages: number;
-    rabbitholeCount: number;
+    branchCount: number;
     estimatedCostUsd: number;
   } | null;
 }
@@ -443,11 +443,12 @@ export interface EvaluationMarker {
 }
 
 /**
- * Rabbithole (tangent) marker for a transcript message.
+ * Branch (tangent) marker for a transcript message.
+ * Renamed from RabbitholeMarker to align with the branch model.
  */
-export interface RabbitholeMarker {
-  /** Event identifier */
-  eventId: string;
+export interface BranchMarker {
+  /** Branch identifier */
+  branchId: string;
   /** Topic of the tangent */
   topic: string;
   /** Whether this message triggered the tangent */
@@ -456,6 +457,10 @@ export interface RabbitholeMarker {
   isReturn: boolean;
   /** Depth of the tangent */
   depth: number;
+  /** Resolution status of the branch */
+  status?: 'closed' | 'abandoned';
+  /** Summary generated when the branch was closed */
+  summary?: string | null;
 }
 
 /**
@@ -476,8 +481,8 @@ export interface TranscriptMessage {
   messageIndex: number;
   /** Evaluation marker if part of a recall evaluation */
   evaluationMarker?: EvaluationMarker | null;
-  /** Rabbithole marker if part of a tangent */
-  rabbitholeMarker?: RabbitholeMarker | null;
+  /** Branch marker if part of a tangent */
+  branchMarker?: BranchMarker | null;
 }
 
 /**

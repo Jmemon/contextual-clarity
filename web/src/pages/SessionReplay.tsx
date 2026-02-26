@@ -5,7 +5,7 @@
  * - Session summary with key statistics
  * - Complete conversation transcript with AI
  * - Evaluation markers showing recall results
- * - Rabbithole markers for tangent conversations
+ * - Branch markers for tangent conversations
  * - Auto-scroll option for navigating the transcript
  *
  * Uses React Query hooks to fetch session data and transcript.
@@ -21,7 +21,7 @@ import { Card, CardBody } from '@/components/ui/Card';
 import {
   SessionSummary,
   TranscriptMessage,
-  RabbitholeMarker,
+  BranchMarker,
 } from '@/components/session-replay';
 import type { TranscriptMessage as TranscriptMessageType } from '@/types/api';
 
@@ -78,7 +78,7 @@ function buildRecallPointContentMap(messages: TranscriptMessageType[]): RecallPo
  * - Fetches session data and transcript using React Query hooks
  * - Displays session summary with key statistics
  * - Renders full conversation transcript with role-based styling
- * - Shows evaluation and rabbithole markers at correct positions
+ * - Shows evaluation and branch markers at correct positions
  * - Supports auto-scroll to bottom of transcript
  * - Handles loading and error states gracefully
  */
@@ -228,10 +228,10 @@ export function SessionReplay() {
   const { session, metrics } = sessionData;
   const messages = transcriptData?.messages ?? [];
 
-  // Find any active rabbithole at the end (for display purposes)
-  const activeRabbithole = messages
-    .filter((m) => m.rabbitholeMarker?.isTrigger && !m.rabbitholeMarker?.isReturn)
-    .pop()?.rabbitholeMarker;
+  // Find any active branch at the end (for display purposes)
+  const activeBranch = messages
+    .filter((m) => m.branchMarker?.isTrigger && !m.branchMarker?.isReturn)
+    .pop()?.branchMarker;
 
   // ============================================================================
   // Render Main Content
@@ -291,7 +291,7 @@ export function SessionReplay() {
                 recallPointsFailed: metrics.recallPointsFailed,
                 avgConfidence: metrics.avgConfidence,
                 totalMessages: metrics.totalMessages,
-                rabbitholeCount: metrics.rabbitholeCount,
+                branchCount: metrics.branchCount,
               }
             : null
         }
@@ -316,12 +316,12 @@ export function SessionReplay() {
           </label>
         </div>
 
-        {/* Active rabbithole indicator (if currently in a tangent) */}
-        {activeRabbithole && (
+        {/* Active branch indicator (if currently in a tangent) */}
+        {activeBranch && (
           <div className="mb-4 flex justify-center">
-            <RabbitholeMarker
-              topic={activeRabbithole.topic}
-              depth={activeRabbithole.depth}
+            <BranchMarker
+              topic={activeBranch.topic}
+              depth={activeBranch.depth}
               isReturn={false}
             />
           </div>

@@ -52,8 +52,8 @@ export interface SessionMetrics {
   avgConfidence?: number;
   /** Total messages in transcript */
   totalMessages?: number;
-  /** Number of rabbithole/tangent events */
-  rabbitholeCount?: number;
+  /** Number of branch/tangent events */
+  branchCount?: number;
 }
 
 export interface SessionSummaryProps {
@@ -269,12 +269,12 @@ export function SessionSummary({
                 </div>
               )}
 
-              {/* Rabbitholes (if available) */}
-              {metrics.rabbitholeCount !== undefined && metrics.rabbitholeCount > 0 && (
+              {/* Branches (if available) */}
+              {metrics.branchCount !== undefined && metrics.branchCount > 0 && (
                 <div>
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Tangents</p>
                   <p className="text-base font-semibold text-orange-400">
-                    {metrics.rabbitholeCount}
+                    {metrics.branchCount}
                   </p>
                 </div>
               )}

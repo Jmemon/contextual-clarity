@@ -1,19 +1,21 @@
 /**
- * RabbitholeMarker Component
+ * BranchMarker Component
  *
  * Displays a visual indicator when the conversation went on a tangent
- * (a "rabbithole"). These markers help users understand when they or
+ * (a "branch"). These markers help users understand when they or
  * the AI diverged from the main study topic.
  *
  * Visual design:
- * - Uses a distinct style to stand out from regular messages
+ * - Uses neutral slate styling to stand out from regular messages
  * - Shows the topic of the tangent
  * - Indicates depth level for nested tangents
  * - Different styling for entering vs returning from tangent
  *
+ * Renamed from RabbitholeMarker to align with the branch model.
+ *
  * @example
  * ```tsx
- * <RabbitholeMarker
+ * <BranchMarker
  *   topic="History of the French Revolution"
  *   depth={1}
  *   isReturn={false}
@@ -25,7 +27,7 @@
 // Types
 // ============================================================================
 
-export interface RabbitholeMarkerProps {
+export interface BranchMarkerProps {
   /** The topic or subject of the tangent */
   topic: string;
   /** How deep the tangent is (1 = first level, 2 = tangent within tangent, etc.) */
@@ -35,24 +37,24 @@ export interface RabbitholeMarkerProps {
 }
 
 // ============================================================================
-// RabbitholeMarker Component
+// BranchMarker Component
 // ============================================================================
 
 /**
- * Renders a visual marker indicating a conversational tangent (rabbithole).
+ * Renders a visual marker indicating a conversational tangent (branch).
  *
  * The marker appears centered in the transcript to distinguish it from
  * regular messages. It shows:
- * - A rabbit emoji icon (for visual recognition)
- * - The direction (entering or returning from tangent)
+ * - An arrow icon for direction (entering or returning)
+ * - The direction label (entering or returning from tangent)
  * - The topic of the tangent
  * - The depth level if nested
  */
-export function RabbitholeMarker({
+export function BranchMarker({
   topic,
   depth,
   isReturn = false,
-}: RabbitholeMarkerProps) {
+}: BranchMarkerProps) {
   return (
     <div
       className={`
@@ -63,12 +65,12 @@ export function RabbitholeMarker({
         border
         ${
           isReturn
-            ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
-            : 'bg-orange-500/10 border-orange-500/30 text-orange-400'
+            ? 'bg-slate-500/10 border-slate-500/30 text-slate-400'
+            : 'bg-slate-600/10 border-slate-500/30 text-slate-300'
         }
       `}
     >
-      {/* Rabbithole icon - using a down/up arrow to indicate direction */}
+      {/* Branch direction icon - using a down/up arrow to indicate direction */}
       <span className="flex-shrink-0" aria-hidden="true">
         {isReturn ? '\u2191' : '\u2193'} {/* Up or Down arrow */}
       </span>
@@ -90,7 +92,7 @@ export function RabbitholeMarker({
             px-1.5 py-0.5
             text-xs
             rounded
-            ${isReturn ? 'bg-purple-500/20 text-purple-300' : 'bg-orange-500/20 text-orange-300'}
+            ${isReturn ? 'bg-slate-500/20 text-slate-400' : 'bg-slate-600/20 text-slate-300'}
           `}
           title={`Depth level ${depth}`}
         >
@@ -101,4 +103,4 @@ export function RabbitholeMarker({
   );
 }
 
-export default RabbitholeMarker;
+export default BranchMarker;

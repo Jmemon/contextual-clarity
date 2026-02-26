@@ -8,7 +8,7 @@
  * Features:
  * - Role-based styling (user/assistant/system)
  * - Timestamp display for each message
- * - Support for evaluation and rabbithole markers
+ * - Support for evaluation and branch markers
  * - Responsive layout that adapts to message content
  *
  * @example
@@ -22,7 +22,7 @@
 
 import type { TranscriptMessage as TranscriptMessageType } from '@/types/api';
 import { EvaluationMarker } from './EvaluationMarker';
-import { RabbitholeMarker } from './RabbitholeMarker';
+import { BranchMarker } from './BranchMarker';
 
 // ============================================================================
 // Types
@@ -115,9 +115,9 @@ export function TranscriptMessage({
   const showEvaluationMarker =
     message.evaluationMarker?.isEnd && message.evaluationMarker.success !== undefined;
 
-  // Determine if we should show the rabbithole marker
+  // Determine if we should show the branch marker
   // Show at the trigger point of a tangent
-  const showRabbitholeMarker = message.rabbitholeMarker?.isTrigger;
+  const showBranchMarker = message.branchMarker?.isTrigger;
 
   return (
     <div className="mb-4">
@@ -159,13 +159,13 @@ export function TranscriptMessage({
         </div>
       )}
 
-      {/* Rabbithole marker - shown when tangent is triggered */}
-      {showRabbitholeMarker && message.rabbitholeMarker && (
+      {/* Branch marker - shown when tangent is triggered */}
+      {showBranchMarker && message.branchMarker && (
         <div className="mt-2 flex justify-center">
-          <RabbitholeMarker
-            topic={message.rabbitholeMarker.topic}
-            depth={message.rabbitholeMarker.depth}
-            isReturn={message.rabbitholeMarker.isReturn}
+          <BranchMarker
+            topic={message.branchMarker.topic}
+            depth={message.branchMarker.depth}
+            isReturn={message.branchMarker.isReturn}
           />
         </div>
       )}

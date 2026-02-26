@@ -5,7 +5,7 @@
  * Components are designed to display past study sessions with:
  * - Full conversation transcripts
  * - Evaluation markers showing recall results
- * - Rabbithole markers indicating tangent conversations
+ * - Branch markers indicating tangent conversations
  * - Session summary statistics
  *
  * @example
@@ -14,7 +14,7 @@
  *   SessionSummary,
  *   TranscriptMessage,
  *   EvaluationMarker,
- *   RabbitholeMarker,
+ *   BranchMarker,
  * } from '@/components/session-replay';
  * ```
  */
@@ -27,9 +27,9 @@ export type { TranscriptMessageProps } from './TranscriptMessage';
 export { EvaluationMarker } from './EvaluationMarker';
 export type { EvaluationMarkerProps, EvaluationOutcome } from './EvaluationMarker';
 
-// Rabbithole marker for indicating conversational tangents
-export { RabbitholeMarker } from './RabbitholeMarker';
-export type { RabbitholeMarkerProps } from './RabbitholeMarker';
+// Branch marker for indicating conversational tangents
+export { BranchMarker } from './BranchMarker';
+export type { BranchMarkerProps } from './BranchMarker';
 
 // Session summary card for displaying key statistics
 export { SessionSummary } from './SessionSummary';

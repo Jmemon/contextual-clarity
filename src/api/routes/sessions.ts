@@ -26,7 +26,7 @@ import {
   RecallSetRepository,
   RecallPointRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
+  BranchRepository,
 } from '@/storage/repositories';
 import { success, notFound, badRequest, internalError } from '../utils/response';
 
@@ -124,13 +124,13 @@ interface SessionDetailResponse {
     recallPointsFailed: number;
     avgConfidence: number;
     totalMessages: number;
-    rabbitholeCount: number;
+    branchCount: number;
     estimatedCostUsd: number;
   } | null;
 }
 
 /**
- * Transcript message with evaluation and rabbithole markers.
+ * Transcript message with evaluation and branch markers.
  */
 interface TranscriptMessage {
   /** Message ID */
@@ -153,9 +153,9 @@ interface TranscriptMessage {
     success?: boolean;
     confidence?: number;
   } | null;
-  /** Rabbithole marker if this message is part of a tangent */
-  rabbitholeMarker?: {
-    eventId: string;
+  /** Branch marker if this message is part of a tangent */
+  branchMarker?: {
+    branchId: string;
     topic: string;
     isTrigger: boolean;
     isReturn: boolean;
@@ -169,7 +169,7 @@ interface TranscriptMessage {
 interface TranscriptResponse {
   /** Session ID */
   sessionId: string;
-  /** Array of messages with evaluation and rabbithole markers */
+  /** Array of messages with evaluation and branch markers */
   messages: TranscriptMessage[];
   /** Total message count */
   totalMessages: number;
@@ -194,7 +194,7 @@ const sessionMetricsRepo = new SessionMetricsRepository(db);
 const recallSetRepo = new RecallSetRepository(db);
 const recallPointRepo = new RecallPointRepository(db);
 const recallOutcomeRepo = new RecallOutcomeRepository(db);
-const rabbitholeRepo = new RabbitholeEventRepository(db);
+const branchRepo = new BranchRepository(db);
 
 // ============================================================================
 // Helper Functions
@@ -381,7 +381,7 @@ export function sessionsRoutes(): Hono {
               recallPointsFailed: metrics.recallPointsFailed,
               avgConfidence: metrics.avgConfidence,
               totalMessages: metrics.totalMessages,
-              rabbitholeCount: metrics.rabbitholeCount,
+              branchCount: metrics.rabbitholeCount,
               estimatedCostUsd: metrics.estimatedCostUsd,
             }
           : null,
@@ -419,8 +419,8 @@ export function sessionsRoutes(): Hono {
       // Fetch recall outcomes to create evaluation markers
       const recallOutcomes = await recallOutcomeRepo.findBySessionId(id);
 
-      // Fetch rabbithole events to create rabbithole markers
-      const rabbitholeEvents = await rabbitholeRepo.findBySessionId(id);
+      // Fetch branch events to create branch markers
+      const branchEvents = await branchRepo.findBySessionId(id);
 
       // Build transcript messages with markers
       const transcriptMessages: TranscriptMessage[] = messages.map((msg, index) => {
@@ -442,17 +442,18 @@ export function sessionsRoutes(): Hono {
           }
         }
 
-        // Check if this message is part of a rabbithole tangent
-        let rabbitholeMarker: TranscriptMessage['rabbitholeMarker'] = null;
-        for (const event of rabbitholeEvents) {
-          const returnIndex = event.returnMessageIndex ?? Infinity;
-          if (index >= event.triggerMessageIndex && index <= returnIndex) {
-            rabbitholeMarker = {
-              eventId: event.id,
-              topic: event.topic,
-              isTrigger: index === event.triggerMessageIndex,
-              isReturn: event.returnMessageIndex !== null && index === event.returnMessageIndex,
-              depth: event.depth,
+        // Check if this message is associated with a branch tangent.
+        // The branches table uses branchPointMessageId to link to the fork point.
+        // We match the branch to the message that triggered it.
+        let branchMarker: TranscriptMessage['branchMarker'] = null;
+        for (const branch of branchEvents) {
+          if (branch.branchPointMessageId === msg.id) {
+            branchMarker = {
+              branchId: branch.id,
+              topic: branch.topic,
+              isTrigger: true,
+              isReturn: false,
+              depth: branch.depth,
             };
             break;
           }
@@ -466,7 +467,7 @@ export function sessionsRoutes(): Hono {
           tokenCount: msg.tokenCount,
           messageIndex: index,
           evaluationMarker,
-          rabbitholeMarker,
+          branchMarker,
         };
       });
 
@@ -588,7 +589,7 @@ export function sessionsRoutes(): Hono {
 
   /**
    * Abandons an in-progress session, marking it as abandoned and
-   * recording the end time. Any active rabbithole events are also
+   * recording the end time. Any active branch events are also
    * marked as abandoned.
    *
    * This endpoint should be called when a user explicitly leaves
@@ -609,8 +610,8 @@ export function sessionsRoutes(): Hono {
         return badRequest(c, `Cannot abandon session: session is already ${session.status}`);
       }
 
-      // Mark any active rabbitholes as abandoned
-      await rabbitholeRepo.markActiveAsAbandoned(id);
+      // Mark any active branches as abandoned
+      await branchRepo.markActiveAsAbandoned(id);
 
       // Abandon the session
       await sessionRepo.abandon(id);
