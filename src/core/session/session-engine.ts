@@ -88,9 +88,10 @@ import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
 import type {
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
 } from '../../storage/repositories';
-import { RabbitholeAgent } from './rabbithole-agent';
+import type { BranchRepository } from '../../storage/repositories';
+import { BranchAgent } from './branch-agent';
+import { buildBranchContext, buildTrunkContext } from './context-builder';
 
 /**
  * Generates a unique ID with a prefix.
@@ -167,8 +168,8 @@ export class SessionEngine {
   /** Repository for persisting individual recall outcomes */
   private recallOutcomeRepo: RecallOutcomeRepository | null = null;
 
-  /** Repository for persisting rabbithole events */
-  private rabbitholeRepo: RabbitholeEventRepository | null = null;
+  /** Repository for persisting branch records */
+  private branchRepo: BranchRepository | null = null;
 
   // === Configuration ===
 
@@ -221,51 +222,20 @@ export class SessionEngine {
   private currentModel: string = 'claude-3-5-sonnet-20241022';
 
   // ============================================================================
-  // T09: Rabbit Hole UX Mode State
+  // Multi-Branch State
   // ============================================================================
 
   /**
-   * T09: Current session mode.
-   * 'recall' = normal Socratic tutoring mode
-   * 'rabbithole' = user is exploring a tangent with the RabbitholeAgent
+   * Map of active branch agents, keyed by branchId.
+   * Multiple branches can be active concurrently, each with its own agent.
    */
-  private currentMode: 'recall' | 'rabbithole' = 'recall';
+  private branchAgents: Map<string, BranchAgent> = new Map();
 
   /**
-   * T09: The active RabbitholeAgent instance, or null if not in a rabbit hole.
-   * Each rabbit hole gets its own dedicated agent instance with its own LLM client.
+   * Per-branch points recalled count for metrics.
+   * Tracks how many recall points were recalled while each branch was active.
    */
-  private activeRabbitholeAgent: RabbitholeAgent | null = null;
-
-  /**
-   * T09: The rabbithole event ID currently being explored, or null if not in a rabbit hole.
-   * Used to persist the conversation to the correct DB record on exit.
-   */
-  private activeRabbitholeEventId: string | null = null;
-
-  /**
-   * T09: The topic being explored in the current rabbit hole, or null if not active.
-   */
-  private activeRabbitholeTopic: string | null = null;
-
-  /**
-   * T09: Number of recall points that were recalled WHILE in the current rabbit hole.
-   * Reported in the rabbithole_exited event payload.
-   */
-  private rabbitholePointsRecalled: number = 0;
-
-  /**
-   * T09: Flag set to true when all points are recalled while inside a rabbit hole.
-   * Mirrors completionPending semantics — the overlay fires when the rabbit hole exits.
-   */
-  private completionPendingAfterRabbithole: boolean = false;
-
-  /**
-   * T09: Cooldown counter for rabbit hole detection.
-   * Set to 3 when the user declines a rabbit hole; decremented on each user message.
-   * While > 0, detectAndRecordRabbithole() is suppressed.
-   */
-  private rabbitholeDeclineCooldown: number = 0;
+  private branchPointsRecalled: Map<string, number> = new Map();
 
   /**
    * Creates a new SessionEngine instance.
@@ -305,8 +275,8 @@ export class SessionEngine {
       this.metricsCollector = deps.metricsCollector;
       this.metricsEnabled = true;
     }
-    if (deps.rabbitholeDetector) {
-      this.rabbitholeDetector = deps.rabbitholeDetector;
+    if (deps.branchDetector) {
+      this.rabbitholeDetector = deps.branchDetector;
     }
     if (deps.metricsRepo) {
       this.metricsRepo = deps.metricsRepo;
@@ -314,8 +284,8 @@ export class SessionEngine {
     if (deps.recallOutcomeRepo) {
       this.recallOutcomeRepo = deps.recallOutcomeRepo;
     }
-    if (deps.rabbitholeRepo) {
-      this.rabbitholeRepo = deps.rabbitholeRepo;
+    if (deps.branchRepo) {
+      this.branchRepo = deps.branchRepo;
     }
 
     // Merge provided config with defaults
@@ -598,13 +568,12 @@ export class SessionEngine {
    * @returns Result containing the response and session status
    * @throws Error if no session is active
    */
-  async processUserMessage(content: string): Promise<ProcessMessageResult> {
+  async processUserMessage(content: string, branchId?: string): Promise<ProcessMessageResult> {
     this.validateActiveSession();
 
-    // T09: If the user is currently in a rabbit hole, route to the dedicated agent.
-    // The main session (Socratic tutor) is frozen while in rabbit hole mode.
-    if (this.currentMode === 'rabbithole') {
-      return this.processRabbitholeMessage(content);
+    // If a branchId is provided, route to the dedicated branch agent
+    if (branchId) {
+      return this.processBranchMessage(branchId, content);
     }
 
     // Save the user message
@@ -802,9 +771,6 @@ export class SessionEngine {
    * The session is only finalized when the user clicks "Done" (which sends leave_session)
    * or when finalizeSession() is called explicitly.
    *
-   * Edge case: if the user is currently in a rabbit hole, set completionPending = true
-   * and defer the overlay until exitRabbithole() is called.
-   *
    * @param evalResult - The evaluation result from the last evaluateUncheckedPoints() call
    * @returns ProcessMessageResult with a continuation response (not marked completed yet)
    */
@@ -812,20 +778,15 @@ export class SessionEngine {
     const recalledCount = this.getRecalledCount();
     const totalPoints = this.targetPoints.length;
 
-    if (this.isInRabbitHole()) {
-      // Defer the overlay until the rabbit hole exits via exitRabbithole()
-      // (completionPendingAfterRabbithole is set in processRabbitholeMessage)
-    } else {
-      // Emit the overlay event — frontend will show completion overlay
-      this.emitEvent({
-        type: 'session_complete_overlay',
-        sessionId: this.currentSession!.id,
-        recalledCount,
-        totalPoints,
-        message: "You've covered everything!",
-        canContinue: true,
-      });
-    }
+    // Emit the overlay event — frontend will show completion overlay
+    this.emitEvent({
+      type: 'session_complete_overlay',
+      sessionId: this.currentSession!.id,
+      recalledCount,
+      totalPoints,
+      message: "You've covered everything!",
+      canContinue: true,
+    });
 
     // Generate a brief continuation response — the user can still keep talking
     const response = await this.generateTutorResponse(evalResult.feedback || undefined);
@@ -839,190 +800,187 @@ export class SessionEngine {
     };
   }
 
-  /**
-   * T09: Returns true if the user is currently inside a rabbit hole tangent.
-   * Replaces the T08 stub — now checks the actual mode state.
-   */
-  private isInRabbitHole(): boolean {
-    return this.currentMode === 'rabbithole';
-  }
-
   // ============================================================================
-  // T09: Rabbit Hole UX Mode Methods
+  // Multi-Branch Methods
   // ============================================================================
 
   /**
-   * T09: Enters a rabbit hole for the given topic.
+   * Activates a branch by creating a dedicated BranchAgent with frozen parent context.
    *
-   * Called when the user opts in after a 'rabbithole_detected' event.
-   * Creates a dedicated RabbitholeAgent with its own AnthropicClient,
-   * switches mode to 'rabbithole', and emits 'rabbithole_entered'.
+   * Called when the user engages with a detected branch tab. Loads the branch
+   * record and all sibling branches from the DB, builds the parent context
+   * snapshot using the context builder, creates a BranchAgent, and generates
+   * the opening message.
    *
-   * @param topic - The tangent topic to explore
-   * @param eventId - The rabbithole event ID from the detection (for DB tracking)
+   * @param branchId - The ID of the branch to activate
    * @returns The agent's opening message to display to the user
-   * @throws Error if no session is active
+   * @throws Error if the branch already has an active agent, or the branch is not found
    */
-  async enterRabbithole(topic: string, eventId: string): Promise<string> {
+  async activateBranch(branchId: string): Promise<string> {
     this.validateActiveSession();
 
-    if (this.currentMode === 'rabbithole') {
-      throw new Error('Already in a rabbit hole — sequential only, not nested');
+    if (this.branchAgents.has(branchId)) {
+      throw new Error(`Branch ${branchId} already has an active agent`);
     }
 
-    // Switch mode before creating the agent
-    this.currentMode = 'rabbithole';
-    this.activeRabbitholeEventId = eventId;
-    this.activeRabbitholeTopic = topic;
-    this.rabbitholePointsRecalled = 0;
+    // Load branch record from DB
+    const branch = await this.branchRepo?.findById(branchId);
+    if (!branch) throw new Error(`Branch ${branchId} not found`);
 
-    // Create the dedicated agent with a fresh AnthropicClient
-    this.activeRabbitholeAgent = new RabbitholeAgent({
-      topic,
+    // Load all branches for this session (needed for context building)
+    const allBranches = await this.branchRepo!.findBySessionId(this.currentSession!.id);
+
+    // Build frozen parent context using the context builder.
+    // This walks up the ancestry chain from the target branch to the trunk,
+    // giving the agent full awareness of the conversation that led here.
+    const parentContext = buildBranchContext(
+      {
+        id: branch.id,
+        parentBranchId: branch.parentBranchId,
+        branchPointMessageId: branch.branchPointMessageId,
+        conversation: branch.conversation as Array<{ id?: string; role: string; content: string }> | null,
+      },
+      allBranches.map(b => ({
+        id: b.id,
+        parentBranchId: b.parentBranchId,
+        branchPointMessageId: b.branchPointMessageId,
+        conversation: b.conversation as Array<{ id?: string; role: string; content: string }> | null,
+      })),
+      this.messages // trunk messages
+    );
+
+    // Create agent with frozen parent context snapshot
+    const agent = new BranchAgent({
+      topic: branch.topic,
       recallSetName: this.currentRecallSet!.name,
       recallSetDescription: this.currentRecallSet!.description,
+      parentContext: parentContext.map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
     });
 
-    // Emit the entered event BEFORE generating the opening message
-    this.emitEvent({ type: 'rabbithole_entered', topic });
+    this.branchAgents.set(branchId, agent);
+    this.branchPointsRecalled.set(branchId, 0);
 
-    // Generate and return the opening message from the agent
-    const openingMessage = await this.activeRabbitholeAgent.generateOpeningMessage();
+    // Update status to active in DB
+    await this.branchRepo!.activate(branchId);
 
+    this.emitEvent({ type: 'branch_activated', branchId, topic: branch.topic });
+
+    // Generate and return opening message from the branch agent
+    const openingMessage = await agent.generateOpeningMessage();
     return openingMessage;
   }
 
   /**
-   * T09: Exits the current rabbit hole and returns to the main recall session.
+   * Closes a branch, persists its conversation, generates a summary, and cleans up.
    *
-   * Stores the full conversation to the DB, resets rabbit hole state,
-   * switches mode back to 'recall', and emits 'rabbithole_exited'.
+   * Saves the full conversation to the DB, generates an LLM summary of what was
+   * explored, closes the branch record, destroys the agent, and emits events
+   * for the UI (branch_closed + branch_summary_injected at the fork point).
    *
-   * If all points were recalled during the rabbit hole (completionPendingAfterRabbithole),
-   * the session_complete_overlay event is fired immediately after exiting.
-   *
-   * @throws Error if not currently in a rabbit hole
+   * @param branchId - The ID of the branch to close
+   * @returns The generated summary string
+   * @throws Error if no active agent exists for the branch
    */
-  async exitRabbithole(): Promise<void> {
-    if (this.currentMode !== 'rabbithole' || !this.activeRabbitholeAgent) {
-      throw new Error('Not currently in a rabbit hole');
-    }
+  async closeBranch(branchId: string): Promise<string> {
+    const agent = this.branchAgents.get(branchId);
+    if (!agent) throw new Error(`No active agent for branch ${branchId}`);
 
-    const topic = this.activeRabbitholeTopic ?? 'Unknown topic';
-    const eventId = this.activeRabbitholeEventId;
-    const pointsRecalledDuring = this.rabbitholePointsRecalled;
-    const completionPending = this.completionPendingAfterRabbithole;
+    // Persist conversation to DB before destroying the agent
+    const conversation = agent.getConversationHistory();
+    await this.branchRepo?.updateConversation(branchId, conversation);
 
-    // Persist conversation to DB before clearing state
-    if (this.rabbitholeRepo && eventId) {
-      const conversation = this.activeRabbitholeAgent.getConversationHistory();
-      await this.rabbitholeRepo.updateConversation(eventId, conversation);
+    // Generate a concise LLM summary of what was explored in the branch
+    const summary = await this.generateBranchSummary(conversation, agent.getTopic());
 
-      // Update status to 'returned' since the user exited intentionally
-      await this.rabbitholeRepo.update(eventId, {
-        returnMessageIndex: this.messages.length - 1,
-        status: 'returned',
-      });
-    }
+    // Close in DB with summary
+    await this.branchRepo?.close(branchId, summary);
 
-    // Reset rabbit hole state
-    this.currentMode = 'recall';
-    this.activeRabbitholeAgent = null;
-    this.activeRabbitholeEventId = null;
-    this.activeRabbitholeTopic = null;
-    this.rabbitholePointsRecalled = 0;
-    this.completionPendingAfterRabbithole = false;
-    // FIX 6: Reset cooldown — the user explicitly returned to normal session flow,
-    // so rabbit hole detection should be re-enabled immediately.
-    this.rabbitholeDeclineCooldown = 0;
+    // Destroy agent and metrics tracking
+    this.branchAgents.delete(branchId);
+    this.branchPointsRecalled.delete(branchId);
 
-    // Emit exited event
-    this.emitEvent({
-      type: 'rabbithole_exited',
-      label: topic,
-      pointsRecalledDuring,
-      completionPending,
-    });
+    this.emitEvent({ type: 'branch_closed', branchId, summary });
 
-    // T09/T08: If all points were recalled during the rabbit hole,
-    // now that we've exited, fire the deferred completion overlay.
-    if (completionPending && this.currentSession) {
+    // Emit summary injection event so the UI can display the summary at the branch point
+    const branch = await this.branchRepo?.findById(branchId);
+    if (branch) {
       this.emitEvent({
-        type: 'session_complete_overlay',
-        sessionId: this.currentSession.id,
-        recalledCount: this.getRecalledCount(),
-        totalPoints: this.targetPoints.length,
-        message: "You've covered everything!",
-        canContinue: true,
+        type: 'branch_summary_injected',
+        branchId,
+        summary,
+        branchPointMessageId: branch.branchPointMessageId,
       });
     }
+
+    return summary;
   }
 
   /**
-   * T09: Processes a user message while in rabbit hole mode.
+   * Generates a concise summary of a branch conversation via the LLM.
    *
-   * Routes the message to the RabbitholeAgent instead of the Socratic tutor.
-   * The continuous evaluator still runs silently — it can still mark points as
-   * recalled, but provides no steering feedback to the user.
+   * @param conversation - The branch conversation messages
+   * @param topic - The branch topic for context
+   * @returns A 1-2 sentence summary of what was explored
+   */
+  private async generateBranchSummary(
+    conversation: Array<{ role: string; content: string }>,
+    topic: string
+  ): Promise<string> {
+    const summaryPrompt = `Summarize this tangent exploration about "${topic}" in 1-2 sentences. Focus on what was clarified, discovered, or changed. Be concise unless something directly relevant to the main session was discussed.\n\nConversation:\n${conversation.map(m => `${m.role}: ${m.content}`).join('\n')}`;
+
+    const response = await this.llmClient.complete(summaryPrompt, {
+      temperature: 0.3,
+      maxTokens: 128,
+    });
+
+    return response.text;
+  }
+
+  /**
+   * Processes a user message within a specific branch.
    *
-   * NOTE: Messages in rabbit hole mode are NOT saved to the main session message
-   * store (this.messages / DB session_messages table). The rabbit hole has its own
-   * conversation history in the RabbitholeAgent.
+   * Routes the message to the branch's dedicated BranchAgent. The continuous
+   * evaluator still runs silently — recall points can be marked during branch
+   * exploration, just without steering feedback.
    *
+   * @param branchId - The ID of the branch to send the message to
    * @param content - The user's message content
    * @returns Result containing the agent's response and session status
+   * @throws Error if no active agent exists for the branch
    */
-  private async processRabbitholeMessage(content: string): Promise<ProcessMessageResult> {
-    if (!this.activeRabbitholeAgent) {
-      throw new Error('No active rabbit hole agent');
-    }
+  private async processBranchMessage(branchId: string, content: string): Promise<ProcessMessageResult> {
+    const agent = this.branchAgents.get(branchId);
+    if (!agent) throw new Error(`No active agent for branch ${branchId}`);
 
-    // Run the evaluator silently — can still mark points as recalled
-    // even during rabbit holes (T06 continuous evaluation continues)
+    // Run evaluator silently — can still mark points recalled during branches
     const evalResult = await this.evaluateUncheckedPoints();
 
-    // Count points recalled during this rabbit hole
-    this.rabbitholePointsRecalled += evalResult.recalledPointIds.length;
+    const currentCount = this.branchPointsRecalled.get(branchId) ?? 0;
+    this.branchPointsRecalled.set(branchId, currentCount + evalResult.recalledPointIds.length);
 
-    // Mark each recalled point and record FSRS outcome
     for (const pointId of evalResult.recalledPointIds) {
       this.markPointRecalled(pointId);
       const confidence = evalResult.confidencePerPoint.get(pointId) ?? 0.5;
       await this.recordRecallOutcome(pointId, {
         success: true,
         confidence,
-        reasoning: `Recalled during rabbit hole exploration (confidence: ${confidence})`,
+        reasoning: `Recalled during branch exploration (confidence: ${confidence})`,
       });
     }
 
-    // If all points are recalled while in a rabbit hole, defer the overlay.
-    // exitRabbithole() reads completionPendingAfterRabbithole to decide whether
-    // to fire session_complete_overlay once the user exits.
-    if (this.allPointsRecalled() && !this.completionPendingAfterRabbithole) {
-      this.completionPendingAfterRabbithole = true;
-    }
-
-    // Route to the RabbitholeAgent for the actual response
-    // The evaluator feedback is NOT injected here — the agent has its own persona
-    const response = await this.activeRabbitholeAgent.generateResponse(content);
+    // Route to the BranchAgent for the actual response
+    const response = await agent.generateResponse(content);
 
     return {
       response,
-      completed: false, // Session never completes while in a rabbit hole
+      completed: false,
       recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
       pointsRecalledThisTurn: evalResult.recalledPointIds,
     };
-  }
-
-  /**
-   * T09: Declines the current rabbit hole prompt.
-   *
-   * Sets a cooldown of 3 messages during which detection is suppressed,
-   * preventing rapid repeated prompts after the user says no.
-   */
-  declineRabbithole(): void {
-    this.rabbitholeDeclineCooldown = 3;
   }
 
   /**
@@ -1407,6 +1365,12 @@ export class SessionEngine {
   private async completeSession(): Promise<void> {
     await this.sessionRepo.complete(this.currentSession!.id);
 
+    // Mark all active/detected branches as abandoned on session end
+    await this.branchRepo?.markActiveAsAbandoned(this.currentSession!.id);
+    // Destroy all branch agents
+    this.branchAgents.clear();
+    this.branchPointsRecalled.clear();
+
     // === Phase 2: Finalize and persist session metrics ===
     await this.finalizeAndPersistMetrics();
 
@@ -1420,7 +1384,7 @@ export class SessionEngine {
         successfulRecalls: this.getRecalledCount(),
         recallRate: this.targetPoints.length > 0 ? this.getRecalledCount() / this.targetPoints.length : 1.0,
         durationMs: 0, // Calculated at the WS layer
-        rabbitholeCount: 0, // Tracked by metrics collector
+        branchCount: 0, // Tracked by metrics collector
         recalledPointIds: this.getRecalledPointIds(),
         recalledPointLabels: this.getRecalledPointIds().map(id => this.extractPointLabel(id)),
         engagementScore: 80,
@@ -1463,14 +1427,9 @@ export class SessionEngine {
     this.messages = [];
     this.llmClient.setSystemPrompt(undefined);
 
-    // T09: Reset rabbit hole UX mode state
-    this.currentMode = 'recall';
-    this.activeRabbitholeAgent = null;
-    this.activeRabbitholeEventId = null;
-    this.activeRabbitholeTopic = null;
-    this.rabbitholePointsRecalled = 0;
-    this.completionPendingAfterRabbithole = false;
-    this.rabbitholeDeclineCooldown = 0;
+    // Destroy all active branch agents and clear metrics
+    this.branchAgents.clear();
+    this.branchPointsRecalled.clear();
 
     // === Phase 2: Reset metrics collection state ===
     this.currentPointStartIndex = 0;
@@ -1501,17 +1460,6 @@ export class SessionEngine {
       return;
     }
 
-    // T09: Skip detection if the user recently declined a rabbit hole (cooldown)
-    if (this.rabbitholeDeclineCooldown > 0) {
-      this.rabbitholeDeclineCooldown--;
-      return;
-    }
-
-    // T09: Don't detect a new rabbit hole if we're already in one
-    if (this.currentMode === 'rabbithole') {
-      return;
-    }
-
     const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
     const messageIndex = this.messages.length - 1;
 
@@ -1524,35 +1472,34 @@ export class SessionEngine {
       messageIndex
     );
 
-    // If a rabbithole was detected, record it
+    // If a branch point was detected, record it
     if (rabbitholeEvent) {
       // Record in metrics collector
       if (this.metricsCollector) {
         this.metricsCollector.recordRabbithole(rabbitholeEvent);
       }
 
-      // Persist to database with 'active' status — will be updated when user enters/declines
-      if (this.rabbitholeRepo) {
-        await this.rabbitholeRepo.create({
+      // Persist to database as a detected branch via BranchRepository.
+      // The branchPointMessageId is the last message that triggered detection.
+      if (this.branchRepo) {
+        const lastMessage = this.messages[this.messages.length - 1];
+        await this.branchRepo.create({
           id: rabbitholeEvent.id,
           sessionId: this.currentSession.id,
+          branchPointMessageId: lastMessage?.id ?? '',
           topic: rabbitholeEvent.topic,
-          triggerMessageIndex: rabbitholeEvent.triggerMessageIndex,
-          returnMessageIndex: null,
           depth: rabbitholeEvent.depth,
           relatedRecallPointIds: rabbitholeEvent.relatedRecallPointIds,
           userInitiated: rabbitholeEvent.userInitiated,
-          status: 'active',
-          createdAt: new Date(),
         });
       }
 
-      // T09: Emit 'rabbithole_detected' so the handler can
-      // forward it to the frontend as a prompt for the user to opt in.
+      // Emit 'branch_detected' so the handler can forward it to the frontend
       this.emitEvent({
-        type: 'rabbithole_detected',
+        type: 'branch_detected',
+        branchId: rabbitholeEvent.id,
         topic: rabbitholeEvent.topic,
-        rabbitholeEventId: rabbitholeEvent.id,
+        depth: rabbitholeEvent.depth,
       });
     }
   }
@@ -1582,7 +1529,8 @@ export class SessionEngine {
       messageIndex
     );
 
-    // Record each returned rabbithole
+    // Record each returned event in metrics
+    // TODO(Task 7): Update to use BranchDetector + branchRepo.close() for branch returns
     for (const event of returnedEvents) {
       // Update metrics collector with return information
       if (this.metricsCollector && event.returnMessageIndex !== null) {
@@ -1590,14 +1538,6 @@ export class SessionEngine {
           event.id,
           event.returnMessageIndex
         );
-      }
-
-      // Update database record
-      if (this.rabbitholeRepo) {
-        await this.rabbitholeRepo.update(event.id, {
-          returnMessageIndex: event.returnMessageIndex,
-          status: 'returned',
-        });
       }
     }
   }
@@ -1623,21 +1563,16 @@ export class SessionEngine {
     const finalMessageIndex = this.messages.length - 1;
 
     // Close any active rabbitholes as abandoned since session is ending
+    // TODO(Task 7): Update to use BranchDetector for branch closure detection
     if (this.rabbitholeDetector) {
       const abandonedRabbitholes = this.rabbitholeDetector.closeAllActive(finalMessageIndex);
 
-      // Record abandoned rabbitholes in metrics and database
+      // Record abandoned rabbitholes in metrics
       for (const event of abandonedRabbitholes) {
         this.metricsCollector.recordRabbithole(event);
-
-        // Update database record to mark as abandoned
-        if (this.rabbitholeRepo) {
-          await this.rabbitholeRepo.update(event.id, {
-            returnMessageIndex: finalMessageIndex,
-            status: 'abandoned',
-          });
-        }
       }
+      // Branch abandonment is already handled via branchRepo.markActiveAsAbandoned()
+      // in completeSession() — no need to duplicate here.
     }
 
     // Finalize session metrics using the collector
