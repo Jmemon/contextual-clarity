@@ -11,7 +11,7 @@
  * Key features:
  * - JSON export preserves full data structure and types
  * - CSV export flattens data for spreadsheet compatibility
- * - Optional inclusion of messages, rabbitholes, and timings
+ * - Optional inclusion of messages, branches, and timings
  * - Date range filtering for large datasets
  * - Efficient streaming for large exports (when possible)
  *
@@ -51,7 +51,7 @@ import type { RecallSetRepository } from '../../storage/repositories/recall-set.
 import type { SessionMessageRepository } from '../../storage/repositories/session-message.repository';
 import type { SessionMetricsRepository } from '../../storage/repositories/session-metrics.repository';
 import type { RecallOutcomeRepository } from '../../storage/repositories/recall-outcome.repository';
-import type { RabbitholeEventRepository } from '../../storage/repositories/rabbithole-event.repository';
+import type { BranchRepository } from '../../storage/repositories/branch.repository';
 import type { AnalyticsCalculator } from '../analytics/analytics-calculator';
 import type {
   ExportOptions,
@@ -62,7 +62,7 @@ import type {
 } from './types';
 import {
   mapRecallOutcomeToExport,
-  mapRabbitholeEventToExport,
+  mapBranchEventToExport,
   mapSessionMessageToExport,
 } from './types';
 
@@ -87,7 +87,7 @@ export class ExportService {
    * @param messageRepo - Repository for session message data access
    * @param metricsRepo - Repository for session metrics data access
    * @param outcomeRepo - Repository for recall outcome data access
-   * @param rabbitholeRepo - Repository for rabbithole event data access
+   * @param branchRepo - Repository for branch event data access
    * @param analyticsCalc - Calculator for aggregate analytics
    */
   constructor(
@@ -96,7 +96,7 @@ export class ExportService {
     private readonly messageRepo: SessionMessageRepository,
     private readonly metricsRepo: SessionMetricsRepository,
     private readonly outcomeRepo: RecallOutcomeRepository,
-    private readonly rabbitholeRepo: RabbitholeEventRepository,
+    private readonly branchRepo: BranchRepository,
     private readonly analyticsCalc: AnalyticsCalculator
   ) {}
 
@@ -118,7 +118,7 @@ export class ExportService {
    * const json = await exportService.exportSession('sess_abc123', {
    *   format: 'json',
    *   includeMessages: true,
-   *   includeRabbitholes: true,
+   *   includeBranches: true,
    *   includeTimings: true,
    * });
    *
@@ -182,7 +182,7 @@ export class ExportService {
    * const data = await exportService.exportRecallSet('rs_spanish_vocab', {
    *   format: 'json',
    *   includeMessages: true,
-   *   includeRabbitholes: true,
+   *   includeBranches: true,
    *   includeTimings: false,
    *   dateRange: {
    *     start: new Date('2024-01-01'),
@@ -339,7 +339,7 @@ export class ExportService {
             recallPointsAttempted: metrics.recallPointsAttempted,
             recallPointsSuccessful: metrics.recallPointsSuccessful,
             costUsd: metrics.estimatedCostUsd,
-            rabbitholeCount: metrics.rabbitholeCount,
+            branchCount: metrics.rabbitholeCount,
             calculatedAt: metrics.calculatedAt,
           }
         : null,
@@ -352,10 +352,10 @@ export class ExportService {
       sessionExport.messages = messages.map(mapSessionMessageToExport);
     }
 
-    // Optionally include rabbitholes
-    if (options.includeRabbitholes) {
-      const rabbitholes = await this.rabbitholeRepo.findBySessionId(session.id);
-      sessionExport.rabbitholes = rabbitholes.map(mapRabbitholeEventToExport);
+    // Optionally include branches
+    if (options.includeBranches) {
+      const branchRows = await this.branchRepo.findBySessionId(session.id);
+      sessionExport.branches = branchRows.map(mapBranchEventToExport);
     }
 
     // Note: Message timings would require a MessageTimingsRepository
@@ -484,7 +484,7 @@ export class ExportService {
           'recallPointsAttempted',
           'recallPointsSuccessful',
           'costUsd',
-          'rabbitholeCount',
+          'branchCount',
           'calculatedAt',
         ].join(',')
       );
@@ -496,7 +496,7 @@ export class ExportService {
           this.escapeCSV(session.metrics.recallPointsAttempted),
           this.escapeCSV(session.metrics.recallPointsSuccessful),
           this.escapeCSV(session.metrics.costUsd),
-          this.escapeCSV(session.metrics.rabbitholeCount),
+          this.escapeCSV(session.metrics.branchCount),
           this.escapeCSV(this.formatDate(session.metrics.calculatedAt)),
         ].join(',')
       );
@@ -550,10 +550,10 @@ export class ExportService {
       }
     }
 
-    // Optional: Rabbitholes section
-    if (session.rabbitholes && session.rabbitholes.length > 0) {
+    // Optional: Branches section
+    if (session.branches && session.branches.length > 0) {
       sections.push('');
-      sections.push('# Rabbitholes');
+      sections.push('# Branches');
       sections.push(
         [
           'id',
@@ -566,17 +566,17 @@ export class ExportService {
           'createdAt',
         ].join(',')
       );
-      for (const rh of session.rabbitholes) {
+      for (const branch of session.branches) {
         sections.push(
           [
-            this.escapeCSV(rh.id),
-            this.escapeCSV(rh.topic),
-            this.escapeCSV(rh.triggerMessageIndex),
-            this.escapeCSV(rh.returnMessageIndex),
-            this.escapeCSV(rh.depth),
-            this.escapeCSV(rh.userInitiated),
-            this.escapeCSV(rh.status),
-            this.escapeCSV(this.formatDate(rh.createdAt)),
+            this.escapeCSV(branch.id),
+            this.escapeCSV(branch.topic),
+            this.escapeCSV(branch.triggerMessageIndex),
+            this.escapeCSV(branch.returnMessageIndex),
+            this.escapeCSV(branch.depth),
+            this.escapeCSV(branch.userInitiated),
+            this.escapeCSV(branch.status),
+            this.escapeCSV(this.formatDate(branch.createdAt)),
           ].join(',')
         );
       }
@@ -693,12 +693,12 @@ export class ExportService {
       }
     }
 
-    // Top rabbithole topics section
-    if (recallSet.analytics.topRabbitholeTopics.length > 0) {
+    // Top branch topics section
+    if (recallSet.analytics.topBranchTopics.length > 0) {
       sections.push('');
-      sections.push('# Top Rabbithole Topics');
+      sections.push('# Top Branch Topics');
       sections.push(['topic', 'count', 'avgDepth'].join(','));
-      for (const topic of recallSet.analytics.topRabbitholeTopics) {
+      for (const topic of recallSet.analytics.topBranchTopics) {
         sections.push(
           [
             this.escapeCSV(topic.topic),
@@ -850,12 +850,12 @@ export class ExportService {
       }
     }
 
-    // Top rabbithole topics section
-    if (analytics.analytics.topRabbitholeTopics.length > 0) {
+    // Top branch topics section
+    if (analytics.analytics.topBranchTopics.length > 0) {
       sections.push('');
-      sections.push('# Top Rabbithole Topics');
+      sections.push('# Top Branch Topics');
       sections.push(['topic', 'count', 'avgDepth'].join(','));
-      for (const topic of analytics.analytics.topRabbitholeTopics) {
+      for (const topic of analytics.analytics.topBranchTopics) {
         sections.push(
           [
             this.escapeCSV(topic.topic),

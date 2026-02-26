@@ -64,7 +64,7 @@ export interface TrendData {
  *   recallRateTrend: [...],
  *   engagementTrend: [...],
  *   pointAnalytics: [...],
- *   topRabbitholeTopics: [
+ *   topBranchTopics: [
  *     { topic: 'Regional dialects', count: 5, avgDepth: 1.5 }
  *   ],
  *   totalCostUsd: 2.35,
@@ -128,15 +128,15 @@ export interface RecallSetAnalytics {
   pointAnalytics: RecallPointAnalytics[];
 
   /**
-   * Most frequent rabbithole topics with their occurrence counts.
+   * Most frequent branch topics with their occurrence counts.
    * Helps identify common areas of curiosity or confusion.
    */
-  topRabbitholeTopics: {
+  topBranchTopics: {
     /** The tangent topic that occurred */
     topic: string;
-    /** Number of times this topic appeared as a rabbithole */
+    /** Number of times this topic appeared as a branch */
     count: number;
-    /** Average depth of rabbitholes for this topic (1-3 scale) */
+    /** Average depth of branches for this topic (1-3 scale) */
     avgDepth: number;
   }[];
 

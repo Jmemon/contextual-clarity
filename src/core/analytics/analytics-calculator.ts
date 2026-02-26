@@ -20,7 +20,7 @@
  * const calculator = new AnalyticsCalculator(
  *   sessionMetricsRepo,
  *   recallOutcomeRepo,
- *   rabbitholeRepo,
+ *   branchRepo,
  *   recallSetRepo,
  *   recallPointRepo
  * );
@@ -37,7 +37,7 @@
 
 import type { SessionMetricsRepository } from '../../storage/repositories/session-metrics.repository';
 import type { RecallOutcomeRepository } from '../../storage/repositories/recall-outcome.repository';
-import type { RabbitholeEventRepository } from '../../storage/repositories/rabbithole-event.repository';
+import type { BranchRepository } from '../../storage/repositories/branch.repository';
 import type { RecallSetRepository } from '../../storage/repositories/recall-set.repository';
 import type { RecallPointRepository } from '../../storage/repositories/recall-point.repository';
 import type {
@@ -65,14 +65,14 @@ export class AnalyticsCalculator {
    *
    * @param sessionMetricsRepo - Repository for session metrics data
    * @param recallOutcomeRepo - Repository for recall outcome data
-   * @param rabbitholeRepo - Repository for rabbithole event data
+   * @param branchRepo - Repository for branch event data
    * @param recallSetRepo - Repository for recall set data
    * @param recallPointRepo - Repository for recall point data
    */
   constructor(
     private readonly sessionMetricsRepo: SessionMetricsRepository,
     private readonly recallOutcomeRepo: RecallOutcomeRepository,
-    private readonly rabbitholeRepo: RabbitholeEventRepository,
+    private readonly branchRepo: BranchRepository,
     private readonly recallSetRepo: RecallSetRepository,
     private readonly recallPointRepo: RecallPointRepository
   ) {}
@@ -85,7 +85,7 @@ export class AnalyticsCalculator {
    * - Aggregate statistics (sessions, time, rates)
    * - Trend data over time
    * - Per-point analytics
-   * - Rabbithole topic analysis
+   * - Branch topic analysis
    *
    * @param recallSetId - The ID of the recall set to analyze
    * @returns Comprehensive analytics for the recall set
@@ -138,11 +138,10 @@ export class AnalyticsCalculator {
     );
     const engagementTrend = await this.calculateEngagementTrend(recallSetId, 30);
 
-    // Get top rabbithole topics for insight into common tangents
-    const topRabbitholeTopics = await this.rabbitholeRepo.getTopTopics(
-      recallSetId,
-      10
-    );
+    // Get top branch topics for insight into common tangents.
+    // The BranchRepository doesn't have getTopTopics; provide empty array
+    // until per-recallSet branch topic aggregation is implemented.
+    const topBranchTopics: { topic: string; count: number; avgDepth: number }[] = [];
 
     return {
       recallSetId,
@@ -154,7 +153,7 @@ export class AnalyticsCalculator {
       recallRateTrend,
       engagementTrend,
       pointAnalytics,
-      topRabbitholeTopics,
+      topBranchTopics: topBranchTopics,
       totalCostUsd,
     };
   }

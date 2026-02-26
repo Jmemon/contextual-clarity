@@ -19,7 +19,7 @@ import type { SessionMetricsSummary } from '../../storage/repositories/session-m
 import type { SessionMessage } from '../models/session';
 import type {
   RecallOutcome as DbRecallOutcome,
-  RabbitholeEvent as DbRabbitholeEvent,
+  BranchRow as DbBranchRow,
   MessageTiming as DbMessageTiming,
 } from '../../storage/schema';
 
@@ -71,11 +71,11 @@ export interface ExportOptions {
   includeMessages: boolean;
 
   /**
-   * Whether to include rabbithole (tangent) event data.
-   * Rabbitholes track when conversations diverge from the main topic.
+   * Whether to include branch (tangent) event data.
+   * Branches track when conversations diverge from the main topic.
    * Useful for analyzing engagement patterns and learning curiosity.
    */
-  includeRabbitholes: boolean;
+  includeBranches: boolean;
 
   /**
    * Whether to include per-message timing data.
@@ -123,12 +123,13 @@ export interface RecallOutcomeExport {
 }
 
 /**
- * Exported rabbithole event data.
+ * Exported branch event data.
  *
  * Represents a conversational tangent that occurred during a session.
  * Tracks when the conversation diverged from the main recall topic.
+ * Renamed from RabbitholeEventExport to align with the branch model.
  */
-export interface RabbitholeEventExport {
+export interface BranchEventExport {
   /** Unique identifier for this event */
   id: string;
   /** The tangent topic */
@@ -143,7 +144,7 @@ export interface RabbitholeEventExport {
   relatedRecallPointIds: string[];
   /** Whether the user initiated this tangent */
   userInitiated: boolean;
-  /** Status of the rabbithole (active, returned, abandoned) */
+  /** Status of the branch (active, returned, abandoned) */
   status: string;
   /** When this event was detected */
   createdAt: Date;
@@ -255,10 +256,10 @@ export interface SessionExport {
   messages?: SessionMessageExport[];
 
   /**
-   * Rabbithole (tangent) events.
-   * Only included when ExportOptions.includeRabbitholes is true.
+   * Branch (tangent) events.
+   * Only included when ExportOptions.includeBranches is true.
    */
-  rabbitholes?: RabbitholeEventExport[];
+  branches?: BranchEventExport[];
 
   /**
    * Per-message timing data.
@@ -370,24 +371,27 @@ export function mapRecallOutcomeToExport(
 }
 
 /**
- * Maps a database rabbithole event to an export format.
+ * Maps a database branch row to an export format.
  *
- * @param event - The database rabbithole event record
- * @returns The event formatted for export
+ * The branches table uses a different schema than the former rabbithole events table.
+ * We map the available fields, using defaults where the old fields don't exist.
+ *
+ * @param branch - The database branch row
+ * @returns The branch formatted for export
  */
-export function mapRabbitholeEventToExport(
-  event: DbRabbitholeEvent
-): RabbitholeEventExport {
+export function mapBranchEventToExport(
+  branch: DbBranchRow
+): BranchEventExport {
   return {
-    id: event.id,
-    topic: event.topic,
-    triggerMessageIndex: event.triggerMessageIndex,
-    returnMessageIndex: event.returnMessageIndex,
-    depth: event.depth,
-    relatedRecallPointIds: event.relatedRecallPointIds,
-    userInitiated: event.userInitiated,
-    status: event.status,
-    createdAt: event.createdAt,
+    id: branch.id,
+    topic: branch.topic,
+    triggerMessageIndex: 0, // Branch model uses branchPointMessageId instead of index
+    returnMessageIndex: null,
+    depth: branch.depth,
+    relatedRecallPointIds: branch.relatedRecallPointIds,
+    userInitiated: branch.userInitiated,
+    status: branch.status,
+    createdAt: branch.createdAt,
   };
 }
 

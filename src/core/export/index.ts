@@ -27,7 +27,7 @@
  *   messageRepo,
  *   metricsRepo,
  *   outcomeRepo,
- *   rabbitholeRepo,
+ *   branchRepo,
  *   analyticsCalc
  * );
  *
@@ -35,7 +35,7 @@
  * const sessionJson = await exportService.exportSession('sess_abc123', {
  *   format: 'json',
  *   includeMessages: true,
- *   includeRabbitholes: true,
+ *   includeBranches: true,
  *   includeTimings: false,
  * });
  *
@@ -43,7 +43,7 @@
  * const recallSetCsv = await exportService.exportRecallSet('rs_spanish_vocab', {
  *   format: 'csv',
  *   includeMessages: false,
- *   includeRabbitholes: false,
+ *   includeBranches: false,
  *   includeTimings: false,
  *   dateRange: {
  *     start: new Date('2024-01-01'),
@@ -55,7 +55,7 @@
  * const analyticsJson = await exportService.exportAnalytics('rs_spanish_vocab', {
  *   format: 'json',
  *   includeMessages: false,
- *   includeRabbitholes: false,
+ *   includeBranches: false,
  *   includeTimings: false,
  * });
  * ```
@@ -71,7 +71,7 @@ export type {
   RecallSetExport,
   AnalyticsExport,
   RecallOutcomeExport,
-  RabbitholeEventExport,
+  BranchEventExport,
   MessageTimingExport,
   SessionMessageExport,
 } from './types';
@@ -79,7 +79,7 @@ export type {
 // Export mapping functions for converting DB records to export format
 export {
   mapRecallOutcomeToExport,
-  mapRabbitholeEventToExport,
+  mapBranchEventToExport,
   mapMessageTimingToExport,
   mapSessionMessageToExport,
 } from './types';

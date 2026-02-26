@@ -7,10 +7,10 @@
  *
  * 1. **Message Timing**: Tracks when each message occurred and latency between messages
  * 2. **Recall Outcomes**: Records evaluation results for each recall point attempted
- * 3. **Rabbithole Events**: Tracks conversational tangents and their resolution
+ * 3. **Branch Events**: Tracks conversational tangents and their resolution
  * 4. **Token Usage**: Monitors input/output token counts for cost calculation
  *
- * The collector coordinates with the rabbithole detector and recall evaluator
+ * The collector coordinates with the branch detector and recall evaluator
  * to build complete session metrics that enable:
  *
  * - Performance analysis and learning insights
@@ -77,7 +77,7 @@ const DEFAULT_MODEL: ClaudeModel = 'claude-3-5-sonnet-20241022';
  * 1. Call `startSession()` when beginning a new session
  * 2. Call `recordMessage()` for each message in the conversation
  * 3. Call `recordRecallOutcome()` after each recall point is evaluated
- * 4. Call `recordRabbithole()` when tangents are detected
+ * 4. Call `recordBranch()` when tangents are detected
  * 5. Call `finalizeSession()` when the session completes
  *
  * The collector maintains internal state and should be reused across messages
@@ -93,8 +93,8 @@ export class SessionMetricsCollector {
   /** Recall evaluation outcomes for each recall point */
   private recallOutcomes: RecallOutcome[] = [];
 
-  /** Rabbithole (tangent) events detected during the session */
-  private rabbitholes: RabbitholeEvent[] = [];
+  /** Branch (tangent) events detected during the session */
+  private branches: RabbitholeEvent[] = [];
 
   /** Cumulative input tokens used across all LLM calls */
   private totalInputTokens: number = 0;
@@ -135,7 +135,7 @@ export class SessionMetricsCollector {
     this.sessionId = sessionId;
     this.messageTimings = [];
     this.recallOutcomes = [];
-    this.rabbitholes = [];
+    this.branches = [];
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.lastMessageTime = null;
@@ -281,18 +281,18 @@ export class SessionMetricsCollector {
   }
 
   /**
-   * Records a rabbithole (conversational tangent) event.
+   * Records a branch (conversational tangent) event.
    *
-   * Rabbitholes are detected by the RabbitholeDetector when the conversation
+   * Branches are detected by the BranchDetector when the conversation
    * diverges from the current recall topic. This method records the event
    * for inclusion in the final session metrics.
    *
-   * @param event - The rabbithole event to record
+   * @param event - The branch event to record
    *
    * @example
    * ```typescript
-   * const rabbithole: RabbitholeEvent = {
-   *   id: 'rh_001',
+   * const branch: RabbitholeEvent = {
+   *   id: 'br_001',
    *   topic: 'Economic impacts of reparations',
    *   triggerMessageIndex: 5,
    *   returnMessageIndex: null,
@@ -302,34 +302,34 @@ export class SessionMetricsCollector {
    *   status: 'active'
    * };
    *
-   * collector.recordRabbithole(rabbithole);
+   * collector.recordBranch(branch);
    * ```
    */
-  recordRabbithole(event: RabbitholeEvent): void {
-    this.rabbitholes.push(event);
+  recordBranch(event: RabbitholeEvent): void {
+    this.branches.push(event);
   }
 
   /**
-   * Updates a rabbithole when the conversation returns to the main topic.
+   * Updates a branch when the conversation returns to the main topic.
    *
-   * When a rabbithole concludes (conversation returns to main topic), this
-   * method updates the rabbithole record with the return message index and
+   * When a branch concludes (conversation returns to main topic), this
+   * method updates the branch record with the return message index and
    * changes the status to 'returned'.
    *
-   * @param rabbitholeId - ID of the rabbithole to update
+   * @param branchId - ID of the branch to update
    * @param returnIndex - Message index where conversation returned to topic
    *
    * @example
    * ```typescript
-   * // Mark rabbithole as returned when conversation gets back on track
-   * collector.updateRabbitholeReturn('rh_001', 9);
+   * // Mark branch as returned when conversation gets back on track
+   * collector.updateBranchClosure('br_001', 9);
    * ```
    */
-  updateRabbitholeReturn(rabbitholeId: string, returnIndex: number): void {
-    const rabbithole = this.rabbitholes.find((rh) => rh.id === rabbitholeId);
-    if (rabbithole) {
-      rabbithole.returnMessageIndex = returnIndex;
-      rabbithole.status = 'returned';
+  updateBranchClosure(branchId: string, returnIndex: number): void {
+    const branch = this.branches.find((b) => b.id === branchId);
+    if (branch) {
+      branch.returnMessageIndex = returnIndex;
+      branch.status = 'returned';
     }
   }
 
@@ -340,7 +340,7 @@ export class SessionMetricsCollector {
    * 1. Calculating total and active duration
    * 2. Computing response time averages
    * 3. Calculating recall success rates
-   * 4. Summarizing rabbithole statistics
+   * 4. Summarizing branch statistics
    * 5. Computing token usage and costs
    * 6. Calculating the engagement score
    *
@@ -358,11 +358,11 @@ export class SessionMetricsCollector {
    * ```
    */
   async finalizeSession(session: Session): Promise<SessionMetrics> {
-    // Mark any still-active rabbitholes as abandoned
+    // Mark any still-active branches as abandoned
     // If the session ends while in a tangent, it means we never returned
-    this.rabbitholes.forEach((rh) => {
-      if (rh.status === 'active') {
-        rh.status = 'abandoned';
+    this.branches.forEach((b) => {
+      if (b.status === 'active') {
+        b.status = 'abandoned';
       }
     });
 
@@ -405,7 +405,7 @@ export class SessionMetricsCollector {
     const metrics: SessionMetrics = {
       sessionId: this.sessionId || session.id,
       recallOutcomes: [...this.recallOutcomes],
-      rabbitholes: [...this.rabbitholes],
+      rabbitholes: [...this.branches],
       tokenUsage,
       costUsd,
       messageTimings: [...this.messageTimings],
@@ -428,27 +428,27 @@ export class SessionMetricsCollector {
    * This method provides a snapshot of the collector's current state,
    * useful for debugging and displaying progress during a session.
    *
-   * @returns Object with current message count, outcome count, active rabbitholes, and tokens
+   * @returns Object with current message count, outcome count, active branches, and tokens
    *
    * @example
    * ```typescript
    * const stats = collector.getCurrentStats();
    * console.log(`Messages: ${stats.messagesRecorded}`);
    * console.log(`Outcomes: ${stats.outcomesRecorded}`);
-   * console.log(`Active rabbitholes: ${stats.activeRabbitholes}`);
+   * console.log(`Active branches: ${stats.activeBranches}`);
    * console.log(`Tokens used: ${stats.tokensUsed}`);
    * ```
    */
   getCurrentStats(): {
     messagesRecorded: number;
     outcomesRecorded: number;
-    activeRabbitholes: number;
+    activeBranches: number;
     tokensUsed: number;
   } {
     return {
       messagesRecorded: this.messageTimings.length,
       outcomesRecorded: this.recallOutcomes.length,
-      activeRabbitholes: this.rabbitholes.filter((rh) => rh.status === 'active')
+      activeBranches: this.branches.filter((b) => b.status === 'active')
         .length,
       tokensUsed: this.totalInputTokens + this.totalOutputTokens,
     };
@@ -462,7 +462,7 @@ export class SessionMetricsCollector {
    *
    * - Response time analysis for identifying engagement patterns
    * - Recall success statistics for learning analytics
-   * - Rabbithole metrics for conversation flow analysis
+   * - Branch metrics for conversation flow analysis
    *
    * @returns Object with extended metric calculations
    *
@@ -471,7 +471,7 @@ export class SessionMetricsCollector {
    * const extended = collector.getExtendedMetrics();
    * console.log(`User avg response: ${extended.avgUserResponseTimeMs}ms`);
    * console.log(`Recall rate: ${(extended.overallRecallRate * 100).toFixed(1)}%`);
-   * console.log(`Rabbithole time: ${extended.totalRabbitholeTimeMs}ms`);
+   * console.log(`Branch time: ${extended.totalBranchTimeMs}ms`);
    * ```
    */
   getExtendedMetrics(): {
@@ -483,9 +483,9 @@ export class SessionMetricsCollector {
     overallRecallRate: number;
     avgConfidence: number;
     totalMessages: number;
-    rabbitholeCount: number;
-    totalRabbitholeTimeMs: number;
-    avgRabbitholeDepth: number;
+    branchCount: number;
+    totalBranchTimeMs: number;
+    avgBranchDepth: number;
     activeTimeMs: number;
   } {
     const totalDurationMs = this.calculateTotalDuration();
@@ -509,9 +509,9 @@ export class SessionMetricsCollector {
           : 0,
       avgConfidence: this.calculateAverageConfidence(),
       totalMessages: this.messageTimings.length,
-      rabbitholeCount: this.rabbitholes.length,
-      totalRabbitholeTimeMs: this.calculateTotalRabbitholeTime(),
-      avgRabbitholeDepth: this.calculateAverageRabbitholeDepth(),
+      branchCount: this.branches.length,
+      totalBranchTimeMs: this.calculateTotalBranchTime(),
+      avgBranchDepth: this.calculateAverageBranchDepth(),
       activeTimeMs,
     };
   }
@@ -533,7 +533,7 @@ export class SessionMetricsCollector {
     this.sessionId = null;
     this.messageTimings = [];
     this.recallOutcomes = [];
-    this.rabbitholes = [];
+    this.branches = [];
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.model = DEFAULT_MODEL;
@@ -707,28 +707,28 @@ export class SessionMetricsCollector {
   }
 
   /**
-   * Calculates the total time spent in rabbitholes.
+   * Calculates the total time spent in branches.
    *
-   * For each rabbithole, calculates the time from trigger message to either:
+   * For each branch, calculates the time from trigger message to either:
    * - Return message (if resolved)
    * - Last message in session (if abandoned)
    *
    * This metric helps identify how much session time was spent on tangents
    * vs. focused recall practice.
    *
-   * @returns Total rabbithole time in milliseconds
+   * @returns Total branch time in milliseconds
    */
-  private calculateTotalRabbitholeTime(): number {
+  private calculateTotalBranchTime(): number {
     let totalTime = 0;
 
-    for (const rabbithole of this.rabbitholes) {
-      const startIndex = rabbithole.triggerMessageIndex;
+    for (const branch of this.branches) {
+      const startIndex = branch.triggerMessageIndex;
       const endIndex =
-        rabbithole.returnMessageIndex !== null
-          ? rabbithole.returnMessageIndex
+        branch.returnMessageIndex !== null
+          ? branch.returnMessageIndex
           : this.messageTimings.length - 1;
 
-      // Calculate duration for this rabbithole's message range
+      // Calculate duration for this branch's message range
       totalTime += this.calculateDurationForMessageRange(startIndex, endIndex);
     }
 
@@ -736,7 +736,7 @@ export class SessionMetricsCollector {
   }
 
   /**
-   * Calculates the average depth of rabbitholes in the session.
+   * Calculates the average depth of branches in the session.
    *
    * Depth indicates how "nested" tangents got:
    * - Depth 1: Direct tangent from main topic
@@ -748,14 +748,14 @@ export class SessionMetricsCollector {
    * - User curiosity leading to exploration
    * - Session structure issues needing attention
    *
-   * @returns Average depth (1-3 scale), or 0 if no rabbitholes
+   * @returns Average depth (1-3 scale), or 0 if no branches
    */
-  private calculateAverageRabbitholeDepth(): number {
-    if (this.rabbitholes.length === 0) {
+  private calculateAverageBranchDepth(): number {
+    if (this.branches.length === 0) {
       return 0;
     }
 
-    const totalDepth = this.rabbitholes.reduce((sum, rh) => sum + rh.depth, 0);
-    return totalDepth / this.rabbitholes.length;
+    const totalDepth = this.branches.reduce((sum, b) => sum + b.depth, 0);
+    return totalDepth / this.branches.length;
   }
 }
