@@ -210,7 +210,7 @@ export class BranchDetector {
    * LLM to analyze recent messages against the current recall point.
    *
    * Detection only creates a Branch if:
-   * 1. The LLM determines a branch exists (isRabbithole: true)
+   * 1. The LLM determines a branch exists (isBranch: true)
    * 2. The confidence is above the configured threshold (default 0.6)
    * 3. The topic hasn't already been flagged as an active branch
    *
@@ -276,7 +276,7 @@ export class BranchDetector {
       const result = parseBranchDetectionResponse(response.text);
 
       // Only create a Branch if confidence threshold is met and branch detected
-      if (!result.isRabbithole || result.confidence < this.config.confidenceThreshold) {
+      if (!result.isBranch || result.confidence < this.config.confidenceThreshold) {
         return null;
       }
 

@@ -48,11 +48,11 @@ export interface BranchDetectionResult {
    * Whether the recent conversation represents a branch (tangent from
    * the main recall point being discussed).
    */
-  isRabbithole: boolean;
+  isBranch: boolean;
 
   /**
    * The topic of the branch, if one was detected.
-   * Null when isRabbithole is false.
+   * Null when isBranch is false.
    *
    * @example "the etymology of the word 'photosynthesis'"
    * @example "historical context of ATP discovery"
@@ -521,7 +521,7 @@ function sanitizeInput(input: string): string {
  * ```typescript
  * const response = await client.complete(prompt);
  * const result = parseBranchDetectionResponse(response.text);
- * if (result.isRabbithole) {
+ * if (result.isBranch) {
  *   // Handle detected tangent
  * }
  * ```
@@ -529,7 +529,7 @@ function sanitizeInput(input: string): string {
 export function parseBranchDetectionResponse(response: string): BranchDetectionResult {
   // Default result for parse failures - assume not a branch to avoid false positives
   const defaultResult: BranchDetectionResult = {
-    isRabbithole: false,
+    isBranch: false,
     topic: null,
     depth: 1,
     relatedToCurrentPoint: false,
@@ -549,7 +549,7 @@ export function parseBranchDetectionResponse(response: string): BranchDetectionR
 
     // Validate and normalize the parsed result
     return {
-      isRabbithole: typeof parsed.isRabbithole === 'boolean' ? parsed.isRabbithole : false,
+      isBranch: typeof parsed.isRabbithole === 'boolean' ? parsed.isRabbithole : false,
       topic: typeof parsed.topic === 'string' ? parsed.topic : null,
       depth: normalizeDepth(parsed.depth),
       relatedToCurrentPoint: typeof parsed.relatedToCurrentPoint === 'boolean' ? parsed.relatedToCurrentPoint : false,
