@@ -228,13 +228,12 @@ describe('WebSocket Types', () => {
       expect(CLIENT_MESSAGE_TYPES).not.toContain('trigger_eval');
       expect(CLIENT_MESSAGE_TYPES).toContain('leave_session');  // T08: renamed from end_session
       expect(CLIENT_MESSAGE_TYPES).toContain('ping');
-      // T09: three rabbit hole message types
-      expect(CLIENT_MESSAGE_TYPES).toContain('enter_rabbithole');
-      expect(CLIENT_MESSAGE_TYPES).toContain('exit_rabbithole');
-      expect(CLIENT_MESSAGE_TYPES).toContain('decline_rabbithole');
+      // T16: branch message types (renamed from rabbithole)
+      expect(CLIENT_MESSAGE_TYPES).toContain('activate_branch');
+      expect(CLIENT_MESSAGE_TYPES).toContain('close_branch');
       // T13: dismiss_overlay added
       expect(CLIENT_MESSAGE_TYPES).toContain('dismiss_overlay');
-      expect(CLIENT_MESSAGE_TYPES.length).toBe(7);
+      expect(CLIENT_MESSAGE_TYPES.length).toBe(6);
     });
 
     it('should have all WebSocket close codes', () => {

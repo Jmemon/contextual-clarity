@@ -6,7 +6,7 @@
  * - Recall set export with all sessions and analytics
  * - Analytics-only export
  * - Date range filtering
- * - Optional inclusion of messages, rabbitholes, and timings
+ * - Optional inclusion of messages, branches, and timings
  * - CSV escaping for special characters
  *
  * Tests use an in-memory SQLite database with comprehensive seeded data
@@ -27,7 +27,7 @@ import {
 } from '../../src/storage/repositories';
 import { SessionMetricsRepository } from '../../src/storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../../src/storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../../src/storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../../src/storage/repositories/branch.repository';
 import { AnalyticsCalculator } from '../../src/core/analytics/analytics-calculator';
 import { ExportService } from '../../src/core/export/export-service';
 import { FSRSScheduler } from '../../src/core/fsrs';
@@ -61,7 +61,7 @@ function daysAgo(days: number): Date {
  *
  * Creates:
  * - 1 recall set with 3 recall points
- * - 2 sessions with messages, metrics, outcomes, and rabbitholes
+ * - 2 sessions with messages, metrics, outcomes, and branches
  * - Data with special characters for CSV escaping tests
  */
 async function seedExportTestData(
@@ -72,7 +72,7 @@ async function seedExportTestData(
   messageRepo: SessionMessageRepository,
   metricsRepo: SessionMetricsRepository,
   outcomeRepo: RecallOutcomeRepository,
-  rabbitholeRepo: RabbitholeEventRepository,
+  branchRepo: BranchRepository,
   scheduler: FSRSScheduler
 ): Promise<{
   recallSet: RecallSet;
@@ -294,19 +294,19 @@ async function seedExportTestData(
     },
   ]);
 
-  // Create rabbithole event with special characters
-  await rabbitholeRepo.create({
+  // Create branch event with special characters
+  const branch = await branchRepo.create({
     id: 'rh_export_1',
     sessionId: session2.id,
+    branchPointMessageId: 'msg_exp_2_2',
     topic: 'Related topic with "quotes" and, commas',
-    triggerMessageIndex: 1,
-    returnMessageIndex: 2,
     depth: 1,
     relatedRecallPointIds: ['rp_export_2'],
     userInitiated: true,
-    status: 'returned',
-    createdAt: daysAgo(2),
   });
+  // Activate and then close the branch so the export test sees it as 'closed'
+  await branchRepo.activate(branch.id);
+  await branchRepo.close(branch.id, 'Branch concluded');
 
   return {
     recallSet,
@@ -325,7 +325,7 @@ describe('Export Service', () => {
   let messageRepo: SessionMessageRepository;
   let metricsRepo: SessionMetricsRepository;
   let outcomeRepo: RecallOutcomeRepository;
-  let rabbitholeRepo: RabbitholeEventRepository;
+  let branchRepo: BranchRepository;
   let scheduler: FSRSScheduler;
   let analyticsCalc: AnalyticsCalculator;
   let exportService: ExportService;
@@ -349,14 +349,14 @@ describe('Export Service', () => {
     messageRepo = new SessionMessageRepository(db);
     metricsRepo = new SessionMetricsRepository(db);
     outcomeRepo = new RecallOutcomeRepository(db);
-    rabbitholeRepo = new RabbitholeEventRepository(db);
+    branchRepo = new BranchRepository(db);
 
     // Initialize services
     scheduler = new FSRSScheduler();
     analyticsCalc = new AnalyticsCalculator(
       metricsRepo,
       outcomeRepo,
-      rabbitholeRepo,
+      branchRepo,
       recallSetRepo,
       recallPointRepo
     );
@@ -367,7 +367,7 @@ describe('Export Service', () => {
       messageRepo,
       metricsRepo,
       outcomeRepo,
-      rabbitholeRepo,
+      branchRepo,
       analyticsCalc
     );
 
@@ -380,7 +380,7 @@ describe('Export Service', () => {
       messageRepo,
       metricsRepo,
       outcomeRepo,
-      rabbitholeRepo,
+      branchRepo,
       scheduler
     );
     testRecallSet = seedData.recallSet;
@@ -401,7 +401,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: true,
-        includeRabbitholes: true,
+        includeBranches: true,
         includeTimings: false,
       };
 
@@ -440,7 +440,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: true,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -470,7 +470,7 @@ describe('Export Service', () => {
       const optionsWithout: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -485,7 +485,7 @@ describe('Export Service', () => {
       const optionsWith: ExportOptions = {
         format: 'json',
         includeMessages: true,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -498,24 +498,24 @@ describe('Export Service', () => {
       expect(exportedWith.messages!.length).toBe(3);
     });
 
-    it('should include rabbitholes when requested', async () => {
-      // Arrange: Export session 2 which has a rabbithole
+    it('should include branches when requested', async () => {
+      // Arrange: Export session 2 which has a branch
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: true,
+        includeBranches: true,
         includeTimings: false,
       };
 
-      // Act: Export session with rabbitholes
+      // Act: Export session with branches
       const jsonString = await exportService.exportSession('sess_export_2', options);
       const exported = JSON.parse(jsonString) as SessionExport;
 
-      // Assert: Rabbitholes should be present
-      expect(exported.rabbitholes).toBeDefined();
-      expect(exported.rabbitholes!.length).toBe(1);
-      expect(exported.rabbitholes![0].topic).toContain('Related topic');
-      expect(exported.rabbitholes![0].status).toBe('returned');
+      // Assert: Branches should be present
+      expect(exported.branches).toBeDefined();
+      expect(exported.branches!.length).toBe(1);
+      expect(exported.branches![0].topic).toContain('Related topic');
+      expect(exported.branches![0].status).toBe('closed');
     });
 
     it('should throw error for non-existent session', async () => {
@@ -523,7 +523,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -547,7 +547,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -567,7 +567,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -597,7 +597,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
         dateRange: {
           start: threeDaysAgo,
@@ -620,7 +620,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -649,7 +649,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -671,7 +671,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -691,7 +691,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -716,7 +716,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -743,7 +743,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: true,
-        includeRabbitholes: true,
+        includeBranches: true,
         includeTimings: false,
       };
 
@@ -783,7 +783,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -808,7 +808,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: true,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -838,7 +838,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: true,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -863,7 +863,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: true,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -890,7 +890,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'csv',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 
@@ -946,7 +946,7 @@ describe('Export Service', () => {
       const options: ExportOptions = {
         format: 'json',
         includeMessages: false,
-        includeRabbitholes: false,
+        includeBranches: false,
         includeTimings: false,
       };
 

@@ -36,10 +36,10 @@ import {
 } from '../../src/storage/repositories';
 import { SessionMetricsRepository } from '../../src/storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../../src/storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../../src/storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../../src/storage/repositories/branch.repository';
 import { SessionEngine } from '../../src/core/session';
 import { SessionMetricsCollector } from '../../src/core/session/metrics-collector';
-import { RabbitholeDetector } from '../../src/core/analysis/rabbithole-detector';
+import { BranchDetector } from '../../src/core/analysis/branch-detector';
 import { FSRSScheduler } from '../../src/core/fsrs';
 import { RecallEvaluator } from '../../src/core/scoring';
 import type { RecallSet, RecallPoint, Session } from '../../src/core/models';
@@ -55,14 +55,14 @@ import type { AppDatabase } from '../../src/storage/db';
  * Mock Anthropic Client that provides controlled responses.
  *
  * This mock tracks all calls and allows configuring specific response sequences.
- * Used for both the tutor LLM calls and the rabbithole detection LLM calls.
+ * Used for both the tutor LLM calls and the branch detection LLM calls.
  */
 class MockAnthropicClient {
   private systemPrompt: string | undefined;
   private tutorResponses: string[] = [];
   private tutorResponseIndex = 0;
-  private rabbitholeResponses: string[] = [];
-  private rabbitholeResponseIndex = 0;
+  private branchResponses: string[] = [];
+  private branchResponseIndex = 0;
   private returnResponses: string[] = [];
   private returnResponseIndex = 0;
 
@@ -79,15 +79,15 @@ class MockAnthropicClient {
   }
 
   /**
-   * Configure rabbithole detection responses.
+   * Configure branch detection responses.
    */
-  setRabbitholeResponses(responses: string[]): void {
-    this.rabbitholeResponses = responses;
-    this.rabbitholeResponseIndex = 0;
+  setBranchResponses(responses: string[]): void {
+    this.branchResponses = responses;
+    this.branchResponseIndex = 0;
   }
 
   /**
-   * Configure rabbithole return detection responses.
+   * Configure branch return detection responses.
    */
   setReturnResponses(responses: string[]): void {
     this.returnResponses = responses;
@@ -109,12 +109,12 @@ class MockAnthropicClient {
     const inputTokens = Math.ceil(input.length / 4);
     let outputTokens: number;
 
-    // Check for rabbithole detection prompts (they mention "tangent" or "off-topic")
-    if (input.includes('tangent') || input.includes('off-topic') || input.includes('rabbithole')) {
-      // This is rabbithole detection
-      responseText = this.rabbitholeResponses[this.rabbitholeResponseIndex] ||
+    // Check for branch detection prompts (they mention "tangent" or "off-topic")
+    if (input.includes('tangent') || input.includes('off-topic') || input.includes('branch')) {
+      // This is branch detection
+      responseText = this.branchResponses[this.branchResponseIndex] ||
         '{"isRabbithole": false, "confidence": 0.3}';
-      this.rabbitholeResponseIndex++;
+      this.branchResponseIndex++;
     } else if (input.includes('return') || input.includes('back to') || input.includes('main topic')) {
       // This is return detection
       responseText = this.returnResponses[this.returnResponseIndex] ||
@@ -182,7 +182,7 @@ class MockAnthropicClient {
     this.completeCalls = [];
     this.tokenUsage = { inputTokens: 0, outputTokens: 0 };
     this.tutorResponseIndex = 0;
-    this.rabbitholeResponseIndex = 0;
+    this.branchResponseIndex = 0;
     this.returnResponseIndex = 0;
   }
 }
@@ -371,14 +371,14 @@ describe('SessionEngine Metrics Integration', () => {
   let messageRepo: SessionMessageRepository;
   let metricsRepo: SessionMetricsRepository;
   let outcomeRepo: RecallOutcomeRepository;
-  let rabbitholeRepo: RabbitholeEventRepository;
+  let branchRepo: BranchRepository;
 
   // Services and mocks
   let scheduler: FSRSScheduler;
   let mockLlmClient: MockAnthropicClient;
   let mockEvaluator: MockRecallEvaluator;
   let metricsCollector: SessionMetricsCollector;
-  let rabbitholeDetector: RabbitholeDetector;
+  let branchDetector: BranchDetector;
 
   // Test data
   let testRecallSet: RecallSet;
@@ -397,7 +397,7 @@ describe('SessionEngine Metrics Integration', () => {
     messageRepo = new SessionMessageRepository(db);
     metricsRepo = new SessionMetricsRepository(db);
     outcomeRepo = new RecallOutcomeRepository(db);
-    rabbitholeRepo = new RabbitholeEventRepository(db);
+    branchRepo = new BranchRepository(db);
 
     // Initialize services
     scheduler = new FSRSScheduler();
@@ -405,8 +405,8 @@ describe('SessionEngine Metrics Integration', () => {
     mockEvaluator = new MockRecallEvaluator();
     metricsCollector = new SessionMetricsCollector();
 
-    // RabbitholeDetector uses the same mock LLM client
-    rabbitholeDetector = new RabbitholeDetector(mockLlmClient as any, {
+    // BranchDetector uses the same mock LLM client
+    branchDetector = new BranchDetector(mockLlmClient as any, {
       confidenceThreshold: 0.6,
       returnConfidenceThreshold: 0.6,
       messageWindowSize: 6,
@@ -441,10 +441,10 @@ describe('SessionEngine Metrics Integration', () => {
           sessionRepo,
           messageRepo,
           metricsCollector,
-          rabbitholeDetector,
+          branchDetector,
           metricsRepo,
           recallOutcomeRepo: outcomeRepo,
-          rabbitholeRepo,
+          branchRepo,
         },
         {
           tutorTemperature: 0.7,
@@ -537,11 +537,11 @@ describe('SessionEngine Metrics Integration', () => {
       expect(startSessionArgs.sessionId).toBe(session.id);
     });
 
-    it('should call rabbitholeDetector.reset() when session starts', async () => {
-      // Arrange: Create a spy-enabled rabbithole detector
+    it('should call branchDetector.reset() when session starts', async () => {
+      // Arrange: Create a spy-enabled branch detector
       let resetCalled = false;
 
-      const spyDetector = new RabbitholeDetector(mockLlmClient as any);
+      const spyDetector = new BranchDetector(mockLlmClient as any);
       const originalReset = spyDetector.reset.bind(spyDetector);
       spyDetector.reset = () => {
         resetCalled = true;
@@ -557,8 +557,8 @@ describe('SessionEngine Metrics Integration', () => {
           recallPointRepo,
           sessionRepo,
           messageRepo,
-          rabbitholeDetector: spyDetector,
-          rabbitholeRepo,
+          branchDetector: spyDetector,
+          branchRepo,
         },
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
@@ -566,7 +566,7 @@ describe('SessionEngine Metrics Integration', () => {
       // Act: Start session
       await engine.startSession(testRecallSet);
 
-      // Assert: rabbitholeDetector.reset was called
+      // Assert: branchDetector.reset was called
       expect(resetCalled).toBe(true);
     });
   });
@@ -1121,9 +1121,9 @@ describe('SessionEngine Metrics Integration', () => {
       expect(outcome2!.confidence).toBe(0.9);
     });
 
-    it('should close and persist abandoned rabbitholes on session completion', async () => {
-      // Arrange: Configure rabbithole detection to find one
-      mockLlmClient.setRabbitholeResponses([
+    it('should close and persist abandoned branches on session completion', async () => {
+      // Arrange: Configure branch detection to find one
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.85,
@@ -1150,10 +1150,10 @@ describe('SessionEngine Metrics Integration', () => {
           sessionRepo,
           messageRepo,
           metricsCollector,
-          rabbitholeDetector,
+          branchDetector,
           metricsRepo,
           recallOutcomeRepo: outcomeRepo,
-          rabbitholeRepo,
+          branchRepo,
         },
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
@@ -1164,21 +1164,21 @@ describe('SessionEngine Metrics Integration', () => {
         makeHighConfidenceResult(), // point 2
       ]);
 
-      // Act: Complete session (rabbithole starts but never returns).
-      // T08: Must call finalizeSession() to persist rabbithole events.
+      // Act: Complete session (branch starts but never closes).
+      // T08: Must call finalizeSession() to persist branch events.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
-      await engine.processUserMessage('What about this tangent topic?'); // Triggers rabbithole + both points recalled
-      await engine.finalizeSession(); // T08: closes abandoned rabbitholes + persists events
+      await engine.processUserMessage('What about this tangent topic?'); // Triggers branch + both points recalled
+      await engine.finalizeSession(); // T08: closes abandoned branches + persists events
 
-      // Assert: Query database for rabbithole events
-      const rabbitholeEvents = await rabbitholeRepo.findBySessionId(session.id);
+      // Assert: Query database for branch events
+      const branchEvents = await branchRepo.findBySessionId(session.id);
 
-      // If rabbithole was detected and persisted, verify its status
-      if (rabbitholeEvents.length > 0) {
-        const abandonedRabbithole = rabbitholeEvents.find(rh => rh.status === 'abandoned');
-        // If session ended while in rabbithole, it should be marked abandoned
-        expect(abandonedRabbithole !== undefined || rabbitholeEvents.every(rh => rh.status === 'returned')).toBe(true);
+      // If branch was detected and persisted, verify its status
+      if (branchEvents.length > 0) {
+        const abandonedBranch = branchEvents.find(rh => rh.status === 'abandoned');
+        // If session ended while in branch, it should be marked abandoned
+        expect(abandonedBranch !== undefined || branchEvents.every(rh => rh.status === 'closed')).toBe(true);
       }
     });
   });
@@ -1400,7 +1400,7 @@ describe('SessionEngine Metrics Integration', () => {
           metricsCollector,
           metricsRepo,
           recallOutcomeRepo: outcomeRepo,
-          rabbitholeRepo,
+          branchRepo,
         },
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
@@ -1567,8 +1567,8 @@ describe('SessionEngine Metrics Integration', () => {
     });
 
     it('should query ALL Phase 2 tables after session completion', async () => {
-      // Arrange: Set up rabbithole detection
-      mockLlmClient.setRabbitholeResponses([
+      // Arrange: Set up branch detection
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.85,
@@ -1599,19 +1599,19 @@ describe('SessionEngine Metrics Integration', () => {
           sessionRepo,
           messageRepo,
           metricsCollector,
-          rabbitholeDetector,
+          branchDetector,
           metricsRepo,
           recallOutcomeRepo: outcomeRepo,
-          rabbitholeRepo,
+          branchRepo,
         },
         { tutorTemperature: 0.7, tutorMaxTokens: 512 }
       );
 
-      // Act: Complete session with potential rabbithole.
-      // T08: finalizeSession() needed to persist metrics/outcomes/rabbitholes.
+      // Act: Complete session with potential branch.
+      // T08: finalizeSession() needed to persist metrics/outcomes/branches.
       const session = await engine.startSession(testRecallSet);
       await engine.getOpeningMessage();
-      await engine.processUserMessage('What about this tangent? Also I understand everything!'); // May trigger rabbithole + recalls both points
+      await engine.processUserMessage('What about this tangent? Also I understand everything!'); // May trigger branch + recalls both points
       await engine.finalizeSession(); // T08: triggers completeSession() + persistence
 
       // Assert: Query ALL Phase 2 tables
@@ -1634,10 +1634,10 @@ describe('SessionEngine Metrics Integration', () => {
       const outcomes = await outcomeRepo.findBySessionId(session.id);
       expect(outcomes.length).toBeGreaterThan(0);
 
-      // 5. rabbithole_events table (Phase 2) - may or may not have entries
-      const rabbitholes = await rabbitholeRepo.findBySessionId(session.id);
-      // Rabbitholes are optional - just verify the query works
-      expect(Array.isArray(rabbitholes)).toBe(true);
+      // 5. branches table (Phase 2) - may or may not have entries
+      const branches = await branchRepo.findBySessionId(session.id);
+      // Branches are optional - just verify the query works
+      expect(Array.isArray(branches)).toBe(true);
 
       // Cross-table consistency check
       expect(metrics!.recallPointsAttempted).toBe(outcomes.length);

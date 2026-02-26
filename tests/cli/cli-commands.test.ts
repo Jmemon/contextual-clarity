@@ -22,7 +22,7 @@ import * as schema from '../../src/storage/schema';
 import { RecallSetRepository, RecallPointRepository, SessionRepository, SessionMessageRepository } from '../../src/storage/repositories';
 import { SessionMetricsRepository } from '../../src/storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../../src/storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../../src/storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../../src/storage/repositories/branch.repository';
 import { FSRSScheduler } from '../../src/core/fsrs';
 import type { AppDatabase } from '../../src/storage/db';
 

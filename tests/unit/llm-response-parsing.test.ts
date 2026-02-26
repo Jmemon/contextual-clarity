@@ -2,7 +2,7 @@
  * Unit Tests: LLM Response Parsing
  *
  * This test suite rigorously tests the parsing functions that handle responses from
- * LLMs during rabbithole detection and recall evaluation. LLMs are unpredictable
+ * LLMs during branch detection and recall evaluation. LLMs are unpredictable
  * in their output formats, so these tests cover:
  *
  * - Valid JSON responses in various formats
@@ -17,11 +17,11 @@
 
 import { describe, it, expect } from 'bun:test';
 import {
-  parseRabbitholeDetectionResponse,
-  parseRabbitholeReturnResponse,
-  type RabbitholeDetectionResult,
-  type RabbitholeReturnResult,
-} from '../../src/llm/prompts/rabbithole-detector';
+  parseBranchDetectionResponse,
+  parseBranchReturnResponse,
+  type BranchDetectionResult,
+  type BranchReturnResult,
+} from '../../src/llm/prompts/branch-detector';
 import {
   parseEnhancedRecallEvaluationResponse,
   deriveRatingFromConfidence,
@@ -33,11 +33,13 @@ import {
 // =============================================================================
 
 /**
- * Creates a valid rabbithole detection JSON string for testing.
+ * Creates a valid branch detection JSON string for testing.
  * Allows overriding specific fields.
  */
-function validRabbitholeDetectionJson(overrides: Partial<RabbitholeDetectionResult> = {}): string {
-  const base: RabbitholeDetectionResult = {
+function validBranchDetectionJson(overrides: Record<string, unknown> = {}): string {
+  // The LLM outputs JSON with `isRabbithole` as the field name (matching the prompt).
+  // The parser maps this to `isBranch` in the BranchDetectionResult type.
+  const base = {
     isRabbithole: true,
     topic: 'Test topic about tangential subject',
     depth: 2,
@@ -50,10 +52,10 @@ function validRabbitholeDetectionJson(overrides: Partial<RabbitholeDetectionResu
 }
 
 /**
- * Creates a valid rabbithole return JSON string for testing.
+ * Creates a valid branch return JSON string for testing.
  */
-function validRabbitholeReturnJson(overrides: Partial<RabbitholeReturnResult> = {}): string {
-  const base: RabbitholeReturnResult = {
+function validBranchReturnJson(overrides: Partial<BranchReturnResult> = {}): string {
+  const base: BranchReturnResult = {
     hasReturned: true,
     confidence: 0.9,
     reasoning: 'The conversation returned to the main topic.',
@@ -77,20 +79,20 @@ function validEnhancedEvaluationJson(overrides: Partial<EnhancedRecallEvaluation
 }
 
 // =============================================================================
-// Section 1: Rabbithole Detection Response Parsing
+// Section 1: Branch Detection Response Parsing
 // =============================================================================
 
-describe('parseRabbitholeDetectionResponse', () => {
+describe('parseBranchDetectionResponse', () => {
   // -------------------------------------------------------------------------
   // Valid Responses
   // -------------------------------------------------------------------------
 
   describe('valid responses', () => {
     it('should parse valid JSON response', () => {
-      const response = validRabbitholeDetectionJson();
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson();
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
       expect(result.topic).toBe('Test topic about tangential subject');
       expect(result.depth).toBe(2);
       expect(result.relatedToCurrentPoint).toBe(true);
@@ -100,20 +102,20 @@ describe('parseRabbitholeDetectionResponse', () => {
     });
 
     it('should parse JSON wrapped in markdown code blocks', () => {
-      const json = validRabbitholeDetectionJson();
+      const json = validBranchDetectionJson();
       const response = '```json\n' + json + '\n```';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
       expect(result.confidence).toBe(0.85);
     });
 
     it('should parse JSON wrapped in plain code blocks (no language)', () => {
-      const json = validRabbitholeDetectionJson();
+      const json = validBranchDetectionJson();
       const response = '```\n' + json + '\n```';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
     });
 
     it('should parse JSON with extra whitespace', () => {
@@ -130,21 +132,21 @@ describe('parseRabbitholeDetectionResponse', () => {
         }
 
       `;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
       expect(result.topic).toBe('spaced topic');
     });
 
-    it('should parse response where isRabbithole is false', () => {
-      const response = validRabbitholeDetectionJson({
+    it('should parse response where isBranch is false', () => {
+      const response = validBranchDetectionJson({
         isRabbithole: false,
         topic: null,
         confidence: 0.95,
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.topic).toBeNull();
       expect(result.confidence).toBe(0.95);
     });
@@ -157,46 +159,46 @@ describe('parseRabbitholeDetectionResponse', () => {
   describe('invalid JSON handling', () => {
     it('should handle completely invalid JSON gracefully', () => {
       const response = 'This is not JSON at all, just plain text response.';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      // Should return default "not a rabbithole" result
-      expect(result.isRabbithole).toBe(false);
+      // Should return default "not a branch" result
+      expect(result.isBranch).toBe(false);
       expect(result.confidence).toBe(0);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
     it('should handle truncated JSON (incomplete response)', () => {
       const response = '{"isRabbithole": true, "topic": "test", "depth": 2, "related';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
     it('should handle JSON with trailing commas', () => {
       // Note: Standard JSON.parse fails on trailing commas
       const response = '{"isRabbithole": true, "topic": "test", "depth": 2,}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Should fail gracefully
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
     it('should handle JSON with single quotes instead of double', () => {
       // Standard JSON requires double quotes - single quotes are invalid
       const response = "{'isRabbithole': true, 'topic': 'test'}";
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
     it('should handle JSON with unquoted keys', () => {
       const response = '{isRabbithole: true, topic: "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
@@ -206,47 +208,47 @@ describe('parseRabbitholeDetectionResponse', () => {
         "isRabbithole": true,
         "topic": "test"
       }`;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
     });
 
     it('should handle empty string response', () => {
-      const result = parseRabbitholeDetectionResponse('');
+      const result = parseBranchDetectionResponse('');
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.confidence).toBe(0);
       expect(result.reasoning).toBe('Failed to parse detection response');
     });
 
     it('should handle null response', () => {
       // @ts-expect-error Testing null input intentionally
-      const result = parseRabbitholeDetectionResponse(null);
+      const result = parseBranchDetectionResponse(null);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.confidence).toBe(0);
     });
 
     it('should handle undefined response', () => {
       // @ts-expect-error Testing undefined input intentionally
-      const result = parseRabbitholeDetectionResponse(undefined);
+      const result = parseBranchDetectionResponse(undefined);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.confidence).toBe(0);
     });
 
     it('should handle non-string response', () => {
       // @ts-expect-error Testing non-string input intentionally
-      const result = parseRabbitholeDetectionResponse(12345);
+      const result = parseBranchDetectionResponse(12345);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.confidence).toBe(0);
     });
 
     it('should handle response that is just whitespace', () => {
-      const result = parseRabbitholeDetectionResponse('   \n\t  ');
+      const result = parseBranchDetectionResponse('   \n\t  ');
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
   });
@@ -263,9 +265,9 @@ describe('parseRabbitholeDetectionResponse', () => {
         confidence: 0.8,
         reasoning: 'test',
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false); // Default to not a rabbithole
+      expect(result.isBranch).toBe(false); // Default to not a branch
     });
 
     it('should provide defaults for missing confidence', () => {
@@ -275,7 +277,7 @@ describe('parseRabbitholeDetectionResponse', () => {
         depth: 2,
         reasoning: 'test',
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Missing confidence should default to 0.5 (moderate)
       expect(result.confidence).toBe(0.5);
@@ -288,7 +290,7 @@ describe('parseRabbitholeDetectionResponse', () => {
         confidence: 0.8,
         reasoning: 'test',
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.topic).toBeNull();
     });
@@ -300,7 +302,7 @@ describe('parseRabbitholeDetectionResponse', () => {
         confidence: 0.8,
         reasoning: 'test',
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.depth).toBe(1); // Default to shallow
     });
@@ -313,7 +315,7 @@ describe('parseRabbitholeDetectionResponse', () => {
         confidence: 0.8,
         reasoning: 'test',
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.relatedRecallPointIds).toEqual([]);
     });
@@ -326,7 +328,7 @@ describe('parseRabbitholeDetectionResponse', () => {
         confidence: 0.8,
         reasoning: 'test',
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.relatedToCurrentPoint).toBe(false);
     });
@@ -338,16 +340,16 @@ describe('parseRabbitholeDetectionResponse', () => {
         depth: 2,
         confidence: 0.8,
       });
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.reasoning).toBe('No reasoning provided');
     });
 
     it('should handle completely empty JSON object', () => {
       const response = '{}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.topic).toBeNull();
       expect(result.depth).toBe(1);
       expect(result.relatedToCurrentPoint).toBe(false);
@@ -364,59 +366,59 @@ describe('parseRabbitholeDetectionResponse', () => {
   describe('invalid field values', () => {
     it('should handle confidence > 1 but <= 100 as percentage', () => {
       // Values 1 < x <= 100 are treated as percentages and divided by 100
-      const response = validRabbitholeDetectionJson({ confidence: 1.5 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ confidence: 1.5 });
+      const result = parseBranchDetectionResponse(response);
 
       // 1.5 is in range (1, 100], so it's divided by 100
       expect(result.confidence).toBeCloseTo(0.015, 3);
     });
 
     it('should clamp confidence > 100 after percentage conversion', () => {
-      const response = validRabbitholeDetectionJson({ confidence: 150 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ confidence: 150 });
+      const result = parseBranchDetectionResponse(response);
 
       // 150 > 100, so it's NOT treated as percentage, just clamped to 1
       expect(result.confidence).toBe(1);
     });
 
     it('should clamp confidence to 0-1 range (negative value)', () => {
-      const response = validRabbitholeDetectionJson({ confidence: -0.5 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ confidence: -0.5 });
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.confidence).toBe(0);
     });
 
     it('should convert percentage-style confidence (0-100) to 0-1', () => {
-      const response = validRabbitholeDetectionJson({ confidence: 85 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ confidence: 85 });
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.confidence).toBe(0.85);
     });
 
     it('should handle confidence of exactly 100', () => {
-      const response = validRabbitholeDetectionJson({ confidence: 100 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ confidence: 100 });
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.confidence).toBe(1);
     });
 
     it('should normalize depth to 1 (values <= 1)', () => {
-      const response = validRabbitholeDetectionJson({ depth: 0 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ depth: 0 });
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.depth).toBe(1);
     });
 
     it('should normalize depth to 3 (values >= 3)', () => {
-      const response = validRabbitholeDetectionJson({ depth: 5 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ depth: 5 });
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.depth).toBe(3);
     });
 
     it('should normalize depth to 2 for intermediate values', () => {
-      const response = validRabbitholeDetectionJson({ depth: 1.5 });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ depth: 1.5 });
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.depth).toBe(2);
     });
@@ -424,32 +426,32 @@ describe('parseRabbitholeDetectionResponse', () => {
     it('should handle depth as string "2" (coerce if needed)', () => {
       // LLM might return "2" as a string instead of number
       const response = '{"isRabbithole": true, "topic": "test", "depth": "2", "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Non-number depth should default to 1
       expect(result.depth).toBe(1);
     });
 
-    it('should handle non-boolean isRabbithole (truthy string)', () => {
+    it('should handle non-boolean isBranch (truthy string)', () => {
       const response = '{"isRabbithole": "true", "topic": "test", "depth": 2, "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // String "true" is not === true, so should default to false
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
     });
 
-    it('should handle non-boolean isRabbithole (number 1)', () => {
+    it('should handle non-boolean isBranch (number 1)', () => {
       const response = '{"isRabbithole": 1, "topic": "test", "depth": 2, "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Number 1 is not === true, so should default to false
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
     });
 
     it('should handle topic as number (convert scenario)', () => {
       // LLM might mistakenly return topic as a number
       const response = '{"isRabbithole": true, "topic": 12345, "depth": 2, "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Non-string topic should be null
       expect(result.topic).toBeNull();
@@ -457,14 +459,14 @@ describe('parseRabbitholeDetectionResponse', () => {
 
     it('should handle topic as object (should become null)', () => {
       const response = '{"isRabbithole": true, "topic": {"nested": "object"}, "depth": 2, "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.topic).toBeNull();
     });
 
     it('should handle relatedRecallPointIds as string instead of array', () => {
       const response = '{"isRabbithole": true, "relatedRecallPointIds": "rp_1,rp_2", "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Non-array should become empty array
       expect(result.relatedRecallPointIds).toEqual([]);
@@ -472,7 +474,7 @@ describe('parseRabbitholeDetectionResponse', () => {
 
     it('should filter non-string elements from relatedRecallPointIds', () => {
       const response = '{"isRabbithole": true, "relatedRecallPointIds": ["rp_1", 123, null, "rp_2", {"obj": true}], "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       expect(result.relatedRecallPointIds).toEqual(['rp_1', 'rp_2']);
     });
@@ -480,7 +482,7 @@ describe('parseRabbitholeDetectionResponse', () => {
     it('should handle NaN confidence', () => {
       // This is tricky - JSON.parse can't produce NaN, but let's test the normalization
       const response = '{"isRabbithole": true, "confidence": "not a number", "reasoning": "test"}';
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Non-numeric confidence should default to 0.5
       expect(result.confidence).toBe(0.5);
@@ -488,8 +490,8 @@ describe('parseRabbitholeDetectionResponse', () => {
 
     it('should handle Infinity confidence', () => {
       // JSON doesn't support Infinity, but the normalization should handle extreme values
-      const response = validRabbitholeDetectionJson({ confidence: Number.MAX_VALUE });
-      const result = parseRabbitholeDetectionResponse(response);
+      const response = validBranchDetectionJson({ confidence: Number.MAX_VALUE });
+      const result = parseBranchDetectionResponse(response);
 
       // Should be clamped to 1
       expect(result.confidence).toBe(1);
@@ -504,10 +506,10 @@ describe('parseRabbitholeDetectionResponse', () => {
     it('should handle response with explanatory text before JSON', () => {
       const response = `Based on my analysis of the conversation, here is my assessment:
 
-${validRabbitholeDetectionJson()}`;
-      const result = parseRabbitholeDetectionResponse(response);
+${validBranchDetectionJson()}`;
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
       expect(result.confidence).toBe(0.85);
     });
 
@@ -515,27 +517,27 @@ ${validRabbitholeDetectionJson()}`;
       // IMPORTANT: Current implementation limitation - when JSON starts the response,
       // trailing text causes parse failure because extraction doesn't truncate at last }
       // This documents the actual behavior for awareness.
-      const response = `${validRabbitholeDetectionJson()}
+      const response = `${validBranchDetectionJson()}
 
 I hope this evaluation helps. Let me know if you need any clarification.`;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
       // Currently fails to parse due to trailing text
       // This test documents the limitation - ideally this would succeed
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
     it('should handle response with explanatory text after JSON in code block', () => {
       // Wrapping JSON in code blocks works because the code block regex extracts cleanly
       const response = `\`\`\`json
-${validRabbitholeDetectionJson()}
+${validBranchDetectionJson()}
 \`\`\`
 
 I hope this evaluation helps. Let me know if you need any clarification.`;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
     });
 
     it('should extract JSON from mixed text/JSON response', () => {
@@ -543,37 +545,37 @@ I hope this evaluation helps. Let me know if you need any clarification.`;
 
 After careful consideration, I believe:
 
-${validRabbitholeDetectionJson()}
+${validBranchDetectionJson()}
 
 This assessment is based on the topic drift observed.`;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
       expect(result.topic).toBe('Test topic about tangential subject');
     });
 
     it('should handle multiple JSON objects by extracting first to last brace', () => {
       // Note: The current implementation finds first { to LAST }, which can create issues
       // when there are multiple JSON objects. This tests the actual behavior.
-      const response = `${validRabbitholeDetectionJson({ topic: 'First topic' })}
+      const response = `${validBranchDetectionJson({ topic: 'First topic' })}
 
 Also, here's another perspective:
 
-${validRabbitholeDetectionJson({ topic: 'Second topic' })}`;
-      const result = parseRabbitholeDetectionResponse(response);
+${validBranchDetectionJson({ topic: 'Second topic' })}`;
+      const result = parseBranchDetectionResponse(response);
 
       // The extractor grabs from first { to last }, which creates invalid JSON
       // because it spans across two JSON objects. This results in parse failure.
       // This documents the current behavior - ideally it would extract the first valid JSON.
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
     it('should handle "I cannot" refusal responses', () => {
       const response = "I cannot analyze this conversation as it contains inappropriate content.";
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(false);
+      expect(result.isBranch).toBe(false);
       expect(result.reasoning).toContain('Failed to parse');
     });
 
@@ -581,11 +583,11 @@ ${validRabbitholeDetectionJson({ topic: 'Second topic' })}`;
       const response = `Here is my analysis of the conversation:
 
 \`\`\`json
-${validRabbitholeDetectionJson()}
+${validBranchDetectionJson()}
 \`\`\``;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
     });
 
     it('should handle response with thinking/reasoning before JSON', () => {
@@ -596,19 +598,19 @@ Let me analyze this step by step:
 3. This seems like a tangent
 </thinking>
 
-${validRabbitholeDetectionJson()}`;
-      const result = parseRabbitholeDetectionResponse(response);
+${validBranchDetectionJson()}`;
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
     });
 
     it('should handle response that apologizes then gives JSON', () => {
       const response = `I apologize for any confusion in my previous response. Let me provide the correct analysis:
 
-${validRabbitholeDetectionJson()}`;
-      const result = parseRabbitholeDetectionResponse(response);
+${validBranchDetectionJson()}`;
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
     });
 
     it('should handle response with markdown formatting around JSON', () => {
@@ -617,27 +619,27 @@ ${validRabbitholeDetectionJson()}`;
 **Classification:** Rabbithole detected
 
 \`\`\`json
-${validRabbitholeDetectionJson()}
+${validBranchDetectionJson()}
 \`\`\`
 
 ---
 *Generated by AI*`;
-      const result = parseRabbitholeDetectionResponse(response);
+      const result = parseBranchDetectionResponse(response);
 
-      expect(result.isRabbithole).toBe(true);
+      expect(result.isBranch).toBe(true);
     });
   });
 });
 
 // =============================================================================
-// Section 2: Rabbithole Return Response Parsing
+// Section 2: Branch Return Response Parsing
 // =============================================================================
 
-describe('parseRabbitholeReturnResponse', () => {
+describe('parseBranchReturnResponse', () => {
   describe('valid responses', () => {
     it('should parse valid return detection response', () => {
-      const response = validRabbitholeReturnJson();
-      const result = parseRabbitholeReturnResponse(response);
+      const response = validBranchReturnJson();
+      const result = parseBranchReturnResponse(response);
 
       expect(result.hasReturned).toBe(true);
       expect(result.confidence).toBe(0.9);
@@ -645,18 +647,18 @@ describe('parseRabbitholeReturnResponse', () => {
     });
 
     it('should parse response where hasReturned is false', () => {
-      const response = validRabbitholeReturnJson({
+      const response = validBranchReturnJson({
         hasReturned: false,
         reasoning: 'Still discussing the tangent.',
       });
-      const result = parseRabbitholeReturnResponse(response);
+      const result = parseBranchReturnResponse(response);
 
       expect(result.hasReturned).toBe(false);
     });
 
     it('should parse JSON wrapped in code blocks', () => {
-      const response = '```json\n' + validRabbitholeReturnJson() + '\n```';
-      const result = parseRabbitholeReturnResponse(response);
+      const response = '```json\n' + validBranchReturnJson() + '\n```';
+      const result = parseBranchReturnResponse(response);
 
       expect(result.hasReturned).toBe(true);
     });
@@ -668,7 +670,7 @@ describe('parseRabbitholeReturnResponse', () => {
         confidence: 0.8,
         reasoning: 'test',
       });
-      const result = parseRabbitholeReturnResponse(response);
+      const result = parseBranchReturnResponse(response);
 
       expect(result.hasReturned).toBe(false);
     });
@@ -678,7 +680,7 @@ describe('parseRabbitholeReturnResponse', () => {
         hasReturned: true,
         reasoning: 'test',
       });
-      const result = parseRabbitholeReturnResponse(response);
+      const result = parseBranchReturnResponse(response);
 
       expect(result.confidence).toBe(0.5);
     });
@@ -688,7 +690,7 @@ describe('parseRabbitholeReturnResponse', () => {
         hasReturned: true,
         confidence: 0.8,
       });
-      const result = parseRabbitholeReturnResponse(response);
+      const result = parseBranchReturnResponse(response);
 
       expect(result.reasoning).toBe('No reasoning provided');
     });
@@ -697,15 +699,15 @@ describe('parseRabbitholeReturnResponse', () => {
   describe('invalid values', () => {
     it('should handle boolean-like strings ("true", "false")', () => {
       const response = '{"hasReturned": "true", "confidence": 0.8, "reasoning": "test"}';
-      const result = parseRabbitholeReturnResponse(response);
+      const result = parseBranchReturnResponse(response);
 
       // String "true" !== boolean true, so default to false
       expect(result.hasReturned).toBe(false);
     });
 
     it('should clamp confidence to valid range', () => {
-      const response = validRabbitholeReturnJson({ confidence: 150 });
-      const result = parseRabbitholeReturnResponse(response);
+      const response = validBranchReturnJson({ confidence: 150 });
+      const result = parseBranchReturnResponse(response);
 
       // 150 is > 100, so it's clamped to 1 (after potential /100 conversion)
       // Actually, 150 > 100, so it gets divided by 100 = 1.5, then clamped to 1
@@ -716,22 +718,22 @@ describe('parseRabbitholeReturnResponse', () => {
   describe('invalid JSON', () => {
     it('should handle all invalid JSON cases from detection tests', () => {
       // Empty response
-      expect(parseRabbitholeReturnResponse('').hasReturned).toBe(false);
+      expect(parseBranchReturnResponse('').hasReturned).toBe(false);
 
       // Null
       // @ts-expect-error Testing null input
-      expect(parseRabbitholeReturnResponse(null).hasReturned).toBe(false);
+      expect(parseBranchReturnResponse(null).hasReturned).toBe(false);
 
       // Plain text
-      expect(parseRabbitholeReturnResponse('Not JSON').hasReturned).toBe(false);
+      expect(parseBranchReturnResponse('Not JSON').hasReturned).toBe(false);
 
       // Truncated JSON
-      expect(parseRabbitholeReturnResponse('{"hasReturned": true, "conf').hasReturned).toBe(false);
+      expect(parseBranchReturnResponse('{"hasReturned": true, "conf').hasReturned).toBe(false);
     });
 
     it('should include truncated response in reasoning on parse failure', () => {
       const longResponse = 'This is a very long response that does not contain any JSON...'.repeat(10);
-      const result = parseRabbitholeReturnResponse(longResponse);
+      const result = parseBranchReturnResponse(longResponse);
 
       expect(result.reasoning).toContain('Failed to parse');
       // Reasoning should contain truncated version of response
@@ -1146,61 +1148,61 @@ describe('parseEnhancedRecallEvaluationResponse', () => {
 describe('JSON extraction behavior', () => {
   it('should extract JSON from plain JSON string', () => {
     const response = '{"isRabbithole": true, "confidence": 0.9, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
   });
 
   it('should extract JSON from ```json code block', () => {
     const response = '```json\n{"isRabbithole": true, "confidence": 0.9, "reasoning": "test"}\n```';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
   });
 
   it('should extract JSON from ``` code block without language', () => {
     const response = '```\n{"isRabbithole": true, "confidence": 0.9, "reasoning": "test"}\n```';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
   });
 
   it('should handle nested JSON objects', () => {
     // The extractor uses first { to last }, which works for nested objects
     const response = '{"isRabbithole": true, "nested": {"key": "value"}, "confidence": 0.9, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
   });
 
   it('should handle JSON arrays at root (return default for non-object)', () => {
     const response = '[{"isRabbithole": true}, {"isRabbithole": false}]';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Arrays at root won't parse as expected object
-    expect(result.isRabbithole).toBe(false);
+    expect(result.isBranch).toBe(false);
   });
 
   it('should return default for no JSON found', () => {
     const response = 'This response contains no JSON at all.';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(false);
+    expect(result.isBranch).toBe(false);
     expect(result.reasoning).toContain('Failed to parse');
   });
 
   it('should handle response with only opening brace', () => {
     const response = 'Here is my analysis { but I never closed it';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(false);
+    expect(result.isBranch).toBe(false);
   });
 
   it('should handle response with only closing brace', () => {
     const response = 'I started somewhere } and here is the end';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(false);
+    expect(result.isBranch).toBe(false);
   });
 });
 
@@ -1223,9 +1225,9 @@ describe('real-world LLM responses', () => {
   "reasoning": "The conversation shifted from cellular respiration to discussing the Greek origins of the word mitochondria."
 }
 \`\`\``;
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
     expect(result.topic).toBe('etymology of mitochondria');
     expect(result.depth).toBe(2);
   });
@@ -1281,7 +1283,7 @@ However, they seemed confused about the Calvin cycle.
 \`\`\`
 
 I hope this helps!`;
-    const result = parseRabbitholeReturnResponse(response);
+    const result = parseBranchReturnResponse(response);
 
     expect(result.hasReturned).toBe(true);
     expect(result.confidence).toBe(0.88);
@@ -1307,9 +1309,9 @@ While this is related to the topic of genetics, it represents a tangent from the
 \`\`\`
 
 Let me know if you need any clarification on this analysis.`;
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
     expect(result.topic).toBe('historical discovery of DNA and Rosalind Franklin');
     expect(result.confidence).toBeCloseTo(0.78, 2);
   });
@@ -1321,11 +1323,11 @@ Let me know if you need any clarification on this analysis.`;
 
 describe('input sanitization and security', () => {
   it('should handle JSON with script tags in strings', () => {
-    const response = validRabbitholeDetectionJson({
+    const response = validBranchDetectionJson({
       topic: '<script>alert("xss")</script>',
       reasoning: 'Contains <script>malicious()</script> content',
     });
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Should parse successfully and preserve the content
     expect(result.topic).toBe('<script>alert("xss")</script>');
@@ -1333,11 +1335,11 @@ describe('input sanitization and security', () => {
   });
 
   it('should handle JSON with SQL injection attempts in strings', () => {
-    const response = validRabbitholeDetectionJson({
+    const response = validBranchDetectionJson({
       topic: "'; DROP TABLE users; --",
       reasoning: "Robert'); DROP TABLE students;--",
     });
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Should parse successfully - SQL injection is not a concern for JSON parsing
     expect(result.topic).toBe("'; DROP TABLE users; --");
@@ -1345,19 +1347,19 @@ describe('input sanitization and security', () => {
 
   it('should handle extremely long field values', () => {
     const veryLongTopic = 'A'.repeat(100000);
-    const response = validRabbitholeDetectionJson({ topic: veryLongTopic });
-    const result = parseRabbitholeDetectionResponse(response);
+    const response = validBranchDetectionJson({ topic: veryLongTopic });
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.topic).toBe(veryLongTopic);
     expect(result.topic!.length).toBe(100000);
   });
 
   it('should handle unicode and emoji in responses', () => {
-    const response = validRabbitholeDetectionJson({
+    const response = validBranchDetectionJson({
       topic: 'Discussion about emoji usage: 😀🎉🚀',
       reasoning: 'The learner used emoji: 👍 and unicode: über, café, 日本語',
     });
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.topic).toBe('Discussion about emoji usage: 😀🎉🚀');
     expect(result.reasoning).toContain('日本語');
@@ -1367,7 +1369,7 @@ describe('input sanitization and security', () => {
     // Null bytes in JSON strings must be escaped as \\u0000
     // Testing with escaped form which is valid JSON
     const response = '{"isRabbithole": true, "topic": "test\\u0000topic", "confidence": 0.8, "reasoning": "test\\u0000reason"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Should parse and preserve null bytes
     expect(result.topic).not.toBeNull();
@@ -1378,16 +1380,16 @@ describe('input sanitization and security', () => {
     // Literal null bytes in JSON strings are invalid and cause parse failure
     // This documents the expected behavior
     const response = '{"isRabbithole": true, "topic": "test' + '\u0000' + 'topic", "confidence": 0.8, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Parse fails due to invalid JSON
-    expect(result.isRabbithole).toBe(false);
+    expect(result.isBranch).toBe(false);
     expect(result.reasoning).toContain('Failed to parse');
   });
 
   it('should handle backslash escapes in strings', () => {
     const response = '{"isRabbithole": true, "topic": "path\\\\to\\\\file", "confidence": 0.8, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.topic).toBe('path\\to\\file');
   });
@@ -1395,19 +1397,19 @@ describe('input sanitization and security', () => {
   it('should handle JSON with prototype pollution attempts', () => {
     // Attempting to pollute __proto__ through JSON
     const response = '{"isRabbithole": true, "__proto__": {"polluted": true}, "confidence": 0.8, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Should parse but not cause pollution
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
     // @ts-expect-error Checking for unintended property
     expect(result.polluted).toBeUndefined();
   });
 
   it('should handle response with constructor property', () => {
     const response = '{"isRabbithole": true, "constructor": {"name": "evil"}, "confidence": 0.8, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
     expect(typeof result.constructor).toBe('function'); // Should be the Object constructor, not overwritten
   });
 
@@ -1420,27 +1422,27 @@ describe('input sanitization and security', () => {
 
     // Wrap in a valid detection format
     const response = `{"isRabbithole": true, "deep": ${nested}, "confidence": 0.8, "reasoning": "test"}`;
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Should parse successfully (100 levels is within JSON.parse limits)
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
   });
 
   it('should handle response with BOM (Byte Order Mark)', () => {
     const response = '\uFEFF{"isRabbithole": true, "confidence": 0.8, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // BOM should be handled gracefully
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
   });
 
   it('should handle mixed encoding issues', () => {
     // UTF-8 encoded content that might be misinterpreted
-    const response = validRabbitholeDetectionJson({
+    const response = validBranchDetectionJson({
       topic: 'Caffè Müller über Østergaard',
       reasoning: '日本語とעברית混合テスト',
     });
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.topic).toBe('Caffè Müller über Østergaard');
     expect(result.reasoning).toContain('日本語');
@@ -1453,45 +1455,45 @@ describe('input sanitization and security', () => {
 
 describe('edge cases and boundary conditions', () => {
   it('should handle confidence of exactly 0', () => {
-    const response = validRabbitholeDetectionJson({ confidence: 0 });
-    const result = parseRabbitholeDetectionResponse(response);
+    const response = validBranchDetectionJson({ confidence: 0 });
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.confidence).toBe(0);
   });
 
   it('should handle confidence of exactly 1', () => {
-    const response = validRabbitholeDetectionJson({ confidence: 1 });
-    const result = parseRabbitholeDetectionResponse(response);
+    const response = validBranchDetectionJson({ confidence: 1 });
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.confidence).toBe(1);
   });
 
   it('should handle empty topic string', () => {
-    const response = validRabbitholeDetectionJson({ topic: '' });
-    const result = parseRabbitholeDetectionResponse(response);
+    const response = validBranchDetectionJson({ topic: '' });
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.topic).toBe('');
   });
 
   it('should handle whitespace-only topic', () => {
-    const response = validRabbitholeDetectionJson({ topic: '   ' });
-    const result = parseRabbitholeDetectionResponse(response);
+    const response = validBranchDetectionJson({ topic: '   ' });
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.topic).toBe('   ');
   });
 
   it('should handle very small confidence values', () => {
-    const response = validRabbitholeDetectionJson({ confidence: 0.0000001 });
-    const result = parseRabbitholeDetectionResponse(response);
+    const response = validBranchDetectionJson({ confidence: 0.0000001 });
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.confidence).toBeCloseTo(0.0000001, 7);
   });
 
   it('should handle response with only required minimum fields', () => {
     const response = '{"isRabbithole": false}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(false);
+    expect(result.isBranch).toBe(false);
     expect(result.depth).toBe(1);
     expect(result.confidence).toBe(0.5);
   });
@@ -1508,10 +1510,10 @@ describe('edge cases and boundary conditions', () => {
       relatedToCurrentPoint: true,
       relatedRecallPointIds: [],
     });
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     // Extra fields should be ignored
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
     // @ts-expect-error Checking for unintended property
     expect(result.extraField1).toBeUndefined();
   });
@@ -1526,16 +1528,16 @@ describe('edge cases and boundary conditions', () => {
       topic: 'out of order',
       relatedToCurrentPoint: false,
     });
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
-    expect(result.isRabbithole).toBe(true);
+    expect(result.isBranch).toBe(true);
     expect(result.topic).toBe('out of order');
     expect(result.depth).toBe(3);
   });
 
   it('should handle JSON number edge cases (scientific notation)', () => {
     const response = '{"isRabbithole": true, "confidence": 8.5e-1, "reasoning": "test"}';
-    const result = parseRabbitholeDetectionResponse(response);
+    const result = parseBranchDetectionResponse(response);
 
     expect(result.confidence).toBeCloseTo(0.85, 2);
   });
@@ -1543,14 +1545,14 @@ describe('edge cases and boundary conditions', () => {
   it('should handle boolean false vs missing field correctly', () => {
     // Explicit false
     const response1 = '{"isRabbithole": false, "relatedToCurrentPoint": false}';
-    const result1 = parseRabbitholeDetectionResponse(response1);
-    expect(result1.isRabbithole).toBe(false);
+    const result1 = parseBranchDetectionResponse(response1);
+    expect(result1.isBranch).toBe(false);
     expect(result1.relatedToCurrentPoint).toBe(false);
 
     // Missing fields (should also be false)
     const response2 = '{}';
-    const result2 = parseRabbitholeDetectionResponse(response2);
-    expect(result2.isRabbithole).toBe(false);
+    const result2 = parseBranchDetectionResponse(response2);
+    expect(result2.isBranch).toBe(false);
     expect(result2.relatedToCurrentPoint).toBe(false);
   });
 });

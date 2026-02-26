@@ -26,7 +26,7 @@ import {
 } from '../src/storage/repositories';
 import { SessionMetricsRepository } from '../src/storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../src/storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../src/storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../src/storage/repositories/branch.repository';
 import { AnalyticsCalculator } from '../src/core/analytics/analytics-calculator';
 import { DashboardDataAggregator } from '../src/core/dashboard/dashboard-data';
 import { FSRSScheduler } from '../src/core/fsrs';
@@ -59,7 +59,7 @@ export interface TestRepositories {
   messageRepo: SessionMessageRepository;
   metricsRepo: SessionMetricsRepository;
   outcomeRepo: RecallOutcomeRepository;
-  rabbitholeRepo: RabbitholeEventRepository;
+  branchRepo: BranchRepository;
 }
 
 /**
@@ -126,7 +126,7 @@ export function createTestRepositories(db: AppDatabase): TestRepositories {
     messageRepo: new SessionMessageRepository(db),
     metricsRepo: new SessionMetricsRepository(db),
     outcomeRepo: new RecallOutcomeRepository(db),
-    rabbitholeRepo: new RabbitholeEventRepository(db),
+    branchRepo: new BranchRepository(db),
   };
 }
 
@@ -143,7 +143,7 @@ export function createTestContext(): TestContext {
   const analyticsCalc = new AnalyticsCalculator(
     repos.metricsRepo,
     repos.outcomeRepo,
-    repos.rabbitholeRepo,
+    repos.branchRepo,
     repos.recallSetRepo,
     repos.recallPointRepo
   );
@@ -574,7 +574,7 @@ export function createTestApp(context: TestContext): Hono {
             recallPointsFailed: metrics.recallPointsFailed,
             avgConfidence: metrics.avgConfidence,
             totalMessages: metrics.totalMessages,
-            rabbitholeCount: metrics.rabbitholeCount,
+            branchCount: metrics.rabbitholeCount,
             estimatedCostUsd: metrics.estimatedCostUsd,
           }
         : null,
@@ -591,7 +591,7 @@ export function createTestApp(context: TestContext): Hono {
 
     const messages = await repos.messageRepo.findBySessionId(id);
     const recallOutcomes = await repos.outcomeRepo.findBySessionId(id);
-    const rabbitholeEvents = await repos.rabbitholeRepo.findBySessionId(id);
+    const branchEvents = await repos.branchRepo.findBySessionId(id);
 
     const transcriptMessages = messages.map((msg, index) => {
       let evaluationMarker = null;
@@ -610,11 +610,11 @@ export function createTestApp(context: TestContext): Hono {
         }
       }
 
-      let rabbitholeMarker = null;
-      for (const event of rabbitholeEvents) {
+      let branchMarker = null;
+      for (const event of branchEvents) {
         const returnIndex = event.returnMessageIndex ?? Infinity;
         if (index >= event.triggerMessageIndex && index <= returnIndex) {
-          rabbitholeMarker = {
+          branchMarker = {
             eventId: event.id,
             topic: event.topic,
             isTrigger: index === event.triggerMessageIndex,
@@ -633,7 +633,7 @@ export function createTestApp(context: TestContext): Hono {
         tokenCount: msg.tokenCount,
         messageIndex: index,
         evaluationMarker,
-        rabbitholeMarker,
+        branchMarker,
       };
     });
 
@@ -720,7 +720,7 @@ export function createTestApp(context: TestContext): Hono {
       return badRequest(c, `Cannot abandon session: session is already ${session.status}`);
     }
 
-    await repos.rabbitholeRepo.markActiveAsAbandoned(id);
+    await repos.branchRepo.markActiveAsAbandoned(id);
     await repos.sessionRepo.abandon(id);
 
     return success(c, {

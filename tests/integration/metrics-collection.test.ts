@@ -8,7 +8,7 @@
  * - Recall outcome recording with confidence and suggested ratings
  * - Token usage tracking and cost calculation
  * - Engagement score calculation
- * - RabbitholeDetector tangent detection and return handling
+ * - BranchDetector tangent detection and return handling
  * - Enhanced RecallEvaluator confidence scores and concept identification
  *
  * Tests use an in-memory SQLite database for isolation and reproducibility.
@@ -29,9 +29,9 @@ import {
 } from '../../src/storage/repositories';
 import { SessionMetricsRepository } from '../../src/storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../../src/storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../../src/storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../../src/storage/repositories/branch.repository';
 import { SessionMetricsCollector } from '../../src/core/session/metrics-collector';
-import { RabbitholeDetector } from '../../src/core/analysis/rabbithole-detector';
+import { BranchDetector } from '../../src/core/analysis/branch-detector';
 import { FSRSScheduler } from '../../src/core/fsrs';
 import type { RecallSet, RecallPoint, Session, SessionMessage } from '../../src/core/models';
 import type { EnhancedRecallEvaluation } from '../../src/core/scoring/types';
@@ -41,21 +41,21 @@ import type { LLMMessage, LLMResponse, StreamCallbacks, LLMConfig } from '../../
 /**
  * Mock Anthropic Client for deterministic testing of metrics collection.
  *
- * Provides controlled responses for rabbithole detection and return detection,
+ * Provides controlled responses for branch detection and return detection,
  * allowing us to test the metrics pipeline without actual LLM calls.
  */
 class MockAnthropicClient {
-  private rabbitHoleResponses: string[] = [];
+  private branchResponses: string[] = [];
   private returnResponses: string[] = [];
   private responseIndex = 0;
   private returnResponseIndex = 0;
 
   /**
-   * Configure the mock to return specific rabbithole detection results.
+   * Configure the mock to return specific branch detection results.
    * Each call to complete() returns the next response in sequence.
    */
-  setRabbitholeResponses(responses: string[]): void {
-    this.rabbitHoleResponses = responses;
+  setBranchResponses(responses: string[]): void {
+    this.branchResponses = responses;
     this.responseIndex = 0;
   }
 
@@ -85,8 +85,8 @@ class MockAnthropicClient {
         '{"hasReturned": false, "confidence": 0.3}';
       this.returnResponseIndex++;
     } else {
-      // This is a rabbithole detection prompt
-      responseText = this.rabbitHoleResponses[this.responseIndex] ||
+      // This is a branch detection prompt
+      responseText = this.branchResponses[this.responseIndex] ||
         '{"isRabbithole": false, "confidence": 0.3}';
       this.responseIndex++;
     }
@@ -180,7 +180,7 @@ describe('Session Metrics Collection', () => {
   let messageRepo: SessionMessageRepository;
   let metricsRepo: SessionMetricsRepository;
   let outcomeRepo: RecallOutcomeRepository;
-  let rabbitholeRepo: RabbitholeEventRepository;
+  let branchRepo: BranchRepository;
 
   // Test services and data
   let scheduler: FSRSScheduler;
@@ -201,7 +201,7 @@ describe('Session Metrics Collection', () => {
     messageRepo = new SessionMessageRepository(db);
     metricsRepo = new SessionMetricsRepository(db);
     outcomeRepo = new RecallOutcomeRepository(db);
-    rabbitholeRepo = new RabbitholeEventRepository(db);
+    branchRepo = new BranchRepository(db);
 
     // Initialize services
     scheduler = new FSRSScheduler();
@@ -231,7 +231,7 @@ describe('Session Metrics Collection', () => {
       const stats = collector.getCurrentStats();
       expect(stats.messagesRecorded).toBe(0);
       expect(stats.outcomesRecorded).toBe(0);
-      expect(stats.activeRabbitholes).toBe(0);
+      expect(stats.activeBranches).toBe(0);
       expect(stats.tokensUsed).toBe(0);
     });
 
@@ -408,15 +408,15 @@ describe('Session Metrics Collection', () => {
       const stats = collector.getCurrentStats();
       expect(stats.messagesRecorded).toBe(0);
       expect(stats.outcomesRecorded).toBe(0);
-      expect(stats.activeRabbitholes).toBe(0);
+      expect(stats.activeBranches).toBe(0);
       expect(stats.tokensUsed).toBe(0);
     });
   });
 
-  describe('RabbitholeDetector', () => {
-    it('should detect rabbithole entry', async () => {
-      // Arrange: Set up mock to return a rabbithole detection
-      mockLlmClient.setRabbitholeResponses([
+  describe('BranchDetector', () => {
+    it('should detect branch entry', async () => {
+      // Arrange: Set up mock to return a branch detection
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.85,
@@ -426,7 +426,7 @@ describe('Session Metrics Collection', () => {
         }),
       ]);
 
-      const detector = new RabbitholeDetector(mockLlmClient as any);
+      const detector = new BranchDetector(mockLlmClient as any);
 
       // Create test messages showing conversation drifting off-topic
       const messages: SessionMessage[] = [
@@ -456,26 +456,25 @@ describe('Session Metrics Collection', () => {
         },
       ];
 
-      // Act: Detect rabbithole
-      const event = await detector.detectRabbithole(
+      // Act: Detect branch
+      const event = await detector.detectBranch(
         'sess_test',
         messages,
         testRecallPoints[0],
         testRecallPoints,
-        2
+        'msg_003'
       );
 
-      // Assert: Verify rabbithole was detected
+      // Assert: Verify branch was detected
       expect(event).not.toBeNull();
       expect(event!.topic).toBe('Economic consequences of the event');
       expect(event!.depth).toBe(1);
       expect(event!.status).toBe('active');
-      expect(event!.triggerMessageIndex).toBe(2);
     });
 
-    it('should detect rabbithole return', async () => {
-      // Arrange: First detect a rabbithole
-      mockLlmClient.setRabbitholeResponses([
+    it('should detect branch return', async () => {
+      // Arrange: First detect a branch
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.85,
@@ -492,15 +491,15 @@ describe('Session Metrics Collection', () => {
         }),
       ]);
 
-      const detector = new RabbitholeDetector(mockLlmClient as any);
+      const detector = new BranchDetector(mockLlmClient as any);
 
       const messages: SessionMessage[] = [
         { id: 'msg_001', sessionId: 'sess_test', role: 'assistant', content: 'Main topic discussion', timestamp: new Date(), tokenCount: 20 },
         { id: 'msg_002', sessionId: 'sess_test', role: 'user', content: 'Off-topic question', timestamp: new Date(), tokenCount: 15 },
       ];
 
-      // First, create the rabbithole
-      await detector.detectRabbithole('sess_test', messages, testRecallPoints[0], testRecallPoints, 1);
+      // First, create the branch
+      await detector.detectBranch('sess_test', messages, testRecallPoints[0], testRecallPoints, 'msg_002');
 
       // Now add messages showing return to topic
       const updatedMessages: SessionMessage[] = [
@@ -510,20 +509,19 @@ describe('Session Metrics Collection', () => {
       ];
 
       // Act: Detect returns
-      const returns = await detector.detectReturns(updatedMessages, testRecallPoints[0], 3);
+      const returns = await detector.detectReturns(updatedMessages, testRecallPoints[0], 'msg_001');
 
       // Assert: Verify return was detected
       expect(returns).toHaveLength(1);
-      expect(returns[0].status).toBe('returned');
-      expect(returns[0].returnMessageIndex).toBe(3);
+      expect(returns[0].status).toBe('closed');
     });
 
-    it('should handle multiple concurrent rabbitholes', async () => {
-      // This test verifies that the detector can track multiple rabbitholes
+    it('should handle multiple concurrent branches', async () => {
+      // This test verifies that the detector can track multiple branches
       // by using separate detectors to simulate the behavior
 
-      // Arrange: Configure mock to return rabbithole detection
-      mockLlmClient.setRabbitholeResponses([
+      // Arrange: Configure mock to return branch detection
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.8,
@@ -533,7 +531,7 @@ describe('Session Metrics Collection', () => {
         }),
       ]);
 
-      const detector = new RabbitholeDetector(mockLlmClient as any, {
+      const detector = new BranchDetector(mockLlmClient as any, {
         confidenceThreshold: 0.6,
         messageWindowSize: 10,
       });
@@ -543,10 +541,10 @@ describe('Session Metrics Collection', () => {
         { id: 'msg_002', sessionId: 'sess_test', role: 'user', content: 'First tangent question about politics', timestamp: new Date(), tokenCount: 15 },
       ];
 
-      // Act: Detect first rabbithole
-      const event1 = await detector.detectRabbithole('sess_test', messages, testRecallPoints[0], testRecallPoints, 1);
+      // Act: Detect first branch
+      const event1 = await detector.detectBranch('sess_test', messages, testRecallPoints[0], testRecallPoints, 'msg_002');
 
-      // Assert: First rabbithole should be detected
+      // Assert: First branch should be detected
       expect(event1).not.toBeNull();
       expect(event1!.topic).toBe('First tangent: Politics');
       expect(event1!.status).toBe('active');
@@ -555,15 +553,15 @@ describe('Session Metrics Collection', () => {
       expect(detector.getActiveCount()).toBe(1);
       expect(detector.isActive(event1!.id)).toBe(true);
 
-      // Get active rabbitholes list
-      const activeRabbitholes = detector.getActiveRabbitholes();
-      expect(activeRabbitholes).toHaveLength(1);
-      expect(activeRabbitholes[0].topic).toBe('First tangent: Politics');
+      // Get active branches list
+      const activeBranches = detector.getActiveBranches();
+      expect(activeBranches).toHaveLength(1);
+      expect(activeBranches[0].topic).toBe('First tangent: Politics');
     });
 
-    it('should close all active on session end', async () => {
-      // Arrange: Create active rabbitholes with different topics
-      mockLlmClient.setRabbitholeResponses([
+    it('should close all active branches on session end', async () => {
+      // Arrange: Create active branches with different topics
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.85,
@@ -580,7 +578,7 @@ describe('Session Metrics Collection', () => {
         }),
       ]);
 
-      const detector = new RabbitholeDetector(mockLlmClient as any, {
+      const detector = new BranchDetector(mockLlmClient as any, {
         confidenceThreshold: 0.6,
         messageWindowSize: 10,
       });
@@ -590,7 +588,7 @@ describe('Session Metrics Collection', () => {
         { id: 'msg_002', sessionId: 'sess_test', role: 'user', content: 'Question about philosophy', timestamp: new Date(), tokenCount: 10 },
       ];
 
-      await detector.detectRabbithole('sess_test', messages, testRecallPoints[0], testRecallPoints, 1);
+      await detector.detectBranch('sess_test', messages, testRecallPoints[0], testRecallPoints, 'msg_002');
 
       const messages2 = [
         ...messages,
@@ -598,16 +596,16 @@ describe('Session Metrics Collection', () => {
         { id: 'msg_004', sessionId: 'sess_test', role: 'user', content: 'What about mathematics?', timestamp: new Date(), tokenCount: 12 },
       ];
 
-      await detector.detectRabbithole('sess_test', messages2, testRecallPoints[0], testRecallPoints, 3);
+      await detector.detectBranch('sess_test', messages2, testRecallPoints[0], testRecallPoints, 'msg_004');
 
-      // Verify we have active rabbitholes (2 if both detected, at least 1)
+      // Verify we have active branches (2 if both detected, at least 1)
       const activeCount = detector.getActiveCount();
       expect(activeCount).toBeGreaterThanOrEqual(1);
 
-      // Act: Close all active rabbitholes
+      // Act: Close all active branches
       const abandoned = detector.closeAllActive(4);
 
-      // Assert: All rabbitholes should be abandoned
+      // Assert: All branches should be abandoned
       expect(abandoned.length).toBe(activeCount);
       for (const event of abandoned) {
         expect(event.status).toBe('abandoned');
@@ -615,9 +613,9 @@ describe('Session Metrics Collection', () => {
       expect(detector.getActiveCount()).toBe(0);
     });
 
-    it('should not create duplicate rabbitholes for same topic', async () => {
+    it('should not create duplicate branches for same topic', async () => {
       // Arrange: Configure mock to return the same topic twice
-      mockLlmClient.setRabbitholeResponses([
+      mockLlmClient.setBranchResponses([
         JSON.stringify({
           isRabbithole: true,
           confidence: 0.85,
@@ -634,15 +632,15 @@ describe('Session Metrics Collection', () => {
         }),
       ]);
 
-      const detector = new RabbitholeDetector(mockLlmClient as any);
+      const detector = new BranchDetector(mockLlmClient as any);
 
       const messages1: SessionMessage[] = [
         { id: 'msg_001', sessionId: 'sess_test', role: 'assistant', content: 'Start', timestamp: new Date(), tokenCount: 10 },
         { id: 'msg_002', sessionId: 'sess_test', role: 'user', content: 'Same topic', timestamp: new Date(), tokenCount: 10 },
       ];
 
-      // First detection - should create rabbithole
-      const event1 = await detector.detectRabbithole('sess_test', messages1, testRecallPoints[0], testRecallPoints, 1);
+      // First detection - should create branch
+      const event1 = await detector.detectBranch('sess_test', messages1, testRecallPoints[0], testRecallPoints, 'msg_002');
 
       const messages2 = [
         ...messages1,
@@ -650,9 +648,9 @@ describe('Session Metrics Collection', () => {
       ];
 
       // Second detection with same topic - should NOT create duplicate
-      const event2 = await detector.detectRabbithole('sess_test', messages2, testRecallPoints[0], testRecallPoints, 2);
+      const event2 = await detector.detectBranch('sess_test', messages2, testRecallPoints[0], testRecallPoints, 'msg_003');
 
-      // Assert: Only one rabbithole should be active
+      // Assert: Only one branch should be active
       expect(event1).not.toBeNull();
       expect(event2).toBeNull(); // Duplicate should return null
       expect(detector.getActiveCount()).toBe(1);
@@ -802,45 +800,47 @@ describe('Session Metrics Collection', () => {
     });
   });
 
-  describe('Metrics Collector with Rabbitholes', () => {
-    it('should record rabbithole events in metrics', async () => {
-      // Arrange: Create collector and rabbithole event
+  describe('Metrics Collector with Branches', () => {
+    it('should record branch events in metrics', async () => {
+      // Arrange: Create collector and branch event
       const collector = new SessionMetricsCollector();
-      collector.startSession('sess_with_rabbitholes');
+      collector.startSession('sess_with_branches');
 
       // Record some messages
       collector.recordMessage('msg_001', 'assistant', 50, 100, 50);
       collector.recordMessage('msg_002', 'user', 30);
       collector.recordMessage('msg_003', 'assistant', 40, 90, 40);
 
-      // Act: Record a rabbithole event
-      collector.recordRabbithole({
+      // Act: Record a branch event
+      collector.recordBranch({
         id: 'rh_001',
+        parentBranchId: null,
+        branchPointMessageId: 'msg_002',
         topic: 'Economic impacts',
-        triggerMessageIndex: 1,
-        returnMessageIndex: null,
         depth: 1,
         relatedRecallPointIds: ['rp_test_1'],
         userInitiated: true,
         status: 'active',
+        summary: null,
+        conversation: null,
       });
 
-      // Assert: Verify rabbithole is tracked
+      // Assert: Verify branch is tracked
       const stats = collector.getCurrentStats();
-      expect(stats.activeRabbitholes).toBe(1);
+      expect(stats.activeBranches).toBe(1);
 
-      // Update rabbithole to returned status
-      collector.updateRabbitholeReturn('rh_001', 2);
+      // Update branch to closed status
+      collector.updateBranchClosure('rh_001');
 
       // After returning, active count should be 0
       const updatedStats = collector.getCurrentStats();
-      expect(updatedStats.activeRabbitholes).toBe(0);
+      expect(updatedStats.activeBranches).toBe(0);
     });
 
-    it('should include rabbitholes in finalized metrics', async () => {
-      // Arrange: Create collector with complete rabbithole lifecycle
+    it('should include branches in finalized metrics', async () => {
+      // Arrange: Create collector with complete branch lifecycle
       const collector = new SessionMetricsCollector();
-      collector.startSession('sess_final_rabbitholes');
+      collector.startSession('sess_final_branches');
 
       // Record messages
       collector.recordMessage('msg_001', 'assistant', 50, 100, 50);
@@ -848,29 +848,33 @@ describe('Session Metrics Collection', () => {
       collector.recordMessage('msg_003', 'assistant', 40, 90, 40);
       collector.recordMessage('msg_004', 'user', 25);
 
-      // Record rabbithole that returns
-      collector.recordRabbithole({
+      // Record branch that returns (gets closed)
+      collector.recordBranch({
         id: 'rh_returned',
+        parentBranchId: null,
+        branchPointMessageId: 'msg_002',
         topic: 'Returned tangent',
-        triggerMessageIndex: 1,
-        returnMessageIndex: null,
         depth: 1,
         relatedRecallPointIds: [],
         userInitiated: true,
         status: 'active',
+        summary: null,
+        conversation: null,
       });
-      collector.updateRabbitholeReturn('rh_returned', 3);
+      collector.updateBranchClosure('rh_returned');
 
-      // Record rabbithole that stays active (will be marked abandoned)
-      collector.recordRabbithole({
+      // Record branch that stays active (will be marked abandoned)
+      collector.recordBranch({
         id: 'rh_abandoned',
+        parentBranchId: null,
+        branchPointMessageId: 'msg_004',
         topic: 'Abandoned tangent',
-        triggerMessageIndex: 3,
-        returnMessageIndex: null,
         depth: 1,
         relatedRecallPointIds: [],
         userInitiated: false,
         status: 'active',
+        summary: null,
+        conversation: null,
       });
 
       // Record an outcome
@@ -885,7 +889,7 @@ describe('Session Metrics Collection', () => {
 
       // Act: Finalize the session
       const mockSession: Session = {
-        id: 'sess_final_rabbitholes',
+        id: 'sess_final_branches',
         recallSetId: 'rs_test',
         status: 'completed',
         targetRecallPointIds: ['rp_test_1'],
@@ -895,16 +899,16 @@ describe('Session Metrics Collection', () => {
 
       const metrics = await collector.finalizeSession(mockSession);
 
-      // Assert: Both rabbitholes should be in metrics
-      expect(metrics.rabbitholes).toHaveLength(2);
+      // Assert: Both branches should be in metrics
+      expect(metrics.branches).toHaveLength(2);
 
-      // Returned rabbithole should have 'returned' status
-      const returned = metrics.rabbitholes.find(rh => rh.id === 'rh_returned');
-      expect(returned).not.toBeUndefined();
-      expect(returned!.status).toBe('returned');
+      // Closed branch should have 'closed' status
+      const closed = metrics.branches.find(rh => rh.id === 'rh_returned');
+      expect(closed).not.toBeUndefined();
+      expect(closed!.status).toBe('closed');
 
-      // Previously active rabbithole should now be 'abandoned'
-      const abandoned = metrics.rabbitholes.find(rh => rh.id === 'rh_abandoned');
+      // Previously active branch should now be 'abandoned'
+      const abandoned = metrics.branches.find(rh => rh.id === 'rh_abandoned');
       expect(abandoned).not.toBeUndefined();
       expect(abandoned!.status).toBe('abandoned');
     });

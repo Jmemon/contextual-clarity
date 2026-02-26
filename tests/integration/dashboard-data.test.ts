@@ -30,7 +30,7 @@ import {
 } from '../../src/storage/repositories';
 import { SessionMetricsRepository } from '../../src/storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../../src/storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../../src/storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../../src/storage/repositories/branch.repository';
 import { AnalyticsCalculator } from '../../src/core/analytics/analytics-calculator';
 import { DashboardDataAggregator } from '../../src/core/dashboard/dashboard-data';
 import { FSRSScheduler } from '../../src/core/fsrs';
@@ -131,7 +131,7 @@ async function seedDashboardTestData(
   sessionRepo: SessionRepository,
   metricsRepo: SessionMetricsRepository,
   outcomeRepo: RecallOutcomeRepository,
-  rabbitholeRepo: RabbitholeEventRepository,
+  branchRepo: BranchRepository,
   scheduler: FSRSScheduler
 ): Promise<TestData> {
   const now = new Date();
@@ -799,7 +799,7 @@ describe('Dashboard Data Aggregator', () => {
   let messageRepo: SessionMessageRepository;
   let metricsRepo: SessionMetricsRepository;
   let outcomeRepo: RecallOutcomeRepository;
-  let rabbitholeRepo: RabbitholeEventRepository;
+  let branchRepo: BranchRepository;
   let scheduler: FSRSScheduler;
   let analyticsCalc: AnalyticsCalculator;
   let aggregator: DashboardDataAggregator;
@@ -820,14 +820,14 @@ describe('Dashboard Data Aggregator', () => {
     messageRepo = new SessionMessageRepository(db);
     metricsRepo = new SessionMetricsRepository(db);
     outcomeRepo = new RecallOutcomeRepository(db);
-    rabbitholeRepo = new RabbitholeEventRepository(db);
+    branchRepo = new BranchRepository(db);
 
     // Initialize services
     scheduler = new FSRSScheduler();
     analyticsCalc = new AnalyticsCalculator(
       metricsRepo,
       outcomeRepo,
-      rabbitholeRepo,
+      branchRepo,
       recallSetRepo,
       recallPointRepo
     );
@@ -846,7 +846,7 @@ describe('Dashboard Data Aggregator', () => {
       sessionRepo,
       metricsRepo,
       outcomeRepo,
-      rabbitholeRepo,
+      branchRepo,
       scheduler
     );
   });
@@ -1027,12 +1027,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1081,12 +1081,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1161,12 +1161,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1237,12 +1237,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1306,12 +1306,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1353,12 +1353,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1421,12 +1421,12 @@ describe('Dashboard Data Aggregator', () => {
         const freshSessionRepo = new SessionRepository(freshDb.db);
         const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
         const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-        const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+        const freshBranchRepo = new BranchRepository(freshDb.db);
 
         const freshAnalyticsCalc = new AnalyticsCalculator(
           freshMetricsRepo,
           freshOutcomeRepo,
-          freshRabbitholeRepo,
+          freshBranchRepo,
           freshRecallSetRepo,
           freshRecallPointRepo
         );
@@ -1881,12 +1881,12 @@ describe('Dashboard Data Aggregator', () => {
       const freshSessionRepo = new SessionRepository(freshDb.db);
       const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
       const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-      const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+      const freshBranchRepo = new BranchRepository(freshDb.db);
 
       const freshAnalyticsCalc = new AnalyticsCalculator(
         freshMetricsRepo,
         freshOutcomeRepo,
-        freshRabbitholeRepo,
+        freshBranchRepo,
         freshRecallSetRepo,
         freshRecallPointRepo
       );
@@ -2006,12 +2006,12 @@ describe('Dashboard Data Aggregator', () => {
       const freshSessionRepo = new SessionRepository(freshDb.db);
       const freshMetricsRepo = new SessionMetricsRepository(freshDb.db);
       const freshOutcomeRepo = new RecallOutcomeRepository(freshDb.db);
-      const freshRabbitholeRepo = new RabbitholeEventRepository(freshDb.db);
+      const freshBranchRepo = new BranchRepository(freshDb.db);
 
       const freshAnalyticsCalc = new AnalyticsCalculator(
         freshMetricsRepo,
         freshOutcomeRepo,
-        freshRabbitholeRepo,
+        freshBranchRepo,
         freshRecallSetRepo,
         freshRecallPointRepo
       );
