@@ -55,11 +55,17 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0' },
         },
+        // Slide-in from right edge — used when a new branch tab appears.
+        slideInRight: {
+          '0%': { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 300ms ease-out',
         'user-flash': 'user-flash 400ms ease-out forwards',
         'cursor-blink': 'cursor-blink 1s ease-in-out infinite',
+        'slide-in-right': 'slideInRight 300ms ease-out',
       },
     },
   },
