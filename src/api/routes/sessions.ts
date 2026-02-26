@@ -401,7 +401,7 @@ export function sessionsRoutes(): Hono {
   /**
    * Retrieves the full conversation transcript for a session,
    * including evaluation markers for recall outcomes and
-   * rabbithole markers for tangent events.
+   * branch markers for tangent events.
    */
   router.get('/:id/transcript', async (c) => {
     try {

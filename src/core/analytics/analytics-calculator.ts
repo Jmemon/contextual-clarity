@@ -139,8 +139,10 @@ export class AnalyticsCalculator {
     const engagementTrend = await this.calculateEngagementTrend(recallSetId, 30);
 
     // Get top branch topics for insight into common tangents.
-    // The BranchRepository doesn't have getTopTopics; provide empty array
-    // until per-recallSet branch topic aggregation is implemented.
+    // The BranchRepository doesn't yet have a getTopTopics aggregation method;
+    // provide empty array until per-recallSet branch topic aggregation is implemented.
+    // branchRepo is retained for this future use.
+    void this.branchRepo;
     const topBranchTopics: { topic: string; count: number; avgDepth: number }[] = [];
 
     return {

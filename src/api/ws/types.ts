@@ -109,7 +109,7 @@ export interface DismissOverlayPayload {
  * Union type representing all possible messages from client to server.
  * Use this type when parsing incoming WebSocket messages.
  *
- * Replaced rabbithole messages with branch messages for multiplexed tab UX.
+ * Uses branch messages for multiplexed tab UX.
  */
 export type ClientMessage =
   | UserMessagePayload
@@ -211,7 +211,7 @@ export interface PointRecalledPayload {
  * The WebSocket connection will be closed after this message.
  *
  * T13: Uses SessionCompletionSummary from core/session/types.ts instead of the
- * old inline SessionSummary interface, adding rabbitholeCount and recalledPointIds.
+ * old inline SessionSummary interface, adding branchCount and recalledPointIds.
  */
 export interface SessionCompletePayload {
   type: 'session_complete';
@@ -327,7 +327,7 @@ export interface PongPayload {
  * Union type representing all possible messages from server to client.
  * Use this type when constructing outgoing WebSocket messages.
  *
- * Replaced rabbithole payloads with branch payloads for multiplexed tab UX.
+ * Uses branch payloads for multiplexed tab UX.
  */
 export type ServerMessage =
   | SessionStartedPayload

@@ -7,7 +7,7 @@
  * 1. Overview metrics (sessions, time, cost)
  * 2. Recall performance (success rate, engagement)
  * 3. Point-by-point breakdown (success rates, due dates, struggling indicators)
- * 4. Top rabbithole topics
+ * 4. Top branch topics
  * 5. Recent recall rate trend visualization
  *
  * The stats command helps users understand their learning progress and identify
@@ -30,7 +30,7 @@ import { RecallSetRepository } from '../../storage/repositories/recall-set.repos
 import { RecallPointRepository } from '../../storage/repositories/recall-point.repository';
 import { SessionMetricsRepository } from '../../storage/repositories/session-metrics.repository';
 import { RecallOutcomeRepository } from '../../storage/repositories/recall-outcome.repository';
-import { RabbitholeEventRepository } from '../../storage/repositories/rabbithole-event.repository';
+import { BranchRepository } from '../../storage/repositories/branch.repository';
 import type { RecallSetAnalytics, RecallPointAnalytics, TrendData } from '../../core/analytics';
 import {
   bold,
@@ -90,7 +90,7 @@ export async function runStatsCommand(
   const recallPointRepo = new RecallPointRepository(db);
   const sessionMetricsRepo = new SessionMetricsRepository(db);
   const recallOutcomeRepo = new RecallOutcomeRepository(db);
-  const rabbitholeRepo = new RabbitholeEventRepository(db);
+  const branchRepo = new BranchRepository(db);
 
   // Step 2: Find the recall set by name (case-insensitive search)
   const recallSet = await recallSetRepo.findByName(recallSetName);
@@ -106,7 +106,7 @@ export async function runStatsCommand(
   const analyticsCalc = new AnalyticsCalculator(
     sessionMetricsRepo,
     recallOutcomeRepo,
-    rabbitholeRepo,
+    branchRepo,
     recallSetRepo,
     recallPointRepo
   );
@@ -129,7 +129,7 @@ export async function runStatsCommand(
  * 1. Overview - Basic session and cost metrics
  * 2. Recall Performance - Success rates and engagement
  * 3. Point Breakdown - Per-point statistics with struggling indicators
- * 4. Top Rabbithole Topics - Common tangent topics
+ * 4. Top Branch Topics - Common tangent topics
  * 5. Recent Trend - ASCII visualization of recall rate trend
  *
  * @param analytics - The computed analytics for the recall set
@@ -149,8 +149,8 @@ function displayStatsReport(analytics: RecallSetAnalytics): void {
   // Section 3: Point Breakdown
   displayPointBreakdownSection(analytics.pointAnalytics);
 
-  // Section 4: Top Rabbithole Topics
-  displayRabbitholeSection(analytics.topRabbitholeTopics);
+  // Section 4: Top Branch Topics
+  displayBranchSection(analytics.topBranchTopics);
 
   // Section 5: Recent Trend
   displayTrendSection(analytics.recallRateTrend);
@@ -291,23 +291,23 @@ function displayPointBreakdownSection(pointAnalytics: RecallPointAnalytics[]): v
 }
 
 /**
- * Displays the top rabbithole topics section.
+ * Displays the top branch topics section.
  *
- * Rabbitholes are tangent topics that came up during sessions.
+ * Branches are tangent topics that came up during sessions.
  * This section shows the most frequent tangent topics, helping
  * users understand common areas of curiosity or confusion.
  *
- * @param topics - Array of top rabbithole topics with counts and depths
+ * @param topics - Array of top branch topics with counts and depths
  */
-function displayRabbitholeSection(
-  topics: RecallSetAnalytics['topRabbitholeTopics']
+function displayBranchSection(
+  topics: RecallSetAnalytics['topBranchTopics']
 ): void {
-  // Skip section if no rabbithole topics
+  // Skip section if no branch topics
   if (topics.length === 0) {
     return;
   }
 
-  console.log(bold(yellow('Top Rabbithole Topics')));
+  console.log(bold(yellow('Top Branch Topics')));
   console.log(formatSeparator(40));
 
   // Display each topic with occurrence count and average depth

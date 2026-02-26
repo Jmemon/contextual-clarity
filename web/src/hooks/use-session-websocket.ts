@@ -89,7 +89,7 @@ export type ServerMessage =
  * T13: Field names updated to match server's SessionCompletionSummary.
  * - totalPointsReviewed replaces pointsAttempted
  * - successfulRecalls replaces pointsSuccessful
- * New fields: sessionId, rabbitholeCount, recalledPointIds, estimatedCostUsd
+ * New fields: sessionId, branchCount, recalledPointIds, estimatedCostUsd
  */
 export interface SessionCompleteSummary {
   /** Unique identifier for the session */
@@ -104,8 +104,8 @@ export interface SessionCompleteSummary {
   successfulRecalls: number;
   /** Overall engagement score */
   engagementScore: number;
-  /** Number of rabbit holes entered during the session */
-  rabbitholeCount: number;
+  /** Number of branches (tangents) entered during the session */
+  branchCount: number;
   /** IDs of all recall points that were successfully recalled */
   recalledPointIds: string[];
   /** Short topic labels for each recalled point */
@@ -519,7 +519,7 @@ export function useSessionWebSocket(
 
         case 'point_recalled':
           // Update progress counts and labels immediately. With branches replacing
-          // rabbit holes, there is no need to buffer recall animations.
+          // branches, there is no need to buffer recall animations.
           setTotalPoints(message.totalPoints);
           setRecalledCount(message.recalledCount);
           setRecalledLabels(prev => [...prev, message.label]);

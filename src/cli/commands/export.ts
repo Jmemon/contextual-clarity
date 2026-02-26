@@ -40,7 +40,7 @@ import {
   SessionMessageRepository,
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
+  BranchRepository,
   RecallPointRepository,
 } from '../../storage/repositories';
 import { ExportService } from '../../core/export';
@@ -70,7 +70,7 @@ export function createExportCommand(): Command {
 
   // Sub-command: export session <session-id>
   // Exports a single session's complete data including metrics, outcomes,
-  // and optionally messages and rabbithole events
+  // and optionally messages and branch events
   exportCmd
     .command('session <session-id>')
     .description('Export a single session')
@@ -78,8 +78,8 @@ export function createExportCommand(): Command {
     .option('-o, --output <file>', 'Output file path')
     .option('--include-messages', 'Include message transcript', true)
     .option('--no-include-messages', 'Exclude message transcript')
-    .option('--include-rabbitholes', 'Include rabbithole events', true)
-    .option('--no-include-rabbitholes', 'Exclude rabbithole events')
+    .option('--include-branches', 'Include branch events', true)
+    .option('--no-include-branches', 'Exclude branch events')
     .action(async (sessionId: string, options: SessionExportOptions) => {
       await exportSession(sessionId, options);
     });
@@ -120,7 +120,7 @@ interface SessionExportOptions {
   format: string;
   output?: string;
   includeMessages: boolean;
-  includeRabbitholes: boolean;
+  includeBranches: boolean;
 }
 
 /**
@@ -163,14 +163,14 @@ function initializeExportService(): {
   const messageRepo = new SessionMessageRepository(db);
   const metricsRepo = new SessionMetricsRepository(db);
   const outcomeRepo = new RecallOutcomeRepository(db);
-  const rabbitholeRepo = new RabbitholeEventRepository(db);
+  const branchRepo = new BranchRepository(db);
   const recallPointRepo = new RecallPointRepository(db);
 
   // Create analytics calculator for aggregate statistics
   const analyticsCalc = new AnalyticsCalculator(
     metricsRepo,
     outcomeRepo,
-    rabbitholeRepo,
+    branchRepo,
     recallSetRepo,
     recallPointRepo
   );
@@ -182,7 +182,7 @@ function initializeExportService(): {
     messageRepo,
     metricsRepo,
     outcomeRepo,
-    rabbitholeRepo,
+    branchRepo,
     analyticsCalc
   );
 
@@ -284,7 +284,7 @@ async function writeExportFile(outputFile: string, data: string): Promise<void> 
  * Exports a single session's data.
  *
  * Fetches all data associated with a session (metrics, outcomes, messages,
- * rabbitholes) and exports it in the requested format. The output file
+ * branches) and exports it in the requested format. The output file
  * defaults to "session-{id}.{format}" if not specified.
  *
  * @param sessionId - The unique identifier of the session to export
@@ -309,7 +309,7 @@ async function exportSession(
     const exportOptions = {
       format,
       includeMessages: options.includeMessages,
-      includeRabbitholes: options.includeRabbitholes,
+      includeBranches: options.includeBranches,
       includeTimings: false, // Timings not yet implemented in the service
     };
 
@@ -317,7 +317,7 @@ async function exportSession(
     console.log(`  Session ID: ${dim(sessionId)}`);
     console.log(`  Format: ${dim(format)}`);
     console.log(`  Include messages: ${dim(options.includeMessages ? 'yes' : 'no')}`);
-    console.log(`  Include rabbitholes: ${dim(options.includeRabbitholes ? 'yes' : 'no')}`);
+    console.log(`  Include branches: ${dim(options.includeBranches ? 'yes' : 'no')}`);
 
     // Perform the export
     const data = await exportService.exportSession(sessionId, exportOptions);
@@ -394,7 +394,7 @@ async function exportRecallSet(
     const exportOptions = {
       format,
       includeMessages: false, // Set exports typically don't need full transcripts
-      includeRabbitholes: false,
+      includeBranches: false,
       includeTimings: false,
       dateRange,
     };
@@ -461,7 +461,7 @@ async function exportAnalytics(
     const exportOptions = {
       format,
       includeMessages: false,
-      includeRabbitholes: false,
+      includeBranches: false,
       includeTimings: false,
     };
 

@@ -23,7 +23,7 @@
  *   messageRepo,
  *   metricsRepo,
  *   outcomeRepo,
- *   rabbitholeRepo,
+ *   branchRepo,
  *   analyticsCalc
  * );
  *
@@ -31,7 +31,7 @@
  * const json = await exportService.exportSession('sess_abc123', {
  *   format: 'json',
  *   includeMessages: true,
- *   includeRabbitholes: true,
+ *   includeBranches: true,
  *   includeTimings: false,
  * });
  *
@@ -39,7 +39,7 @@
  * const csv = await exportService.exportRecallSet('rs_spanish_vocab', {
  *   format: 'csv',
  *   includeMessages: false,
- *   includeRabbitholes: false,
+ *   includeBranches: false,
  *   includeTimings: false,
  *   dateRange: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
  * });
@@ -105,7 +105,7 @@ export class ExportService {
    *
    * Fetches all data associated with a session and converts it to the requested
    * format. The export includes session metadata, metrics, and recall outcomes.
-   * Optionally includes messages, rabbitholes, and timing data based on options.
+   * Optionally includes messages, branches, and timing data based on options.
    *
    * @param sessionId - The unique identifier of the session to export
    * @param options - Export configuration options
@@ -126,7 +126,7 @@ export class ExportService {
    * const csv = await exportService.exportSession('sess_abc123', {
    *   format: 'csv',
    *   includeMessages: false,
-   *   includeRabbitholes: false,
+   *   includeBranches: false,
    *   includeTimings: false,
    * });
    * ```
@@ -258,7 +258,7 @@ export class ExportService {
    * const analytics = await exportService.exportAnalytics('rs_spanish_vocab', {
    *   format: 'json',
    *   includeMessages: false,
-   *   includeRabbitholes: false,
+   *   includeBranches: false,
    *   includeTimings: false,
    * });
    * ```
@@ -299,7 +299,7 @@ export class ExportService {
    * Build a SessionExport object from a session.
    *
    * Fetches all related data for a session (metrics, outcomes, and optionally
-   * messages, rabbitholes, timings) and assembles them into an export object.
+   * messages, branches, timings) and assembles them into an export object.
    *
    * @param session - The session domain model
    * @param recallSetName - The name of the recall set (for convenience)
@@ -339,7 +339,7 @@ export class ExportService {
             recallPointsAttempted: metrics.recallPointsAttempted,
             recallPointsSuccessful: metrics.recallPointsSuccessful,
             costUsd: metrics.estimatedCostUsd,
-            branchCount: metrics.rabbitholeCount,
+            rabbitholeCount: metrics.rabbitholeCount,
             calculatedAt: metrics.calculatedAt,
           }
         : null,
@@ -448,7 +448,7 @@ export class ExportService {
    * - Session info section
    * - Metrics section
    * - Recall outcomes section
-   * - Optional: Messages, Rabbitholes, Timings sections
+   * - Optional: Messages, Branches, Timings sections
    *
    * @param session - The session export object
    * @returns CSV string with sections separated by blank lines
@@ -496,7 +496,7 @@ export class ExportService {
           this.escapeCSV(session.metrics.recallPointsAttempted),
           this.escapeCSV(session.metrics.recallPointsSuccessful),
           this.escapeCSV(session.metrics.costUsd),
-          this.escapeCSV(session.metrics.branchCount),
+          this.escapeCSV(session.metrics.rabbitholeCount),
           this.escapeCSV(this.formatDate(session.metrics.calculatedAt)),
         ].join(',')
       );
@@ -615,7 +615,7 @@ export class ExportService {
    * - Recall set info section
    * - Analytics summary section
    * - Point analytics section
-   * - Top rabbithole topics section
+   * - Top branch topics section
    * - Sessions summary section
    *
    * @param recallSet - The recall set export object

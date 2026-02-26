@@ -444,7 +444,7 @@ export interface EvaluationMarker {
 
 /**
  * Branch (tangent) marker for a transcript message.
- * Renamed from RabbitholeMarker to align with the branch model.
+ * Represents a branch event marker aligned with the branch model.
  */
 export interface BranchMarker {
   /** Branch identifier */

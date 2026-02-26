@@ -152,7 +152,7 @@ export function useSession(id: string) {
 
 /**
  * Hook to fetch the full transcript for a session.
- * Includes evaluation markers and rabbithole markers.
+ * Includes evaluation markers and branch markers.
  *
  * @param id - Session identifier
  * @returns Query result with transcript messages and markers
@@ -172,7 +172,7 @@ export function useSession(id: string) {
  *           role={message.role}
  *           content={message.content}
  *           evaluationMarker={message.evaluationMarker}
- *           rabbitholeMarker={message.rabbitholeMarker}
+ *           branchMarker={message.branchMarker}
  *         />
  *       ))}
  *     </div>

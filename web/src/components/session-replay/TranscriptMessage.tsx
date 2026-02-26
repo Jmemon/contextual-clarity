@@ -102,7 +102,7 @@ function getMessageStyles(role: 'user' | 'assistant' | 'system'): {
  *
  * User messages appear on the right with a blue bubble,
  * assistant messages appear on the left with a gray bubble.
- * Includes timestamps and optional evaluation/rabbithole markers.
+ * Includes timestamps and optional evaluation/branch markers.
  */
 export function TranscriptMessage({
   message,

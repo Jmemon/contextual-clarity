@@ -36,7 +36,7 @@ import type {
  * const fullOptions: ExportOptions = {
  *   format: 'json',
  *   includeMessages: true,
- *   includeRabbitholes: true,
+ *   includeBranches: true,
  *   includeTimings: true,
  * };
  *
@@ -44,7 +44,7 @@ import type {
  * const lightOptions: ExportOptions = {
  *   format: 'csv',
  *   includeMessages: false,
- *   includeRabbitholes: false,
+ *   includeBranches: false,
  *   includeTimings: false,
  *   dateRange: {
  *     start: new Date('2024-01-01'),
@@ -127,7 +127,7 @@ export interface RecallOutcomeExport {
  *
  * Represents a conversational tangent that occurred during a session.
  * Tracks when the conversation diverged from the main recall topic.
- * Renamed from RabbitholeEventExport to align with the branch model.
+ * Represents a branch event for export. Aligned with the branch domain model.
  */
 export interface BranchEventExport {
   /** Unique identifier for this event */
@@ -194,7 +194,7 @@ export interface SessionMessageExport {
  * Complete export of a single session's data.
  *
  * SessionExport contains all data associated with a recall session,
- * including metrics, outcomes, and optionally messages/rabbitholes/timings.
+ * including metrics, outcomes, and optionally messages/branches/timings.
  * This is the primary export type for analyzing individual sessions.
  *
  * @example
@@ -211,7 +211,7 @@ export interface SessionMessageExport {
  *   metrics: { ... },
  *   recallOutcomes: [...],
  *   messages: [...],
- *   rabbitholes: [...],
+ *   branches: [...],
  *   timings: [...],
  * };
  * ```

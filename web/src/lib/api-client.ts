@@ -367,7 +367,7 @@ export async function getSession(id: string): Promise<SessionDetail> {
 
 /**
  * Fetches the full transcript for a session including evaluation and
- * rabbithole markers.
+ * branch markers.
  *
  * @param id - Session identifier
  * @returns Full transcript with messages and markers

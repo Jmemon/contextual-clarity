@@ -11,7 +11,7 @@
  * - Indicates depth level for nested tangents
  * - Different styling for entering vs returning from tangent
  *
- * Renamed from RabbitholeMarker to align with the branch model.
+ * Displays a branch event marker aligned with the branch model.
  *
  * @example
  * ```tsx

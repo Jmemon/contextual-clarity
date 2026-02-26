@@ -1358,9 +1358,9 @@ export class SessionEngine {
    * Marks the current session as completed.
    *
    * Phase 2: Also finalizes and persists session metrics, including:
-   * - Closing any active rabbitholes as abandoned
+   * - Closing any active branches as abandoned
    * - Recording all collected metrics to the database
-   * - Persisting rabbithole events and recall outcomes
+   * - Persisting branch events and recall outcomes
    */
   private async completeSession(): Promise<void> {
     await this.sessionRepo.complete(this.currentSession!.id);
@@ -1580,9 +1580,9 @@ export class SessionEngine {
         userMessages: Math.floor(extendedMetrics.totalMessages / 2),
         assistantMessages: Math.ceil(extendedMetrics.totalMessages / 2),
         avgMessageLength: this.calculateAverageMessageLength(),
-        rabbitholeCount: extendedMetrics.rabbitholeCount,
-        totalRabbitholeTimeMs: extendedMetrics.totalRabbitholeTimeMs,
-        avgRabbitholeDepth: extendedMetrics.avgRabbitholeDepth,
+        rabbitholeCount: extendedMetrics.branchCount,
+        totalRabbitholeTimeMs: extendedMetrics.totalBranchTimeMs,
+        avgRabbitholeDepth: extendedMetrics.avgBranchDepth,
         inputTokens: metrics.tokenUsage.inputTokens,
         outputTokens: metrics.tokenUsage.outputTokens,
         totalTokens: metrics.tokenUsage.totalTokens,

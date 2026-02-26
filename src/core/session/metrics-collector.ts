@@ -40,7 +40,7 @@
 import type { Session } from '../models';
 import type {
   SessionMetrics,
-  RabbitholeEvent,
+  Branch,
   RecallOutcome,
   TokenUsage,
   MessageTiming,
@@ -94,7 +94,7 @@ export class SessionMetricsCollector {
   private recallOutcomes: RecallOutcome[] = [];
 
   /** Branch (tangent) events detected during the session */
-  private branches: RabbitholeEvent[] = [];
+  private branches: Branch[] = [];
 
   /** Cumulative input tokens used across all LLM calls */
   private totalInputTokens: number = 0;
@@ -291,21 +291,23 @@ export class SessionMetricsCollector {
    *
    * @example
    * ```typescript
-   * const branch: RabbitholeEvent = {
+   * const branch: Branch = {
    *   id: 'br_001',
+   *   parentBranchId: null,
+   *   branchPointMessageId: 'msg_005',
    *   topic: 'Economic impacts of reparations',
-   *   triggerMessageIndex: 5,
-   *   returnMessageIndex: null,
    *   depth: 1,
    *   relatedRecallPointIds: ['rp_001'],
    *   userInitiated: true,
-   *   status: 'active'
+   *   status: 'active',
+   *   summary: null,
+   *   conversation: null,
    * };
    *
    * collector.recordBranch(branch);
    * ```
    */
-  recordBranch(event: RabbitholeEvent): void {
+  recordBranch(event: Branch): void {
     this.branches.push(event);
   }
 
@@ -313,23 +315,22 @@ export class SessionMetricsCollector {
    * Updates a branch when the conversation returns to the main topic.
    *
    * When a branch concludes (conversation returns to main topic), this
-   * method updates the branch record with the return message index and
-   * changes the status to 'returned'.
+   * method updates the branch record status to 'closed' and sets the
+   * closedAt timestamp.
    *
    * @param branchId - ID of the branch to update
-   * @param returnIndex - Message index where conversation returned to topic
    *
    * @example
    * ```typescript
-   * // Mark branch as returned when conversation gets back on track
-   * collector.updateBranchClosure('br_001', 9);
+   * // Mark branch as closed when conversation returns to the main topic
+   * collector.updateBranchClosure('br_001');
    * ```
    */
-  updateBranchClosure(branchId: string, returnIndex: number): void {
+  updateBranchClosure(branchId: string): void {
     const branch = this.branches.find((b) => b.id === branchId);
     if (branch) {
-      branch.returnMessageIndex = returnIndex;
-      branch.status = 'returned';
+      branch.status = 'closed';
+      branch.closedAt = new Date();
     }
   }
 
@@ -344,7 +345,7 @@ export class SessionMetricsCollector {
    * 5. Computing token usage and costs
    * 6. Calculating the engagement score
    *
-   * Any rabbitholes still in 'active' status are marked as 'abandoned'
+   * Any branches still in 'active' status are marked as 'abandoned'
    * since the session is ending without them being resolved.
    *
    * @param session - The Session entity for additional context (e.g., recall point count)
@@ -399,13 +400,13 @@ export class SessionMetricsCollector {
 
     // Build the metrics object (without engagement score yet)
     // Note: Additional derived metrics like avgUserResponseTimeMs, overallRecallRate,
-    // avgConfidence, totalRabbitholeTimeMs, etc. can be computed from the raw data
-    // stored in recallOutcomes, messageTimings, and rabbitholes arrays.
+    // avgConfidence, totalBranchTimeMs, etc. can be computed from the raw data
+    // stored in recallOutcomes, messageTimings, and branches arrays.
     // These are available through the private helper methods for future use.
     const metrics: SessionMetrics = {
       sessionId: this.sessionId || session.id,
       recallOutcomes: [...this.recallOutcomes],
-      rabbitholes: [...this.branches],
+      branches: [...this.branches],
       tokenUsage,
       costUsd,
       messageTimings: [...this.messageTimings],
@@ -416,7 +417,7 @@ export class SessionMetricsCollector {
     };
 
     // Calculate engagement score using the helper function
-    // This considers recall success, consistency, rabbithole management, and completion
+    // This considers recall success, consistency, branch management, and completion
     metrics.engagementScore = calculateEngagementScore(metrics);
 
     return metrics;
@@ -709,9 +710,9 @@ export class SessionMetricsCollector {
   /**
    * Calculates the total time spent in branches.
    *
-   * For each branch, calculates the time from trigger message to either:
-   * - Return message (if resolved)
-   * - Last message in session (if abandoned)
+   * For each branch with a closedAt timestamp, calculates the duration from
+   * createdAt to closedAt. For branches still active or abandoned, estimates
+   * from createdAt to the last message timestamp.
    *
    * This metric helps identify how much session time was spent on tangents
    * vs. focused recall practice.
@@ -722,14 +723,14 @@ export class SessionMetricsCollector {
     let totalTime = 0;
 
     for (const branch of this.branches) {
-      const startIndex = branch.triggerMessageIndex;
-      const endIndex =
-        branch.returnMessageIndex !== null
-          ? branch.returnMessageIndex
-          : this.messageTimings.length - 1;
+      const startTime = branch.createdAt?.getTime() ?? 0;
+      const endTime = branch.closedAt
+        ? branch.closedAt.getTime()
+        : (this.messageTimings.length > 0
+          ? this.messageTimings[this.messageTimings.length - 1].timestamp.getTime()
+          : startTime);
 
-      // Calculate duration for this branch's message range
-      totalTime += this.calculateDurationForMessageRange(startIndex, endIndex);
+      totalTime += Math.max(0, endTime - startTime);
     }
 
     return totalTime;

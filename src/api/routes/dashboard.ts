@@ -37,7 +37,7 @@ import {
   SessionRepository,
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
+  BranchRepository,
 } from '../../storage/repositories';
 import { db } from '../../storage/db';
 import { success, badRequest, internalError } from '../utils/response';
@@ -88,13 +88,13 @@ function createDashboardAggregator(): DashboardDataAggregator {
   const sessionRepo = new SessionRepository(db);
   const metricsRepo = new SessionMetricsRepository(db);
   const recallOutcomeRepo = new RecallOutcomeRepository(db);
-  const rabbitholeRepo = new RabbitholeEventRepository(db);
+  const branchRepo = new BranchRepository(db);
 
   // Create the analytics calculator with its required repositories
   const analyticsCalc = new AnalyticsCalculator(
     metricsRepo,
     recallOutcomeRepo,
-    rabbitholeRepo,
+    branchRepo,
     recallSetRepo,
     recallPointRepo
   );

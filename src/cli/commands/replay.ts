@@ -8,13 +8,13 @@
  *    date, duration, recall rate, and status for each session.
  *
  * 2. `replay` - Display a full session transcript with timestamps,
- *    rabbithole markers, and recall evaluation results.
+ *    branch markers, and recall evaluation results.
  *
  * These commands are useful for:
  * - Reviewing past learning sessions to reinforce memory
  * - Analyzing learning patterns and progress over time
  * - Identifying areas that need more practice based on recall outcomes
- * - Understanding how rabbitholes affected session flow
+ * - Understanding how branches affected session flow
  *
  * Usage (via CLI):
  * ```bash
@@ -34,7 +34,7 @@ import {
   SessionMessageRepository,
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
+  BranchRepository,
 } from '../../storage/repositories';
 import { eq, desc } from 'drizzle-orm';
 import { sessions } from '../../storage/schema';
@@ -165,7 +165,7 @@ export async function listSessions(setName: string, limit: number): Promise<void
  * Displays the complete session including:
  * - Session metadata (start time, duration, recall rate)
  * - All messages with timestamps
- * - Rabbithole entry/exit markers with topic names
+ * - Branch entry/exit markers with topic names
  * - Recall evaluation results with success/failure indicators
  * - Final session summary with aggregate statistics
  *
@@ -179,7 +179,7 @@ export async function replaySession(sessionId: string): Promise<void> {
   const messageRepo = new SessionMessageRepository(db);
   const metricsRepo = new SessionMetricsRepository(db);
   const outcomeRepo = new RecallOutcomeRepository(db);
-  const rabbitholeRepo = new RabbitholeEventRepository(db);
+  const branchRepo = new BranchRepository(db);
 
   // Fetch the session record
   const session = await sessionRepo.findById(sessionId);
@@ -192,7 +192,7 @@ export async function replaySession(sessionId: string): Promise<void> {
   // Fetch all related data for the session replay
   const messages = await messageRepo.findBySessionId(sessionId);
   const outcomes = await outcomeRepo.findBySessionId(sessionId);
-  const rabbitholes = await rabbitholeRepo.findBySessionId(sessionId);
+  const branches = await branchRepo.findBySessionId(sessionId);
   const metrics = await metricsRepo.findBySessionId(sessionId);
 
   // === Display Session Header ===
@@ -233,21 +233,21 @@ export async function replaySession(sessionId: string): Promise<void> {
   console.log(formatSeparator(60));
 
   // === Replay Messages with Annotations ===
-  // Track active rabbitholes for visual context (nesting indication)
-  const activeRabbitholes: string[] = [];
+  // Track active branches for visual context (nesting indication)
+  const activeBranches: string[] = [];
 
   // Iterate through all messages in chronological order
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
 
-    // Check for rabbithole entries at this message index
-    // Rabbitholes are triggered when conversation diverges from the main topic
-    const entering = rabbitholes.filter((rh) => rh.triggerMessageIndex === i);
-    for (const rh of entering) {
+    // Check for branch entries at this message
+    // Branches are triggered when conversation diverges from the main topic
+    const entering = branches.filter((b) => b.branchPointMessageId === msg.id);
+    for (const b of entering) {
       printBlankLine();
-      const depthIndicator = rh.depth > 1 ? ` (depth ${rh.depth})` : '';
-      console.log(blue(`>> Entering rabbithole: "${rh.topic}"${depthIndicator}`));
-      activeRabbitholes.push(rh.id);
+      const depthIndicator = b.depth > 1 ? ` (depth ${b.depth})` : '';
+      console.log(blue(`>> Entering branch: "${b.topic}"${depthIndicator}`));
+      activeBranches.push(b.id);
     }
 
     // Format timestamp for display (time only for readability)
@@ -255,8 +255,8 @@ export async function replaySession(sessionId: string): Promise<void> {
       ? dim(`[${formatTime(msg.timestamp)}]`)
       : '';
 
-    // Add visual indicator if currently inside a rabbithole
-    const rabbitholePrefix = activeRabbitholes.length > 0
+    // Add visual indicator if currently inside a branch
+    const branchPrefix = activeBranches.length > 0
       ? blue('| ')
       : '';
 
@@ -264,28 +264,30 @@ export async function replaySession(sessionId: string): Promise<void> {
     printBlankLine();
     if (msg.role === 'user') {
       // User messages shown in green
-      console.log(`${rabbitholePrefix}${timestamp} ${green('You:')}`);
-      console.log(`${rabbitholePrefix}${msg.content}`);
+      console.log(`${branchPrefix}${timestamp} ${green('You:')}`);
+      console.log(`${branchPrefix}${msg.content}`);
     } else if (msg.role === 'assistant') {
       // Assistant/tutor messages shown in cyan
-      console.log(`${rabbitholePrefix}${timestamp} ${cyan('Tutor:')}`);
-      console.log(`${rabbitholePrefix}${msg.content}`);
+      console.log(`${branchPrefix}${timestamp} ${cyan('Tutor:')}`);
+      console.log(`${branchPrefix}${msg.content}`);
     } else if (msg.role === 'system') {
       // System messages shown dimmed (usually internal prompts)
-      console.log(`${rabbitholePrefix}${timestamp} ${dim('[System]')}`);
-      console.log(`${rabbitholePrefix}${dim(msg.content)}`);
+      console.log(`${branchPrefix}${timestamp} ${dim('[System]')}`);
+      console.log(`${branchPrefix}${dim(msg.content)}`);
     }
 
-    // Check for rabbithole returns at this message index
-    // This indicates the conversation has returned to the main topic
-    const returning = rabbitholes.filter((rh) => rh.returnMessageIndex === i);
-    for (const rh of returning) {
-      printBlankLine();
-      console.log(blue(`<< Returned from rabbithole: "${rh.topic}"`));
-      // Remove from active list
-      const idx = activeRabbitholes.indexOf(rh.id);
-      if (idx > -1) {
-        activeRabbitholes.splice(idx, 1);
+    // Check for closed branches (status 'closed' or 'abandoned')
+    // This indicates the branch conversation has concluded
+    const closing = branches.filter((b) => activeBranches.includes(b.id) && (b.status === 'closed' || b.status === 'abandoned'));
+    for (const b of closing) {
+      // Only show return message once, when we reach the end of active messages
+      if (i === messages.length - 1 || b.status === 'closed') {
+        printBlankLine();
+        console.log(blue(`<< Returned from branch: "${b.topic}"`));
+        const idx = activeBranches.indexOf(b.id);
+        if (idx > -1) {
+          activeBranches.splice(idx, 1);
+        }
       }
     }
 
@@ -328,9 +330,9 @@ export async function replaySession(sessionId: string): Promise<void> {
     console.log(`  Successful: ${green(metrics.recallPointsSuccessful.toString())} | Failed: ${red(metrics.recallPointsFailed.toString())}`);
     printBlankLine();
 
-    // Rabbithole statistics (if any occurred)
+    // Branch (tangent) statistics (if any occurred)
     if (metrics.rabbitholeCount > 0) {
-      console.log(`${bold('Rabbitholes:')} ${metrics.rabbitholeCount}`);
+      console.log(`${bold('Branches:')} ${metrics.rabbitholeCount}`);
       console.log(`  Total time: ${formatDuration(metrics.totalRabbitholeTimeMs)}`);
       console.log(`  Avg depth: ${metrics.avgRabbitholeDepth.toFixed(1)}`);
       printBlankLine();
