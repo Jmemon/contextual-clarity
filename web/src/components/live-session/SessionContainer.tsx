@@ -14,7 +14,7 @@
  * ```
  */
 
-import { useState, useEffect, useCallback, type HTMLAttributes } from 'react';
+import { useState, useEffect, useCallback, useMemo, type HTMLAttributes } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSessionWebSocket, type SessionCompleteSummary, type CompleteOverlayData } from '@/hooks/use-session-websocket';
 import { SingleExchangeView } from './SingleExchangeView';
@@ -22,8 +22,7 @@ import { VoiceInput } from './VoiceInput';
 import { SessionProgress } from './SessionProgress';
 import { SessionControls } from './SessionControls';
 import { SessionCompleteOverlay } from './SessionCompleteOverlay';
-import { RabbitholePrompt } from './RabbitholePrompt';
-import { RabbitholeIndicator } from './RabbitholeIndicator';
+import { BranchTabBar, type BranchInfo } from './BranchTabBar';
 
 // ============================================================================
 // Types
@@ -328,15 +327,13 @@ export function SessionContainer({
     latestAssistantMessage,
     lastSentUserMessage,
     isOpeningMessage,
-    // T09: rabbit hole mode fields
-    isInRabbithole,
-    rabbitholeTopic,
-    rabbitholePrompt,
-    enterRabbithole,
-    exitRabbithole,
-    declineRabbithole,
-    // T11: explored rabbit hole labels for SessionProgress pills
-    rabbitholeLabels,
+    // Branch (tangent) state — replaces rabbit hole fields
+    activeBranchId,
+    branches,
+    branchSummaries,
+    activateBranch,
+    closeBranch,
+    switchToTrunk,
     // Task 3: recalled point labels for tappable popover indicators
     recalledLabels,
   } = useSessionWebSocket(sessionId, {
@@ -346,6 +343,22 @@ export function SessionContainer({
     onSessionPaused: handleSessionPaused,
     onError: handleError,
   });
+
+  // Project branch Map into a flat list for the tab bar component.
+  const branchInfoList = useMemo<BranchInfo[]>(() => {
+    return Array.from(branches.values()).map((b) => ({
+      branchId: b.branchId,
+      topic: b.topic,
+      parentBranchId: b.parentBranchId,
+      depth: b.depth,
+      status: b.status,
+      hasUnread: b.hasUnread,
+    }));
+  }, [branches]);
+
+  // When the user is viewing a branch, resolve the current branch's data
+  // so we can pass it to SingleExchangeView instead of the trunk data.
+  const activeBranch = activeBranchId ? branches.get(activeBranchId) : null;
 
   // Determine if controls should be disabled
   const controlsDisabled =
@@ -372,21 +385,17 @@ export function SessionContainer({
   }
 
   return (
-    <div className={`flex flex-col h-full min-h-screen transition-colors duration-700 ${isInRabbithole ? 'bg-[#0b100e]' : ''} ${className}`} {...props}>
+    <div className={`flex flex-col h-full min-h-screen ${className}`} {...props}>
       {/* Header with timer and progress */}
-      <header className={`flex items-center justify-between px-6 py-4 border-b transition-colors duration-700 ${
-        isInRabbithole ? 'bg-[#0e1311] border-[#1e2e26]' : 'bg-slate-950/70 border-slate-700'
-      }`}>
+      <header className="flex items-center justify-between px-6 py-4 border-b bg-slate-950/70 border-slate-700">
         {/* Session info */}
         <div className="flex items-center gap-4">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold transition-colors duration-700 ${
-            isInRabbithole ? 'bg-[#1a2a22]' : 'bg-slate-800'
-          }`}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold bg-slate-800">
             CC
           </div>
           <div>
             <p className="text-white font-medium">Live Session</p>
-            <p className={`text-sm transition-colors duration-700 ${isInRabbithole ? 'text-stone-400' : 'text-clarity-400'}`}>
+            <p className="text-sm text-clarity-400">
               {connectionState === 'connected' ? 'Connected' :
                connectionState === 'connecting' ? 'Connecting...' :
                connectionState === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
@@ -394,30 +403,25 @@ export function SessionContainer({
           </div>
         </div>
 
-        {/* T11: Exit button */}
+        {/* Exit button */}
         <div className="flex items-center gap-6">
           <Link
             to="/"
-            className={`px-4 py-2 text-white rounded-lg transition-colors text-sm ${
-              isInRabbithole ? 'bg-[#1a2a22] hover:bg-[#243830]' : 'bg-slate-800/60 hover:bg-slate-600'
-            }`}
+            className="px-4 py-2 text-white rounded-lg transition-colors text-sm bg-slate-800/60 hover:bg-slate-600"
           >
             Exit
           </Link>
         </div>
       </header>
 
-      {/* T11: New single progress bar — replaces the old header timer + two old SessionProgress calls.
-           Hides automatically during rabbit hole mode (slide-up + fade handled inside the component).
-           totalPoints guard ensures we don't render an empty circle row before the session starts. */}
+      {/* Progress bar — totalPoints guard ensures we don't render an empty circle row before the session starts. */}
       {totalPoints > 0 && (
-        <div className={`px-6 py-2 transition-colors duration-700 ${isInRabbithole ? 'bg-[#0c1310]' : 'bg-slate-950/30'}`}>
+        <div className="px-6 py-2 bg-slate-950/30">
           <SessionProgress
             totalPoints={totalPoints}
             recalledCount={recalledCount}
             elapsedSeconds={elapsedSeconds}
-            rabbitholeLabels={rabbitholeLabels}
-            isInRabbithole={isInRabbithole}
+            branchSummaries={branchSummaries}
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
             recalledLabels={recalledLabels}
@@ -425,19 +429,8 @@ export function SessionContainer({
         </div>
       )}
 
-      {/* T09: RabbitholeIndicator shown when user is inside a rabbit hole.
-           Signals to the user they're in a separate exploration context. */}
-      {isInRabbithole && rabbitholeTopic && (
-        <RabbitholeIndicator
-          topic={rabbitholeTopic}
-          onReturn={exitRabbithole}
-        />
-      )}
-
       {/* T08: Session complete overlay — shown when all recall points recalled.
            User can continue discussing or leave (which pauses the session). */}
-      {/* FIX 7: Pass message and canContinue from overlayData so the overlay shows
-           the server-provided text and conditionally shows the "Continue" button. */}
       {showCompleteOverlay && overlayData && (
         <SessionCompleteOverlay
           recalledCount={overlayData.recalledCount}
@@ -450,58 +443,54 @@ export function SessionContainer({
         />
       )}
 
-      {/* Main content area */}
-      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
-        {/*
-          T12: Single-exchange view replaces the scrolling MessageList.
-          Only one AI turn is visible at a time — no history shown to the user.
-          The full conversation is still in `messages` (maintained by the hook)
-          for the evaluator and database; this is purely a visual change.
-        */}
-        <SingleExchangeView
-          currentAssistantMessage={latestAssistantMessage}
-          isStreaming={!!streamingContent}
-          streamingContent={streamingContent || ''}
-          userMessageSent={lastSentUserMessage}
-          isLoading={isWaitingForResponse && !streamingContent}
-          isOpeningMessage={isOpeningMessage}
-          isInRabbithole={isInRabbithole}
-          className="flex-1"
+      {/* Main content area — flex row with content + optional branch tab bar */}
+      <div className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 py-6 overflow-hidden">
+          {/*
+            Single-exchange view: when viewing a branch, pass branch-level data;
+            otherwise pass trunk data. The full conversation is still in the hook
+            for the evaluator and database — this is purely a visual change.
+          */}
+          <SingleExchangeView
+            currentAssistantMessage={activeBranch ? activeBranch.latestAssistantMessage : latestAssistantMessage}
+            isStreaming={activeBranch ? !!activeBranch.streamingContent : !!streamingContent}
+            streamingContent={activeBranch ? activeBranch.streamingContent : (streamingContent || '')}
+            userMessageSent={activeBranch ? activeBranch.lastSentUserMessage : lastSentUserMessage}
+            isLoading={activeBranch ? (activeBranch.isWaitingForResponse && !activeBranch.streamingContent) : (isWaitingForResponse && !streamingContent)}
+            isOpeningMessage={activeBranch ? false : isOpeningMessage}
+            className="flex-1"
+          />
+
+          {/* Input and controls */}
+          <div className="border-t pt-6 mt-4 border-slate-700">
+            {/* Session controls — "I've got it!" removed (T06: continuous evaluation).
+                T08: "End Session" renamed to "Leave Session" (non-destructive pause). */}
+            <SessionControls
+              onLeaveSession={leaveSession}
+              disabled={controlsDisabled}
+              isSessionComplete={sessionState === 'completed'}
+              className="mb-4"
+            />
+
+            {/* Voice-first input (with text fallback) */}
+            <VoiceInput
+              onSend={sendUserMessage}
+              sessionId={sessionId}
+              disabled={controlsDisabled}
+              placeholder="Type your response..."
+            />
+          </div>
+        </main>
+
+        {/* Right-edge branch tab bar — only rendered when branches exist */}
+        <BranchTabBar
+          branches={branchInfoList}
+          activeBranchId={activeBranchId}
+          onActivateBranch={activateBranch}
+          onCloseBranch={closeBranch}
+          onSwitchToTrunk={switchToTrunk}
         />
-
-        {/* T09: Rabbit hole opt-in prompt — shown inline when a tangent is detected.
-             Dismissed when the user accepts (enter_rabbithole) or declines. */}
-        {rabbitholePrompt && !isInRabbithole && (
-          <RabbitholePrompt
-            topic={rabbitholePrompt.topic}
-            onExplore={() => enterRabbithole(rabbitholePrompt.rabbitholeEventId, rabbitholePrompt.topic)}
-            onDecline={declineRabbithole}
-            className="mt-3"
-          />
-        )}
-
-        {/* Input and controls */}
-        <div className={`border-t pt-6 mt-4 transition-colors duration-700 ${isInRabbithole ? 'border-[#1e2e26]' : 'border-slate-700'}`}>
-          {/* Session controls — "I've got it!" removed (T06: continuous evaluation).
-              T08: "End Session" renamed to "Leave Session" (non-destructive pause). */}
-          <SessionControls
-            onLeaveSession={leaveSession}
-            disabled={controlsDisabled}
-            isSessionComplete={sessionState === 'completed'}
-            isInRabbithole={isInRabbithole}
-            className="mb-4"
-          />
-
-          {/* Voice-first input (with text fallback) */}
-          <VoiceInput
-            onSend={sendUserMessage}
-            sessionId={sessionId}
-            disabled={controlsDisabled}
-            placeholder="Type your response..."
-            isInRabbithole={isInRabbithole}
-          />
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

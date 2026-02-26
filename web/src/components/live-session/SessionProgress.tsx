@@ -4,15 +4,14 @@
  * Replaces the old "X / Y points" progress bar with an anonymous, event-driven
  * progress display. Design goals:
  *  - Show HOW MANY points recalled but NOT WHICH topics remain (anonymity)
- *  - Animate each newly-recalled circle (scale-up 1.5× for 300ms)
+ *  - Animate each newly-recalled circle (scale-up 1.5x for 300ms)
  *  - Trigger haptic vibration on each recall (mobile)
  *  - Show elapsed time in MM:SS (monospace, tabular-nums)
- *  - Show explored rabbit hole labels as emerald pills
- *  - Smooth hide/show animation during rabbit hole mode (slide-up + fade)
+ *  - Show explored branch summaries as clarity-colored pills (topic + tooltip)
  *  - Vibration toggle persisted in localStorage
  *
- * Layout (left → right):
- *   [○ ○ ● ● ○]   03:42   [Adenosine] [Tolerance]   🔊
+ * Layout (left -> right):
+ *   [o o * * o]   03:42   [Adenosine] [Tolerance]   mute-toggle
  */
 
 import { useState, useEffect, useRef, useCallback, type HTMLAttributes } from 'react';
@@ -31,11 +30,8 @@ export interface SessionProgressProps extends HTMLAttributes<HTMLDivElement> {
   /** Elapsed time in seconds since session started */
   elapsedSeconds: number;
 
-  /** Labels of rabbit holes that have been explored (entered and exited) */
-  rabbitholeLabels: string[];
-
-  /** Whether the user is currently inside a rabbit hole */
-  isInRabbithole: boolean;
+  /** Summaries of branches that have been explored and closed */
+  branchSummaries: Array<{ topic: string; summary: string }>;
 
   /** Whether audio is muted (controlled by parent, persisted in localStorage) */
   isMuted: boolean;
@@ -155,21 +151,22 @@ function PointIcons({
 }
 
 /**
- * Renders a list of explored rabbit hole labels as small emerald-colored pills.
- * Only shows rabbit holes that have been fully explored (entered and exited).
- * Returns null if no rabbit holes have been explored.
+ * Renders a list of explored branch summaries as small clarity-colored pills.
+ * Each pill shows the branch topic, with the full summary available as a tooltip.
+ * Returns null if no branches have been explored.
  */
-function RabbitholeLabels({ labels }: { labels: string[] }) {
-  if (labels.length === 0) return null;
+function BranchSummaryPills({ summaries }: { summaries: Array<{ topic: string; summary: string }> }) {
+  if (summaries.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {labels.map((label, i) => (
+      {summaries.map((item, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 rounded-full"
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-clarity-500/15 text-clarity-300 border border-clarity-500/20 rounded-full"
+          title={item.summary}
         >
-          {label}
+          {item.topic}
         </span>
       ))}
     </div>
@@ -215,17 +212,15 @@ function MuteToggle({ isMuted, onToggle }: { isMuted: boolean; onToggle: () => v
 /**
  * SessionProgress — anonymous, event-driven progress bar for live sessions.
  *
- * Hides automatically during rabbit hole mode (slide up + fade) and shows
- * again when the rabbit hole exits. Points recalled during a rabbit hole are
- * buffered in the hook and arrive as a bulk recalledCount increment; the
- * animation effect here plays N sequential circle fills 150ms apart.
+ * Displays point circles, elapsed time, explored branch summary pills, and
+ * a mute toggle. When recalledCount increases by N, animates each newly-recalled
+ * circle 150ms apart with a haptic pulse per circle.
  */
 export function SessionProgress({
   totalPoints,
   recalledCount,
   elapsedSeconds,
-  rabbitholeLabels,
-  isInRabbithole,
+  branchSummaries,
   isMuted,
   onToggleMute,
   recalledLabels,
@@ -307,38 +302,24 @@ export function SessionProgress({
       className={className}
       {...props}
     >
-      {/*
-       * Slide-up + fade animation when entering/exiting rabbit hole mode.
-       * max-h trick: animate between max-h-0 (hidden) and max-h-20 (visible)
-       * so the surrounding layout collapses cleanly.
-       */}
-      <div
-        className={[
-          'transition-all duration-500 ease-in-out overflow-hidden',
-          isInRabbithole
-            ? 'max-h-0 opacity-0 -translate-y-2'
-            : 'max-h-20 opacity-100 translate-y-0',
-        ].join(' ')}
-      >
-        <div className="flex items-center justify-between gap-4 px-4 py-2 bg-slate-800/50 rounded-lg">
-          {/* Left: Anonymous point circles */}
-          <PointIcons
-            totalPoints={totalPoints}
-            recalledCount={recalledCount}
-            animatingIndex={animatingIndex}
-            recalledLabels={recalledLabels}
-          />
+      <div className="flex items-center justify-between gap-4 px-4 py-2 bg-slate-800/50 rounded-lg">
+        {/* Left: Anonymous point circles */}
+        <PointIcons
+          totalPoints={totalPoints}
+          recalledCount={recalledCount}
+          animatingIndex={animatingIndex}
+          recalledLabels={recalledLabels}
+        />
 
-          {/* Center: Elapsed time — monospace tabular-nums prevents width shifts */}
-          <span className="text-clarity-300 text-sm font-mono tabular-nums">
-            {formatElapsedTime(elapsedSeconds)}
-          </span>
+        {/* Center: Elapsed time — monospace tabular-nums prevents width shifts */}
+        <span className="text-clarity-300 text-sm font-mono tabular-nums">
+          {formatElapsedTime(elapsedSeconds)}
+        </span>
 
-          {/* Right: Explored rabbit hole labels + mute toggle */}
-          <div className="flex items-center gap-3">
-            <RabbitholeLabels labels={rabbitholeLabels} />
-            <MuteToggle isMuted={isMuted} onToggle={onToggleMute} />
-          </div>
+        {/* Right: Explored branch summary pills + mute toggle */}
+        <div className="flex items-center gap-3">
+          <BranchSummaryPills summaries={branchSummaries} />
+          <MuteToggle isMuted={isMuted} onToggle={onToggleMute} />
         </div>
       </div>
     </div>

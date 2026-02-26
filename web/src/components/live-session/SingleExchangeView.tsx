@@ -64,8 +64,6 @@ export interface SingleExchangeViewProps {
    * entry on session start.
    */
   isOpeningMessage: boolean;
-  /** Whether the session is in rabbit hole mode — shifts accents to emerald */
-  isInRabbithole?: boolean;
   /** Additional CSS classes for the root element. */
   className?: string;
 }
@@ -91,14 +89,11 @@ export function SingleExchangeView({
   userMessageSent,
   isLoading,
   isOpeningMessage,
-  isInRabbithole = false,
   className = '',
 }: SingleExchangeViewProps) {
-  // Accent color for labels and loading indicators — emerald during rabbit hole
-  // In rabbit hole mode, labels/dots shift to neutral warm gray — NOT green.
-  // Only the banner and mic button carry the emerald accent.
-  const labelColor = isInRabbithole ? 'text-stone-400' : 'text-clarity-400';
-  const dotColor = isInRabbithole ? 'bg-stone-400' : 'bg-clarity-400';
+  // Accent color for labels and loading indicators — always clarity colors.
+  const labelColor = 'text-clarity-400';
+  const dotColor = 'bg-clarity-400';
   // Derived phase from the combination of incoming props.
   // Priority: ai_streaming > awaiting_response > showing_ai
   const [phase, setPhase] = useState<ExchangePhase>('showing_ai');

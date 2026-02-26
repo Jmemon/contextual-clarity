@@ -57,9 +57,9 @@ export type { SessionControlsProps } from './SessionControls';
 export { SessionProgress } from './SessionProgress';
 export type { SessionProgressProps } from './SessionProgress';
 
-// T09: Rabbit hole UX mode components
-export { RabbitholePrompt } from './RabbitholePrompt';
-export type { RabbitholePromptProps } from './RabbitholePrompt';
+// Branch tab navigation components (replaces rabbit hole UX)
+export { BranchTabBar } from './BranchTabBar';
+export type { BranchTabBarProps, BranchInfo } from './BranchTabBar';
 
-export { RabbitholeIndicator } from './RabbitholeIndicator';
-export type { RabbitholeIndicatorProps } from './RabbitholeIndicator';
+export { BranchTab } from './BranchTab';
+export type { BranchTabProps } from './BranchTab';
