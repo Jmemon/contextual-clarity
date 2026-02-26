@@ -91,7 +91,7 @@ import type {
 } from '../../storage/repositories';
 import type { BranchRepository } from '../../storage/repositories';
 import { BranchAgent } from './branch-agent';
-import { buildBranchContext, buildTrunkContext } from './context-builder';
+import { buildBranchContext } from './context-builder';
 
 /**
  * Generates a unique ID with a prefix.
