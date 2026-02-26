@@ -2,29 +2,29 @@
  * Analysis Module Types
  *
  * This module defines types specific to conversation analysis features,
- * particularly rabbithole (conversational tangent) detection and tracking.
+ * particularly branch (conversational tangent) detection and tracking.
  *
  * These types complement the core session metrics types by providing
  * additional interfaces needed for real-time analysis during active sessions.
  */
 
 /**
- * Configuration options for the RabbitholeDetector service.
+ * Configuration options for the BranchDetector service.
  *
  * These options control how aggressively the detector identifies tangents
  * and how it handles edge cases like rapid topic switches.
  */
-export interface RabbitholeDetectorConfig {
+export interface BranchDetectorConfig {
   /**
-   * Minimum confidence threshold for creating a rabbithole event.
+   * Minimum confidence threshold for creating a branch event.
    * Detection results below this threshold are ignored.
    * Range: 0.0 to 1.0, default: 0.6
    */
   confidenceThreshold: number;
 
   /**
-   * Minimum confidence threshold for returning from a rabbithole.
-   * Return detections below this threshold keep the rabbithole active.
+   * Minimum confidence threshold for closing a branch (returning to parent).
+   * Return detections below this threshold keep the branch active.
    * Range: 0.0 to 1.0, default: 0.6
    */
   returnConfidenceThreshold: number;
@@ -45,10 +45,10 @@ export interface RabbitholeDetectorConfig {
 }
 
 /**
- * Default configuration values for RabbitholeDetector.
+ * Default configuration values for BranchDetector.
  * These represent sensible defaults balancing accuracy and performance.
  */
-export const DEFAULT_RABBITHOLE_DETECTOR_CONFIG: RabbitholeDetectorConfig = {
+export const DEFAULT_BRANCH_DETECTOR_CONFIG: BranchDetectorConfig = {
   confidenceThreshold: 0.6,
   returnConfidenceThreshold: 0.6,
   messageWindowSize: 10,
@@ -56,12 +56,12 @@ export const DEFAULT_RABBITHOLE_DETECTOR_CONFIG: RabbitholeDetectorConfig = {
 };
 
 /**
- * Internal state for tracking an active rabbithole during a session.
- * This is used by RabbitholeDetector to manage concurrent tangents.
+ * Internal state for tracking an active branch during a session.
+ * This is used by BranchDetector to manage concurrent tangents.
  */
-export interface ActiveRabbitholeState {
+export interface ActiveBranchState {
   /**
-   * Unique identifier for this rabbithole event.
+   * Unique identifier for this branch event.
    */
   id: string;
 
@@ -91,9 +91,19 @@ export interface ActiveRabbitholeState {
   userInitiated: boolean;
 
   /**
-   * Timestamp when this rabbithole was detected.
+   * Timestamp when this branch was detected.
    */
   detectedAt: Date;
+
+  /**
+   * ID of the parent branch, or null if branching from the main conversation.
+   */
+  parentBranchId: string | null;
+
+  /**
+   * ID of the message where the branch point was detected.
+   */
+  branchPointMessageId: string;
 }
 
 /**

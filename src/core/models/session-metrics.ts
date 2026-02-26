@@ -6,7 +6,7 @@
  *
  * 1. Performance Analytics - Track recall success rates, timing patterns, and engagement
  * 2. Cost Tracking - Monitor token usage and API costs across sessions
- * 3. Conversation Analysis - Identify patterns like "rabbitholes" (tangential discussions)
+ * 3. Conversation Analysis - Identify patterns like "branches" (conversational tangents)
  * 4. Progress Visualization - Lightweight summaries for dashboard views
  *
  * Session metrics are computed after a session completes and stored for
@@ -73,18 +73,19 @@ export interface RecallOutcome {
 }
 
 /**
- * Status of a rabbithole (conversational tangent) within a session.
+ * Status of a branch (conversational tangent) within a session.
  *
- * - 'active': Currently in the tangent, hasn't returned yet
- * - 'returned': Successfully returned to the main recall topic
- * - 'abandoned': Tangent was never resolved (session ended or gave up)
+ * - 'detected': Branch point identified but not yet entered
+ * - 'active': Currently exploring this branch
+ * - 'closed': Branch was resolved and conversation returned to parent
+ * - 'abandoned': Branch was never resolved (session ended or gave up)
  */
-export type RabbitholeStatus = 'active' | 'returned' | 'abandoned';
+export type BranchStatus = 'detected' | 'active' | 'closed' | 'abandoned';
 
 /**
- * Represents a conversational tangent ("rabbithole") during a recall session.
+ * Represents a conversational branch (tangent) during a recall session.
  *
- * Rabbitholes occur when the conversation diverges from the current recall
+ * Branches occur when the conversation diverges from the current recall
  * point into a related but distinct topic. These can be valuable learning
  * opportunities but may also indicate:
  *
@@ -92,72 +93,66 @@ export type RabbitholeStatus = 'active' | 'returned' | 'abandoned';
  * - Natural curiosity leading to deeper exploration
  * - Potential issues with recall point scope/clarity
  *
- * Tracking rabbitholes helps identify patterns and optimize session flow.
+ * Tracking branches helps identify patterns and optimize session flow.
  *
  * @example
  * ```typescript
- * const rabbithole: RabbitholeEvent = {
- *   id: 'rh_001',
+ * const branch: Branch = {
+ *   id: 'br_001',
+ *   parentBranchId: null,
+ *   branchPointMessageId: 'msg_005',
  *   topic: 'Economic impacts of reparations',
- *   triggerMessageIndex: 5,
- *   returnMessageIndex: 9,
  *   depth: 1,
  *   relatedRecallPointIds: ['rp_treaty_versailles_001'],
  *   userInitiated: true,
- *   status: 'returned',
+ *   status: 'closed',
+ *   summary: 'Explored the economic consequences of WWI reparations',
+ *   conversation: null,
  * };
  * ```
  */
-export interface RabbitholeEvent {
-  /**
-   * Unique identifier for this rabbithole event.
-   * Format: typically prefixed UUID (e.g., 'rh_001')
-   */
+export interface Branch {
+  /** Unique identifier for this branch. */
   id: string;
 
-  /**
-   * Brief description of the tangent topic.
-   * Summarizes what the conversation diverged to discuss.
-   */
+  /** ID of the session this branch belongs to. */
+  sessionId?: string;
+
+  /** ID of the parent branch, or null if branching from the main conversation. */
+  parentBranchId: string | null;
+
+  /** ID of the message where the branch point was detected. */
+  branchPointMessageId: string;
+
+  /** Brief description of the branch topic. */
   topic: string;
 
-  /**
-   * Index of the message that triggered the tangent.
-   * Points to the message where the conversation started to diverge.
-   */
-  triggerMessageIndex: number;
+  /** Nesting depth of the branch (how far from the main conversation). */
+  depth: number;
 
   /**
-   * Index of the message where conversation returned to main topic.
-   * Null if the tangent is still active or was abandoned.
-   */
-  returnMessageIndex: number | null;
-
-  /**
-   * Nesting depth of the rabbithole (1-3 scale).
-   * - 1: Direct tangent from main topic
-   * - 2: Tangent within a tangent
-   * - 3: Maximum tracked depth (deeper nesting is capped at 3)
-   */
-  depth: 1 | 2 | 3;
-
-  /**
-   * IDs of recall points that relate to this tangent.
+   * IDs of recall points that relate to this branch.
    * Helps identify which recall topics tend to spawn tangential discussions.
    */
   relatedRecallPointIds: string[];
 
-  /**
-   * Whether the user initiated this tangent (true) or the AI did (false).
-   * User-initiated tangents often indicate genuine curiosity or confusion.
-   */
+  /** Whether the user initiated this branch (true) or the AI did (false). */
   userInitiated: boolean;
 
-  /**
-   * Current status of the rabbithole.
-   * Tracks whether the conversation successfully returned to topic.
-   */
-  status: RabbitholeStatus;
+  /** Current status of the branch. */
+  status: BranchStatus;
+
+  /** Summary of the branch conversation, generated when the branch is closed. */
+  summary: string | null;
+
+  /** Conversation messages within this branch, if captured. */
+  conversation: Array<{ role: string; content: string }> | null;
+
+  /** When this branch was created. */
+  createdAt?: Date;
+
+  /** When this branch was closed, or null if still open. */
+  closedAt?: Date | null;
 }
 
 /**
@@ -250,7 +245,7 @@ export interface MessageTiming {
  *     { recallPointId: 'rp_001', success: true, confidence: 0.9, ... },
  *     { recallPointId: 'rp_002', success: false, confidence: 0.75, ... },
  *   ],
- *   rabbitholes: [],
+ *   branches: [],
  *   tokenUsage: { inputTokens: 2500, outputTokens: 1800, totalTokens: 4300 },
  *   costUsd: 0.042,
  *   messageTimings: [...],
@@ -275,10 +270,10 @@ export interface SessionMetrics {
   recallOutcomes: RecallOutcome[];
 
   /**
-   * All rabbithole events that occurred during the session.
+   * All branch events that occurred during the session.
    * Empty array if the conversation stayed focused throughout.
    */
-  rabbitholes: RabbitholeEvent[];
+  branches: Branch[];
 
   /**
    * Token usage breakdown for the session.
@@ -341,7 +336,7 @@ export interface SessionMetrics {
  *   totalDurationMs: 180000,
  *   costUsd: 0.042,
  *   engagementScore: 78,
- *   rabbitholeCount: 1,
+ *   branchCount: 1,
  * };
  * ```
  */
@@ -383,9 +378,9 @@ export interface SessionMetricsSummary {
   engagementScore: number;
 
   /**
-   * Number of rabbithole tangents that occurred.
+   * Number of branch tangents that occurred.
    */
-  rabbitholeCount: number;
+  branchCount: number;
 }
 
 /**
@@ -440,7 +435,7 @@ export function calculateResponseTimeVariance(
  * The engagement score is a composite metric that considers:
  * - Recall success rate (higher success = more engaged)
  * - Response time consistency (lower variance = more focused)
- * - Rabbithole behavior (some tangents show curiosity, too many show distraction)
+ * - Branch behavior (some tangents show curiosity, too many show distraction)
  * - Session completion (finishing all recall points indicates commitment)
  *
  * Score interpretation:
@@ -460,7 +455,7 @@ export function calculateResponseTimeVariance(
  *     { recallPointId: 'rp_001', success: true, confidence: 0.9, ... },
  *     { recallPointId: 'rp_002', success: true, confidence: 0.85, ... },
  *   ],
- *   rabbitholes: [{ status: 'returned', ... }],
+ *   branches: [{ status: 'closed', ... }],
  *   ...
  * };
  * const score = calculateEngagementScore(metrics);
@@ -472,7 +467,7 @@ export function calculateEngagementScore(metrics: SessionMetrics): number {
   const weights = {
     recallSuccess: 0.4, // 40% - Primary indicator of engagement
     consistency: 0.25, // 25% - Response time consistency
-    rabbitholeManagement: 0.2, // 20% - How tangents were handled
+    branchManagement: 0.2, // 20% - How tangents were handled
     completion: 0.15, // 15% - Session completion behavior
   };
 
@@ -496,28 +491,28 @@ export function calculateEngagementScore(metrics: SessionMetrics): number {
   const normalizedVariance = Math.min(variance / varianceThreshold, 1);
   const consistencyScore = (1 - normalizedVariance) * 100;
 
-  // Component 3: Rabbithole management (0-100)
-  // - Some rabbitholes (1-2) with successful returns show healthy curiosity
+  // Component 3: Branch management (0-100)
+  // - Some branches (1-2) with successful closures show healthy curiosity
   // - Too many (3+) or abandoned ones indicate distraction
-  const abandonedRabbitholes = metrics.rabbitholes.filter(
-    (r) => r.status === 'abandoned'
+  const abandonedBranches = metrics.branches.filter(
+    (b) => b.status === 'abandoned'
   ).length;
-  const totalRabbitholes = metrics.rabbitholes.length;
+  const totalBranches = metrics.branches.length;
 
-  let rabbitholeScore: number;
-  if (totalRabbitholes === 0) {
+  let branchScore: number;
+  if (totalBranches === 0) {
     // No tangents: good focus, but maybe missed exploration opportunities
-    rabbitholeScore = 85;
-  } else if (totalRabbitholes <= 2 && abandonedRabbitholes === 0) {
-    // Few tangents, all returned: excellent curiosity management
-    rabbitholeScore = 100;
-  } else if (abandonedRabbitholes === 0) {
-    // More tangents but all returned: decent but could be more focused
-    rabbitholeScore = 70;
+    branchScore = 85;
+  } else if (totalBranches <= 2 && abandonedBranches === 0) {
+    // Few tangents, all closed: excellent curiosity management
+    branchScore = 100;
+  } else if (abandonedBranches === 0) {
+    // More tangents but all closed: decent but could be more focused
+    branchScore = 70;
   } else {
     // Some abandoned tangents: penalty proportional to abandonment
-    const abandonmentRatio = abandonedRabbitholes / totalRabbitholes;
-    rabbitholeScore = Math.max(0, 80 - abandonmentRatio * 60);
+    const abandonmentRatio = abandonedBranches / totalBranches;
+    branchScore = Math.max(0, 80 - abandonmentRatio * 60);
   }
 
   // Component 4: Completion behavior (0-100)
@@ -529,7 +524,7 @@ export function calculateEngagementScore(metrics: SessionMetrics): number {
   const finalScore =
     recallSuccessScore * weights.recallSuccess +
     consistencyScore * weights.consistency +
-    rabbitholeScore * weights.rabbitholeManagement +
+    branchScore * weights.branchManagement +
     completionScore * weights.completion;
 
   // Clamp to 0-100 range and round to whole number

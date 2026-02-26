@@ -38,8 +38,8 @@ export type {
 // SessionMetrics types - comprehensive session performance tracking
 export type {
   RecallOutcome,
-  RabbitholeStatus,
-  RabbitholeEvent,
+  BranchStatus,
+  Branch,
   TokenUsage,
   MessageTiming,
   SessionMetrics,

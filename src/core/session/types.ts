@@ -25,7 +25,6 @@ import type {
   RecallSetRepository,
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
 } from '../../storage/repositories';
 import type { SessionMetricsCollector } from './metrics-collector';
 import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
@@ -41,7 +40,7 @@ import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
  * Event categories:
  * - Session lifecycle: start, pause, complete overlay, complete
  * - Recall point: recalled, near miss
- * - Rabbit hole: detected, entered, exited, declined
+ * - Branch: detected, activated, closed, summary_injected
  * - Resources: show image, show resource
  * - Messages: user, assistant, streaming start/end
  *
@@ -68,11 +67,11 @@ export type SessionEventType =
   // === Recall Point Events ===
   | 'point_recalled'            // A specific recall point was marked as recalled (T01 — keep existing name)
 
-  // === Rabbit Hole Events ===
-  | 'rabbithole_detected'       // Tangent detected, prompt user to explore (T09)
-  | 'rabbithole_entered'        // User accepted, entering rabbit hole mode (T09)
-  | 'rabbithole_exited'         // User returned to main session (T09)
-  | 'rabbithole_declined'       // User declined to explore the tangent (T09)
+  // === Branch Events ===
+  | 'branch_detected'           // Branch point detected in conversation
+  | 'branch_activated'          // Branch entered and active
+  | 'branch_closed'             // Branch resolved, returned to parent
+  | 'branch_summary_injected'   // Branch summary injected at branch point
 
   // === Message Events ===
   | 'user_message'              // User sent a message
@@ -95,8 +94,8 @@ export interface SessionCompletionSummary {
   recallRate: number;
   /** Total session duration in milliseconds */
   durationMs: number;
-  /** Number of rabbit holes entered during the session */
-  rabbitholeCount: number;
+  /** Number of branches explored during the session */
+  branchCount: number;
   /** IDs of all recall points that were successfully recalled */
   recalledPointIds: string[];
   /** Short topic labels for each recalled point (same order as recalledPointIds) */
@@ -120,10 +119,10 @@ export type SessionEventData =
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_completed'; sessionId: string; summary: SessionCompletionSummary }
   | { type: 'point_recalled'; pointId: string; label: string; recalledCount: number; totalPoints: number }
-  | { type: 'rabbithole_detected'; topic: string; rabbitholeEventId: string }
-  | { type: 'rabbithole_entered'; topic: string }
-  | { type: 'rabbithole_exited'; label: string; pointsRecalledDuring: number; completionPending: boolean }
-  | { type: 'rabbithole_declined'; topic?: string }
+  | { type: 'branch_detected'; branchId: string; topic: string; parentBranchId?: string; depth: number }
+  | { type: 'branch_activated'; branchId: string; topic: string }
+  | { type: 'branch_closed'; branchId: string; summary: string }
+  | { type: 'branch_summary_injected'; branchId: string; summary: string; branchPointMessageId: string }
   | { type: 'user_message'; content: string }
   | { type: 'assistant_message'; content: string; isOpening?: boolean };
 
@@ -203,10 +202,10 @@ export const DEFAULT_SESSION_CONFIG: SessionEngineConfig = {
  *   messageRepo: new SessionMessageRepository(db),
  *   // Phase 2: Metrics collection (optional)
  *   metricsCollector: new SessionMetricsCollector(),
- *   rabbitholeDetector: new RabbitholeDetector(llmClient),
+ *   branchDetector: new RabbitholeDetector(llmClient), // will become BranchDetector in Task 7
  *   metricsRepo: new SessionMetricsRepository(db),
  *   recallOutcomeRepo: new RecallOutcomeRepository(db),
- *   rabbitholeRepo: new RabbitholeEventRepository(db),
+ *   branchRepo: any, // BranchRepository — created in Task 3
  * };
  *
  * const engine = new SessionEngine(deps);
@@ -247,12 +246,13 @@ export interface SessionEngineDependencies {
   metricsCollector?: SessionMetricsCollector;
 
   /**
-   * Detector for identifying conversational tangents (rabbitholes).
+   * Detector for identifying conversational branches (tangents).
    * When provided, enables real-time detection and tracking of when
    * conversations drift from the main recall topic.
+   * Note: Still uses RabbitholeDetector class until Task 7 renames it to BranchDetector.
    * @since Phase 2
    */
-  rabbitholeDetector?: RabbitholeDetector;
+  branchDetector?: RabbitholeDetector;
 
   /**
    * Repository for persisting session-level metrics.
@@ -269,11 +269,12 @@ export interface SessionEngineDependencies {
   recallOutcomeRepo?: RecallOutcomeRepository;
 
   /**
-   * Repository for persisting rabbithole events.
-   * Required if rabbitholeDetector is provided.
+   * Repository for persisting branch events.
+   * Required if branchDetector is provided.
+   * Note: BranchRepository will be created in Task 3. Using `any` as placeholder.
    * @since Phase 2
    */
-  rabbitholeRepo?: RabbitholeEventRepository;
+  branchRepo?: any; // TODO(Task 3): Replace with BranchRepository
 }
 
 /**

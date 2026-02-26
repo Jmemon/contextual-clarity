@@ -2,20 +2,21 @@
  * Analysis Module - Barrel Export
  *
  * This module provides conversation analysis capabilities for recall sessions,
- * including rabbithole (tangent) detection and tracking.
+ * including branch (tangent) detection and tracking.
  *
- * The primary service is RabbitholeDetector, which uses LLM analysis to:
+ * The primary service is RabbitholeDetector (to be renamed BranchDetector in Task 7),
+ * which uses LLM analysis to:
  * - Detect when conversations drift into tangential topics
- * - Track multiple concurrent tangents
+ * - Track multiple concurrent tangents (branches)
  * - Detect when conversations return to the main topic
- * - Handle session-end cleanup of unresolved tangents
+ * - Handle session-end cleanup of unresolved branches
  *
  * @example
  * ```typescript
  * import {
  *   RabbitholeDetector,
- *   type RabbitholeDetectorConfig,
- *   DEFAULT_RABBITHOLE_DETECTOR_CONFIG,
+ *   type BranchDetectorConfig,
+ *   DEFAULT_BRANCH_DETECTOR_CONFIG,
  * } from '@/core/analysis';
  *
  * // Create detector with default config
@@ -26,25 +27,16 @@
  *   confidenceThreshold: 0.7,
  *   messageWindowSize: 8,
  * });
- *
- * // Detect rabbitholes after each message
- * const event = await detector.detectRabbithole(
- *   sessionId,
- *   messages,
- *   currentRecallPoint,
- *   allRecallPoints,
- *   messageIndex
- * );
  * ```
  */
 
-// Main rabbithole detector service
+// Main detector service (class rename to BranchDetector happens in Task 7)
 export { RabbitholeDetector } from './rabbithole-detector';
 
 // Configuration types and defaults
 export {
-  type RabbitholeDetectorConfig,
-  type ActiveRabbitholeState,
+  type BranchDetectorConfig,
+  type ActiveBranchState,
   type DetectionDebugInfo,
-  DEFAULT_RABBITHOLE_DETECTOR_CONFIG,
+  DEFAULT_BRANCH_DETECTOR_CONFIG,
 } from './types';
