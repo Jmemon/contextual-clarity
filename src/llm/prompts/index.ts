@@ -56,13 +56,15 @@ export {
   type EnhancedEvaluationContext,
 } from './recall-evaluator';
 
-// Rabbithole detector prompt builders, types, and utilities
+// Branch detector prompt builders, types, and utilities
 export {
-  buildRabbitholeDetectorPrompt,
-  buildRabbitholeReturnPrompt,
-  parseRabbitholeDetectionResponse,
-  parseRabbitholeReturnResponse,
-  type RabbitholeDetectionResult,
-  type RabbitholeDetectorParams,
-  type RabbitholeReturnResult,
-} from './rabbithole-detector';
+  buildBranchDetectorPrompt,
+  buildBranchReturnPrompt,
+  buildBranchConclusionPrompt,
+  parseBranchDetectionResponse,
+  parseBranchReturnResponse,
+  parseBranchConclusionResponse,
+  type BranchDetectionResult,
+  type BranchDetectorParams,
+  type BranchReturnResult,
+} from './branch-detector';

@@ -1,14 +1,14 @@
 /**
- * Rabbithole Detector Prompt Builder
+ * Branch Detector Prompt Builder
  *
  * This module constructs prompts for detecting and managing conversational tangents
- * ("rabbitholes") during Socratic recall sessions. A rabbithole occurs when the
+ * ("branches") during Socratic recall sessions. A branch occurs when the
  * conversation drifts away from the current recall point into related but tangential
  * topics.
  *
  * Key design decisions:
  *
- * 1. **Depth classification**: Rabbitholes are classified by depth (1-3) based on
+ * 1. **Depth classification**: Branches are classified by depth (1-3) based on
  *    how far the conversation has strayed from the core topic. This allows for
  *    nuanced handling - shallow tangents might be valuable context, while deep
  *    ones may require redirection.
@@ -17,10 +17,13 @@
  *    to the current recall point or to other points in the session. This helps
  *    determine if the tangent is productive learning or pure distraction.
  *
- * 3. **Return detection**: A separate prompt detects when a rabbithole has concluded,
+ * 3. **Return detection**: A separate prompt detects when a branch has concluded,
  *    allowing the system to resume normal recall evaluation.
  *
- * 4. **Contextual awareness**: The detector considers existing rabbitholes to avoid
+ * 4. **Conclusion detection**: Detects when a branch conversation has naturally
+ *    wound down, enabling automatic branch closure without explicit return.
+ *
+ * 5. **Contextual awareness**: The detector considers existing branches to avoid
  *    flagging the same tangent multiple times and to understand nesting depth.
  *
  * Use cases:
@@ -28,26 +31,27 @@
  * - Deciding when to gently redirect back to core material
  * - Identifying patterns in how users connect concepts
  * - Preventing conversations from becoming unproductive
+ * - Detecting natural conclusion of branch conversations
  */
 
 import type { RecallPoint, SessionMessage } from '../../core/models';
 
 /**
- * Result of analyzing whether the conversation has entered a rabbithole.
+ * Result of analyzing whether the conversation has entered a branch (tangent).
  *
  * This interface defines the JSON schema that the LLM should return when
  * evaluating conversation tangents. The structured format enables programmatic
- * handling of rabbithole detection.
+ * handling of branch detection.
  */
-export interface RabbitholeDetectionResult {
+export interface BranchDetectionResult {
   /**
-   * Whether the recent conversation represents a rabbithole (tangent from
+   * Whether the recent conversation represents a branch (tangent from
    * the main recall point being discussed).
    */
   isRabbithole: boolean;
 
   /**
-   * The topic of the rabbithole, if one was detected.
+   * The topic of the branch, if one was detected.
    * Null when isRabbithole is false.
    *
    * @example "the etymology of the word 'photosynthesis'"
@@ -56,7 +60,7 @@ export interface RabbitholeDetectionResult {
   topic: string | null;
 
   /**
-   * Depth level of the rabbithole indicating how far the conversation
+   * Depth level of the branch indicating how far the conversation
    * has strayed from the core recall point.
    *
    * - 1 (shallow): Brief tangent, 1-2 exchanges, easily returnable
@@ -66,21 +70,21 @@ export interface RabbitholeDetectionResult {
   depth: 1 | 2 | 3;
 
   /**
-   * Whether the rabbithole topic is semantically related to the current
+   * Whether the branch topic is semantically related to the current
    * recall point being discussed. Related tangents may have educational
    * value even if they drift from the specific recall target.
    */
   relatedToCurrentPoint: boolean;
 
   /**
-   * IDs of other recall points in the session that this rabbithole topic
+   * IDs of other recall points in the session that this branch topic
    * relates to. Useful for identifying when tangents actually preview
    * or reinforce other session material.
    */
   relatedRecallPointIds: string[];
 
   /**
-   * Confidence level in the rabbithole detection (0.0 to 1.0).
+   * Confidence level in the branch detection (0.0 to 1.0).
    *
    * High confidence (0.8-1.0): Clear tangent or clearly on-topic
    * Medium confidence (0.5-0.8): Borderline case, topic somewhat related
@@ -90,17 +94,17 @@ export interface RabbitholeDetectionResult {
 
   /**
    * Human-readable explanation of the detection reasoning.
-   * Describes why the conversation was or wasn't classified as a rabbithole.
+   * Describes why the conversation was or wasn't classified as a branch.
    */
   reasoning: string;
 }
 
 /**
- * Parameters required to build a rabbithole detection prompt.
+ * Parameters required to build a branch detection prompt.
  * Provides all the context needed to assess whether the conversation
  * has drifted into a tangent.
  */
-export interface RabbitholeDetectorParams {
+export interface BranchDetectorParams {
   /**
    * Recent messages from the session conversation.
    * These are analyzed to detect topic drift from the current recall point.
@@ -110,7 +114,7 @@ export interface RabbitholeDetectorParams {
 
   /**
    * The recall point currently being discussed in the session.
-   * This is the "anchor" topic - deviations from this constitute rabbitholes.
+   * This is the "anchor" topic - deviations from this constitute branches.
    */
   currentRecallPoint: RecallPoint;
 
@@ -121,21 +125,21 @@ export interface RabbitholeDetectorParams {
   allRecallPoints: RecallPoint[];
 
   /**
-   * Topics of already-identified rabbitholes in this session.
+   * Topics of already-identified branches in this session.
    * Helps avoid re-flagging known tangents and understand nesting.
    */
-  existingRabbitholes: string[];
+  existingBranches: string[];
 }
 
 /**
- * Result of analyzing whether a rabbithole has concluded.
+ * Result of analyzing whether a branch has concluded (returned to main topic).
  *
- * This interface defines the JSON schema for rabbithole return detection,
+ * This interface defines the JSON schema for branch return detection,
  * allowing the system to know when normal recall evaluation should resume.
  */
-export interface RabbitholeReturnResult {
+export interface BranchReturnResult {
   /**
-   * Whether the conversation has returned from the rabbithole to the
+   * Whether the conversation has returned from the branch to the
    * main recall topic or a new productive area.
    */
   hasReturned: boolean;
@@ -146,14 +150,14 @@ export interface RabbitholeReturnResult {
   confidence: number;
 
   /**
-   * Human-readable explanation of why the rabbithole was or wasn't
+   * Human-readable explanation of why the branch was or wasn't
    * considered concluded.
    */
   reasoning: string;
 }
 
 /**
- * Builds a prompt for detecting if the conversation has entered a rabbithole.
+ * Builds a prompt for detecting if the conversation has entered a branch (tangent).
  *
  * The generated prompt instructs the LLM to:
  * 1. Analyze recent messages against the current recall point
@@ -161,23 +165,23 @@ export interface RabbitholeReturnResult {
  * 3. Classify the depth and relatedness of any detected tangent
  * 4. Identify connections to other recall points in the session
  *
- * @param params - Context for rabbithole detection including messages and recall points
+ * @param params - Context for branch detection including messages and recall points
  * @returns A complete prompt string for the LLM to evaluate
  *
  * @example
  * ```typescript
- * const prompt = buildRabbitholeDetectorPrompt({
+ * const prompt = buildBranchDetectorPrompt({
  *   recentMessages: lastTenMessages,
  *   currentRecallPoint: atpSynthesisPoint,
  *   allRecallPoints: sessionPoints,
- *   existingRabbitholes: ['mitochondria history'],
+ *   existingBranches: ['mitochondria history'],
  * });
  * const response = await client.complete(prompt);
- * const result = JSON.parse(response.text) as RabbitholeDetectionResult;
+ * const result = JSON.parse(response.text) as BranchDetectionResult;
  * ```
  */
-export function buildRabbitholeDetectorPrompt(params: RabbitholeDetectorParams): string {
-  const { recentMessages, currentRecallPoint, allRecallPoints, existingRabbitholes } = params;
+export function buildBranchDetectorPrompt(params: BranchDetectorParams): string {
+  const { recentMessages, currentRecallPoint, allRecallPoints, existingBranches } = params;
 
   // Format recent messages for inclusion in the prompt
   const formattedMessages = formatMessagesForPrompt(recentMessages);
@@ -185,17 +189,18 @@ export function buildRabbitholeDetectorPrompt(params: RabbitholeDetectorParams):
   // Format all recall points with their IDs for cross-reference
   const formattedRecallPoints = formatRecallPointsForPrompt(allRecallPoints, currentRecallPoint.id);
 
-  // Format existing rabbitholes if any
-  const existingRabbitholesSection = existingRabbitholes.length > 0
+  // Format existing branches if any
+  const existingBranchesSection = existingBranches.length > 0
     ? `## Previously Identified Rabbitholes
 
 The following tangent topics have already been identified in this session:
-${existingRabbitholes.map((topic, idx) => `${idx + 1}. ${sanitizeInput(topic)}`).join('\n')}
+${existingBranches.map((topic, idx) => `${idx + 1}. ${sanitizeInput(topic)}`).join('\n')}
 
 Do not re-flag these unless the conversation has returned to them after leaving.`
     : '';
 
   // Build the complete detection prompt
+  // Note: The prompt text still uses "rabbithole" as that's the concept name for the LLM
   return `You are an expert conversation analyst specializing in detecting topic drift during educational dialogues.
 
 ## Your Task
@@ -225,7 +230,7 @@ These are all the recall points in this session. If the tangent relates to any o
 
 ${formattedRecallPoints}
 
-${existingRabbitholesSection}
+${existingBranchesSection}
 
 ## Rabbithole Detection Criteria
 
@@ -278,30 +283,30 @@ Where:
 }
 
 /**
- * Builds a prompt for detecting when a rabbithole has concluded.
+ * Builds a prompt for detecting when a branch has concluded (returned to main topic).
  *
  * This prompt helps determine when the conversation has returned from a tangent
  * back to productive recall discussion, allowing the system to resume normal
  * evaluation flow.
  *
- * @param rabbitholeTopic - The topic of the rabbithole being tracked
+ * @param branchTopic - The topic of the branch being tracked
  * @param currentRecallPoint - The recall point the conversation should return to
  * @param recentMessages - Recent messages to analyze for return signals
- * @returns A complete prompt string for rabbithole return detection
+ * @returns A complete prompt string for branch return detection
  *
  * @example
  * ```typescript
- * const prompt = buildRabbitholeReturnPrompt(
+ * const prompt = buildBranchReturnPrompt(
  *   'the history of ATP discovery',
  *   atpStructurePoint,
  *   lastFiveMessages
  * );
  * const response = await client.complete(prompt);
- * const result = JSON.parse(response.text) as RabbitholeReturnResult;
+ * const result = JSON.parse(response.text) as BranchReturnResult;
  * ```
  */
-export function buildRabbitholeReturnPrompt(
-  rabbitholeTopic: string,
+export function buildBranchReturnPrompt(
+  branchTopic: string,
   currentRecallPoint: RecallPoint,
   recentMessages: SessionMessage[]
 ): string {
@@ -309,6 +314,7 @@ export function buildRabbitholeReturnPrompt(
   const formattedMessages = formatMessagesForPrompt(recentMessages);
 
   // Build the return detection prompt
+  // Note: The prompt text still uses "rabbithole" as that's the concept name for the LLM
   return `You are an expert conversation analyst evaluating whether a conversational tangent has concluded.
 
 ## Your Task
@@ -320,7 +326,7 @@ Determine if the conversation has returned from a tangent ("rabbithole") back to
 The conversation previously drifted into this tangent:
 
 <rabbithole_topic>
-${sanitizeInput(rabbitholeTopic)}
+${sanitizeInput(branchTopic)}
 </rabbithole_topic>
 
 ## Target Recall Point
@@ -372,6 +378,54 @@ Where:
 - \`reasoning\`: 1-3 sentence explanation of the detection decision
 
 **Important:** Return ONLY the JSON object. Do not include any other text, explanations, or markdown formatting outside the JSON.`;
+}
+
+/**
+ * Builds a prompt for detecting if a branch conversation has naturally concluded.
+ *
+ * This is distinct from return detection — conclusion detection checks whether
+ * a tangent has wound down on its own (user satisfied, topic exhausted, etc.)
+ * rather than whether the conversation returned to the main topic.
+ *
+ * @param topic - The branch topic being discussed
+ * @param recentMessages - The last few messages in the branch conversation
+ * @returns A complete prompt string for conclusion detection
+ */
+export function buildBranchConclusionPrompt(
+  topic: string,
+  recentMessages: Array<{ role: string; content: string }>
+): string {
+  return `Analyze whether this tangent conversation about "${topic}" has naturally concluded.
+
+Signs of conclusion:
+- The user seems satisfied or has stopped asking follow-up questions
+- The topic has been thoroughly explored
+- The conversation is becoming repetitive
+- The user is giving short acknowledgment responses
+
+Recent messages:
+${recentMessages.map(m => `${m.role}: ${m.content}`).join('\n')}
+
+Respond with JSON: { "isConcluded": boolean, "confidence": 0.0-1.0 }`;
+}
+
+/**
+ * Parses the LLM response for branch conclusion detection.
+ *
+ * @param text - The raw LLM response text
+ * @returns Parsed result with isConcluded flag and confidence score
+ */
+export function parseBranchConclusionResponse(text: string): { isConcluded: boolean; confidence: number } {
+  try {
+    const jsonString = extractJsonFromResponse(text);
+    const parsed = JSON.parse(jsonString);
+    return {
+      isConcluded: Boolean(parsed.isConcluded),
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+    };
+  } catch {
+    return { isConcluded: false, confidence: 0 };
+  }
 }
 
 /**
@@ -453,7 +507,7 @@ function sanitizeInput(input: string): string {
 }
 
 /**
- * Parses the LLM response into a structured RabbitholeDetectionResult.
+ * Parses the LLM response into a structured BranchDetectionResult.
  *
  * This utility function handles common response variations:
  * - JSON wrapped in markdown code blocks
@@ -461,20 +515,20 @@ function sanitizeInput(input: string): string {
  * - Missing or invalid fields
  *
  * @param response - The raw LLM response text
- * @returns Parsed detection result, or a default "not rabbithole" result if parsing fails
+ * @returns Parsed detection result, or a default "not a branch" result if parsing fails
  *
  * @example
  * ```typescript
  * const response = await client.complete(prompt);
- * const result = parseRabbitholeDetectionResponse(response.text);
+ * const result = parseBranchDetectionResponse(response.text);
  * if (result.isRabbithole) {
  *   // Handle detected tangent
  * }
  * ```
  */
-export function parseRabbitholeDetectionResponse(response: string): RabbitholeDetectionResult {
-  // Default result for parse failures - assume not a rabbithole to avoid false positives
-  const defaultResult: RabbitholeDetectionResult = {
+export function parseBranchDetectionResponse(response: string): BranchDetectionResult {
+  // Default result for parse failures - assume not a branch to avoid false positives
+  const defaultResult: BranchDetectionResult = {
     isRabbithole: false,
     topic: null,
     depth: 1,
@@ -515,7 +569,7 @@ export function parseRabbitholeDetectionResponse(response: string): RabbitholeDe
 }
 
 /**
- * Parses the LLM response into a structured RabbitholeReturnResult.
+ * Parses the LLM response into a structured BranchReturnResult.
  *
  * @param response - The raw LLM response text
  * @returns Parsed return result, or a default "not returned" result if parsing fails
@@ -523,15 +577,15 @@ export function parseRabbitholeDetectionResponse(response: string): RabbitholeDe
  * @example
  * ```typescript
  * const response = await client.complete(prompt);
- * const result = parseRabbitholeReturnResponse(response.text);
+ * const result = parseBranchReturnResponse(response.text);
  * if (result.hasReturned) {
  *   // Resume normal recall flow
  * }
  * ```
  */
-export function parseRabbitholeReturnResponse(response: string): RabbitholeReturnResult {
-  // Default result for parse failures - assume still in rabbithole to be safe
-  const defaultResult: RabbitholeReturnResult = {
+export function parseBranchReturnResponse(response: string): BranchReturnResult {
+  // Default result for parse failures - assume still in branch to be safe
+  const defaultResult: BranchReturnResult = {
     hasReturned: false,
     confidence: 0,
     reasoning: 'Failed to parse return detection response',

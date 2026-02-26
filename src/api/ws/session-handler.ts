@@ -69,7 +69,7 @@ import type { FSRSScheduler } from '@/core/fsrs/scheduler';
 import type { RecallEvaluator } from '@/core/scoring/recall-evaluator';
 import type { AnthropicClient } from '@/llm/client';
 import type { SessionMetricsCollector } from '@/core/session/metrics-collector';
-import type { RabbitholeDetector } from '@/core/analysis/rabbithole-detector';
+import type { BranchDetector } from '@/core/analysis/branch-detector';
 import { SessionEngine } from '@/core/session/session-engine';
 import {
   type ClientMessage,
@@ -193,8 +193,8 @@ export interface WebSocketHandlerDependencies {
   llmClient: AnthropicClient;
   /** Phase 2: Metrics collector instance (creates fresh per session) */
   metricsCollector?: SessionMetricsCollector;
-  /** Phase 2: Rabbit hole detector instance */
-  rabbitholeDetector?: RabbitholeDetector;
+  /** Phase 2: Branch detector instance */
+  branchDetector?: BranchDetector;
   /** Phase 2: Session metrics repository */
   metricsRepo?: SessionMetricsRepository;
   /** Phase 2: Recall outcome repository */
@@ -291,9 +291,9 @@ export class WebSocketSessionHandler {
         recallPointRepo: this.deps.recallPointRepo,
         sessionRepo: this.deps.sessionRepo,
         messageRepo: this.deps.messageRepo,
-        // Phase 2: Metrics and rabbit hole detection
+        // Phase 2: Metrics and branch detection
         metricsCollector: this.deps.metricsCollector,
-        rabbitholeDetector: this.deps.rabbitholeDetector,
+        branchDetector: this.deps.branchDetector,
         metricsRepo: this.deps.metricsRepo,
         recallOutcomeRepo: this.deps.recallOutcomeRepo,
         rabbitholeRepo: this.deps.rabbitholeRepo,

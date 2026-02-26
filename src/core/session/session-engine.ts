@@ -84,7 +84,7 @@ import {
   DEFAULT_SESSION_CONFIG,
 } from './types';
 import type { SessionMetricsCollector } from './metrics-collector';
-import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
+import type { BranchDetector } from '../analysis/branch-detector';
 import type {
   SessionMetricsRepository,
   RecallOutcomeRepository,
@@ -157,10 +157,10 @@ export class SessionEngine {
   private metricsCollector: SessionMetricsCollector | null = null;
 
   /**
-   * Detector for identifying conversational tangents (rabbitholes).
+   * Detector for identifying conversational branches (tangents).
    * When provided, enables real-time detection of topic drift.
    */
-  private rabbitholeDetector: RabbitholeDetector | null = null;
+  private branchDetector: BranchDetector | null = null;
 
   /** Repository for persisting session-level metrics */
   private metricsRepo: SessionMetricsRepository | null = null;
@@ -276,7 +276,7 @@ export class SessionEngine {
       this.metricsEnabled = true;
     }
     if (deps.branchDetector) {
-      this.rabbitholeDetector = deps.branchDetector;
+      this.branchDetector = deps.branchDetector;
     }
     if (deps.metricsRepo) {
       this.metricsRepo = deps.metricsRepo;
@@ -396,9 +396,9 @@ export class SessionEngine {
       this.metricsCollector.startSession(session.id, this.currentModel);
     }
 
-    // Reset rabbithole detector state for the new session
-    if (this.rabbitholeDetector) {
-      this.rabbitholeDetector.reset();
+    // Reset branch detector state for the new session
+    if (this.branchDetector) {
+      this.branchDetector.reset();
     }
 
     // Configure the LLM with the Socratic tutor prompt for the first point
@@ -480,9 +480,9 @@ export class SessionEngine {
       this.metricsCollector.startSession(session.id, this.currentModel);
     }
 
-    // Reset rabbithole detector state for the resumed session
-    if (this.rabbitholeDetector) {
-      this.rabbitholeDetector.reset();
+    // Reset branch detector state for the resumed session
+    if (this.branchDetector) {
+      this.branchDetector.reset();
     }
 
     // Configure the LLM with the appropriate prompt
@@ -585,9 +585,9 @@ export class SessionEngine {
       content,
     });
 
-    // === Phase 2: Detect rabbitholes after user message ===
+    // === Phase 2: Detect branches after user message ===
     // Check if the user's message indicates a conversational tangent
-    await this.detectAndRecordRabbithole();
+    await this.detectAndRecordBranch();
 
     // === T06: Continuous evaluation — evaluate ALL unchecked points after every user message ===
     const evalResult = await this.evaluateUncheckedPoints();
@@ -617,9 +617,9 @@ export class SessionEngine {
     // Generate a follow-up response from the tutor, injecting evaluator feedback
     const response = await this.generateTutorResponse(evalResult.feedback || undefined);
 
-    // === Phase 2: Check for rabbithole returns after assistant response ===
-    // Check if any active rabbitholes have concluded (returned to main topic)
-    await this.detectRabbitholeReturns();
+    // === Phase 2: Check for branch returns after assistant response ===
+    // Check if any active branches have concluded (returned to main topic)
+    await this.detectBranchReturns();
 
     return {
       response,
@@ -1436,8 +1436,8 @@ export class SessionEngine {
     if (this.metricsCollector) {
       this.metricsCollector.reset();
     }
-    if (this.rabbitholeDetector) {
-      this.rabbitholeDetector.reset();
+    if (this.branchDetector) {
+      this.branchDetector.reset();
     }
   }
 
@@ -1446,98 +1446,88 @@ export class SessionEngine {
   // ============================================================================
 
   /**
-   * Detects and records a new rabbithole (conversational tangent).
+   * Detects and records a new branch (conversational tangent).
    *
    * Called after each user message to check if the conversation has
-   * diverged from the current recall topic. If a rabbithole is detected,
-   * it is recorded in both the metrics collector and the database.
+   * diverged from the current recall topic. If a branch is detected,
+   * it is recorded in the database and emitted as an event.
    *
    * @private
    */
-  private async detectAndRecordRabbithole(): Promise<void> {
-    // Skip if rabbithole detection is not enabled
-    if (!this.rabbitholeDetector || !this.currentSession) {
+  private async detectAndRecordBranch(): Promise<void> {
+    // Skip if branch detection is not enabled
+    if (!this.branchDetector || !this.currentSession) {
       return;
     }
 
     const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
-    const messageIndex = this.messages.length - 1;
+    const lastMessage = this.messages[this.messages.length - 1];
+    const branchPointMessageId = lastMessage?.id ?? '';
 
-    // Detect if the conversation has entered a new rabbithole
-    const rabbitholeEvent = await this.rabbitholeDetector.detectRabbithole(
+    // Detect if the conversation has entered a new branch
+    const branch = await this.branchDetector.detectBranch(
       this.currentSession.id,
       this.messages,
       currentPoint,
       this.targetPoints,
-      messageIndex
+      branchPointMessageId
     );
 
-    // If a branch point was detected, record it
-    if (rabbitholeEvent) {
-      // Record in metrics collector
-      if (this.metricsCollector) {
-        this.metricsCollector.recordRabbithole(rabbitholeEvent);
-      }
-
-      // Persist to database as a detected branch via BranchRepository.
-      // The branchPointMessageId is the last message that triggered detection.
+    // If a branch was detected, record it
+    if (branch) {
+      // Persist to database via BranchRepository
       if (this.branchRepo) {
-        const lastMessage = this.messages[this.messages.length - 1];
         await this.branchRepo.create({
-          id: rabbitholeEvent.id,
+          id: branch.id,
           sessionId: this.currentSession.id,
-          branchPointMessageId: lastMessage?.id ?? '',
-          topic: rabbitholeEvent.topic,
-          depth: rabbitholeEvent.depth,
-          relatedRecallPointIds: rabbitholeEvent.relatedRecallPointIds,
-          userInitiated: rabbitholeEvent.userInitiated,
+          branchPointMessageId: branch.branchPointMessageId,
+          topic: branch.topic,
+          depth: branch.depth,
+          relatedRecallPointIds: branch.relatedRecallPointIds,
+          userInitiated: branch.userInitiated,
         });
       }
 
       // Emit 'branch_detected' so the handler can forward it to the frontend
       this.emitEvent({
         type: 'branch_detected',
-        branchId: rabbitholeEvent.id,
-        topic: rabbitholeEvent.topic,
-        depth: rabbitholeEvent.depth,
+        branchId: branch.id,
+        topic: branch.topic,
+        depth: branch.depth,
       });
     }
   }
 
   /**
-   * Detects when active rabbitholes have concluded (returned to main topic).
+   * Detects when active branches have concluded (returned to main topic).
    *
    * Called after generating tutor responses to check if any active
-   * rabbitholes have been resolved. Updates both the metrics collector
-   * and the database when returns are detected.
+   * branches have been resolved. Updates the database when returns
+   * are detected.
    *
    * @private
    */
-  private async detectRabbitholeReturns(): Promise<void> {
-    // Skip if rabbithole detection is not enabled
-    if (!this.rabbitholeDetector || !this.currentSession) {
+  private async detectBranchReturns(): Promise<void> {
+    // Skip if branch detection is not enabled
+    if (!this.branchDetector || !this.currentSession) {
       return;
     }
 
     const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
-    const messageIndex = this.messages.length - 1;
+    const lastMessage = this.messages[this.messages.length - 1];
+    const branchPointMessageId = lastMessage?.id ?? '';
 
-    // Detect if any active rabbitholes have concluded
-    const returnedEvents = await this.rabbitholeDetector.detectReturns(
+    // Detect if any active branches have concluded
+    const returnedBranches = await this.branchDetector.detectReturns(
       this.messages,
       currentPoint,
-      messageIndex
+      branchPointMessageId
     );
 
-    // Record each returned event in metrics
-    // TODO(Task 7): Update to use BranchDetector + branchRepo.close() for branch returns
-    for (const event of returnedEvents) {
-      // Update metrics collector with return information
-      if (this.metricsCollector && event.returnMessageIndex !== null) {
-        this.metricsCollector.updateRabbitholeReturn(
-          event.id,
-          event.returnMessageIndex
-        );
+    // Close each returned branch in the database
+    for (const branch of returnedBranches) {
+      if (this.branchRepo) {
+        await this.branchRepo.close(branch.id, branch.summary ?? '');
       }
     }
   }
@@ -1546,11 +1536,10 @@ export class SessionEngine {
    * Finalizes and persists all session metrics.
    *
    * This method is called when the session completes. It:
-   * 1. Closes any active rabbitholes as abandoned
+   * 1. Closes any active branches as abandoned
    * 2. Calculates final session metrics
    * 3. Persists metrics to the session_metrics table
    * 4. Persists recall outcomes to the recall_outcomes table
-   * 5. Records any final rabbithole events
    *
    * @private
    */
@@ -1560,17 +1549,9 @@ export class SessionEngine {
       return;
     }
 
-    const finalMessageIndex = this.messages.length - 1;
-
-    // Close any active rabbitholes as abandoned since session is ending
-    // TODO(Task 7): Update to use BranchDetector for branch closure detection
-    if (this.rabbitholeDetector) {
-      const abandonedRabbitholes = this.rabbitholeDetector.closeAllActive(finalMessageIndex);
-
-      // Record abandoned rabbitholes in metrics
-      for (const event of abandonedRabbitholes) {
-        this.metricsCollector.recordRabbithole(event);
-      }
+    // Close any active branches as abandoned since session is ending
+    if (this.branchDetector) {
+      this.branchDetector.closeAllActive();
       // Branch abandonment is already handled via branchRepo.markActiveAsAbandoned()
       // in completeSession() — no need to duplicate here.
     }

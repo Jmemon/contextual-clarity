@@ -1,15 +1,17 @@
 /**
- * Rabbithole Detector Service
+ * Branch Detector Service
  *
  * This service uses LLM analysis to detect when conversations during recall
- * sessions drift into tangential topics ("rabbitholes") and when they return
- * to the main subject.
+ * sessions drift into tangential topics ("branches") and when they return
+ * to the main subject. It also detects when branch conversations have
+ * naturally concluded.
  *
  * Key features:
- * - Detects new rabbitholes when conversation drifts from recall points
- * - Tracks multiple concurrent rabbitholes (e.g., nested tangents)
+ * - Detects new branches when conversation drifts from recall points
+ * - Tracks multiple concurrent branches (e.g., nested tangents)
  * - Detects when conversations return from tangents to main topics
- * - Handles session end by closing all active rabbitholes
+ * - Detects when branch conversations have naturally wound down
+ * - Handles session end by closing all active branches
  * - Serializes detection calls to prevent race conditions
  *
  * The detector respects a confidence threshold (default 0.6) to avoid
@@ -17,56 +19,64 @@
  *
  * Usage:
  * ```typescript
- * const detector = new RabbitholeDetector(llmClient);
+ * const detector = new BranchDetector(llmClient);
  *
- * // After each message exchange, check for new rabbitholes
- * const event = await detector.detectRabbithole(
+ * // After each message exchange, check for new branches
+ * const branch = await detector.detectBranch(
  *   sessionId,
  *   messages,
  *   currentRecallPoint,
  *   allRecallPoints,
- *   messageIndex
+ *   branchPointMessageId
  * );
  *
- * // Also check if any active rabbitholes have concluded
+ * // Also check if any active branches have concluded
  * const returns = await detector.detectReturns(
  *   messages,
  *   currentRecallPoint,
- *   messageIndex
+ *   branchPointMessageId
  * );
  *
- * // At session end, close any remaining active rabbitholes
- * const abandoned = detector.closeAllActive(finalMessageIndex);
+ * // Check if a branch conversation has naturally wound down
+ * const concluded = await detector.detectConclusion(
+ *   branchConversation,
+ *   topic
+ * );
+ *
+ * // At session end, close any remaining active branches
+ * const abandoned = detector.closeAllActive();
  * ```
  */
 
 import type { AnthropicClient } from '../../llm/client';
 import {
-  buildRabbitholeDetectorPrompt,
-  buildRabbitholeReturnPrompt,
-  parseRabbitholeDetectionResponse,
-  parseRabbitholeReturnResponse,
+  buildBranchDetectorPrompt,
+  buildBranchReturnPrompt,
+  buildBranchConclusionPrompt,
+  parseBranchDetectionResponse,
+  parseBranchReturnResponse,
+  parseBranchConclusionResponse,
 } from '../../llm/prompts';
-import type { SessionMessage, RecallPoint, RabbitholeEvent } from '../models';
+import type { SessionMessage, RecallPoint, Branch } from '../models';
 import {
-  type RabbitholeDetectorConfig,
-  type ActiveRabbitholeState,
-  DEFAULT_RABBITHOLE_DETECTOR_CONFIG,
+  type BranchDetectorConfig,
+  type ActiveBranchState,
+  DEFAULT_BRANCH_DETECTOR_CONFIG,
 } from './types';
 
 /**
- * Generates a unique identifier for rabbithole events.
+ * Generates a unique identifier for branch events.
  * Uses crypto.randomUUID() for guaranteed uniqueness.
  *
- * @returns A unique ID string prefixed with 'rh_'
+ * @returns A unique ID string prefixed with 'br_'
  */
-function generateRabbitholeId(): string {
-  return `rh_${crypto.randomUUID()}`;
+function generateBranchId(): string {
+  return `br_${crypto.randomUUID()}`;
 }
 
 /**
  * Determines whether a message was sent by the user.
- * Used to track who initiated a rabbithole.
+ * Used to track who initiated a branch.
  *
  * @param messages - Array of session messages
  * @param triggerIndex - Index of the message that triggered the tangent
@@ -81,24 +91,25 @@ function wasUserInitiated(messages: SessionMessage[], triggerIndex: number): boo
 }
 
 /**
- * RabbitholeDetector analyzes conversations to identify when they drift
- * into tangential topics and when they return to the main subject.
+ * BranchDetector analyzes conversations to identify when they drift
+ * into tangential topics, when they return to the main subject, and
+ * when branch conversations have naturally concluded.
  *
- * The detector maintains state for active rabbitholes within a session
- * and provides methods to check for new tangents and returns.
+ * The detector maintains state for active branches within a session
+ * and provides methods to check for new tangents, returns, and conclusions.
  */
-export class RabbitholeDetector {
+export class BranchDetector {
   /** The LLM client used for analysis */
   private llmClient: AnthropicClient;
 
   /** Configuration options for detection thresholds and behavior */
-  private config: RabbitholeDetectorConfig;
+  private config: BranchDetectorConfig;
 
   /**
-   * Map of active (unreturned) rabbitholes, keyed by their ID.
+   * Map of active (unreturned) branches, keyed by their ID.
    * This allows tracking multiple concurrent tangents.
    */
-  private activeRabbitholes: Map<string, ActiveRabbitholeState> = new Map();
+  private activeBranches: Map<string, ActiveBranchState> = new Map();
 
   /**
    * Flag indicating whether a detection operation is in progress.
@@ -117,17 +128,17 @@ export class RabbitholeDetector {
   }> = [];
 
   /**
-   * Creates a new RabbitholeDetector instance.
+   * Creates a new BranchDetector instance.
    *
    * @param llmClient - The Anthropic client for making LLM calls
    * @param config - Optional configuration to override defaults
    *
    * @example
    * ```typescript
-   * const detector = new RabbitholeDetector(llmClient);
+   * const detector = new BranchDetector(llmClient);
    *
    * // With custom config
-   * const detector = new RabbitholeDetector(llmClient, {
+   * const detector = new BranchDetector(llmClient, {
    *   confidenceThreshold: 0.7,
    *   messageWindowSize: 8,
    * });
@@ -135,10 +146,10 @@ export class RabbitholeDetector {
    */
   constructor(
     llmClient: AnthropicClient,
-    config: Partial<RabbitholeDetectorConfig> = {}
+    config: Partial<BranchDetectorConfig> = {}
   ) {
     this.llmClient = llmClient;
-    this.config = { ...DEFAULT_RABBITHOLE_DETECTOR_CONFIG, ...config };
+    this.config = { ...DEFAULT_BRANCH_DETECTOR_CONFIG, ...config };
   }
 
   /**
@@ -146,7 +157,7 @@ export class RabbitholeDetector {
    *
    * Multiple detection calls may happen rapidly during a session (e.g.,
    * quick message exchanges). This lock ensures they execute sequentially
-   * to maintain consistent state in the activeRabbitholes map.
+   * to maintain consistent state in the activeBranches map.
    *
    * @param fn - The async function to execute with lock protection
    * @returns Promise resolving to the function's return value
@@ -192,45 +203,47 @@ export class RabbitholeDetector {
   }
 
   /**
-   * Checks if the conversation has entered a new rabbithole.
+   * Checks if the conversation has entered a new branch (tangent).
    *
    * This method should be called after each message exchange to detect
    * when the conversation drifts into a tangential topic. It uses the
    * LLM to analyze recent messages against the current recall point.
    *
-   * Detection only creates an event if:
-   * 1. The LLM determines a rabbithole exists (isRabbithole: true)
+   * Detection only creates a Branch if:
+   * 1. The LLM determines a branch exists (isRabbithole: true)
    * 2. The confidence is above the configured threshold (default 0.6)
-   * 3. The topic hasn't already been flagged as an active rabbithole
+   * 3. The topic hasn't already been flagged as an active branch
    *
    * @param sessionId - ID of the current session (used for event tracking)
    * @param messages - All messages in the session so far
    * @param currentRecallPoint - The recall point currently being discussed
    * @param allRecallPoints - All recall points in the session for cross-reference
-   * @param messageIndex - Index of the current message (used as trigger index)
-   * @returns A RabbitholeEvent if a new rabbithole was detected, null otherwise
+   * @param branchPointMessageId - ID of the message that triggered detection
+   * @param parentBranchId - ID of the parent branch, or null if from main conversation
+   * @returns A Branch if a new branch was detected, null otherwise
    *
    * @example
    * ```typescript
-   * const event = await detector.detectRabbithole(
+   * const branch = await detector.detectBranch(
    *   'sess_abc123',
    *   sessionMessages,
    *   currentPoint,
    *   allPoints,
-   *   messages.length - 1
+   *   'msg_xyz789'
    * );
-   * if (event) {
-   *   console.log(`Detected tangent: ${event.topic}`);
+   * if (branch) {
+   *   console.log(`Detected tangent: ${branch.topic}`);
    * }
    * ```
    */
-  async detectRabbithole(
+  async detectBranch(
     _sessionId: string, // Kept for API consistency; may be used for session-specific logging
     messages: SessionMessage[],
     currentRecallPoint: RecallPoint,
     allRecallPoints: RecallPoint[],
-    messageIndex: number
-  ): Promise<RabbitholeEvent | null> {
+    branchPointMessageId: string,
+    parentBranchId: string | null = null
+  ): Promise<Branch | null> {
     return this.withLock(async () => {
       // Get recent messages within the configured window size
       const recentMessages = this.getRecentMessages(messages);
@@ -240,17 +253,17 @@ export class RabbitholeDetector {
         return null;
       }
 
-      // Get topics of currently active rabbitholes to avoid re-flagging
-      const existingTopics = Array.from(this.activeRabbitholes.values()).map(
-        (rh) => rh.topic
+      // Get topics of currently active branches to avoid re-flagging
+      const existingTopics = Array.from(this.activeBranches.values()).map(
+        (br) => br.topic
       );
 
       // Build the detection prompt with all necessary context
-      const prompt = buildRabbitholeDetectorPrompt({
+      const prompt = buildBranchDetectorPrompt({
         recentMessages,
         currentRecallPoint,
         allRecallPoints: this.config.trackRelatedRecallPoints ? allRecallPoints : [],
-        existingRabbitholes: existingTopics,
+        existingBranches: existingTopics,
       });
 
       // Call the LLM to analyze the conversation
@@ -260,9 +273,9 @@ export class RabbitholeDetector {
       });
 
       // Parse the LLM response into structured data
-      const result = parseRabbitholeDetectionResponse(response.text);
+      const result = parseBranchDetectionResponse(response.text);
 
-      // Only create an event if confidence threshold is met and rabbithole detected
+      // Only create a Branch if confidence threshold is met and branch detected
       if (!result.isRabbithole || result.confidence < this.config.confidenceThreshold) {
         return null;
       }
@@ -276,11 +289,12 @@ export class RabbitholeDetector {
         return null;
       }
 
-      // Generate a unique ID for this rabbithole event
-      const id = generateRabbitholeId();
+      // Generate a unique ID for this branch
+      const id = generateBranchId();
+      const messageIndex = messages.length - 1;
 
       // Create the active state for tracking
-      const activeState: ActiveRabbitholeState = {
+      const activeState: ActiveBranchState = {
         id,
         topic: result.topic ?? 'Unknown tangent',
         triggerMessageIndex: messageIndex,
@@ -288,61 +302,65 @@ export class RabbitholeDetector {
         relatedRecallPointIds: result.relatedRecallPointIds,
         userInitiated: wasUserInitiated(messages, messageIndex),
         detectedAt: new Date(),
+        parentBranchId,
+        branchPointMessageId,
       };
 
-      // Add to the active rabbitholes map
-      this.activeRabbitholes.set(id, activeState);
+      // Add to the active branches map
+      this.activeBranches.set(id, activeState);
 
-      // Create and return the RabbitholeEvent
-      const event: RabbitholeEvent = {
+      // Create and return the Branch object
+      const branch: Branch = {
         id,
+        parentBranchId,
+        branchPointMessageId,
         topic: activeState.topic,
-        triggerMessageIndex: activeState.triggerMessageIndex,
-        returnMessageIndex: null, // Not yet returned
         depth: activeState.depth,
         relatedRecallPointIds: activeState.relatedRecallPointIds,
         userInitiated: activeState.userInitiated,
         status: 'active',
+        summary: null,
+        conversation: null,
       };
 
-      return event;
+      return branch;
     });
   }
 
   /**
-   * Checks if any active rabbitholes have concluded (returned to main topic).
+   * Checks if any active branches have concluded (returned to main topic).
    *
-   * This method iterates through all active rabbitholes and uses the LLM
+   * This method iterates through all active branches and uses the LLM
    * to determine if the conversation has returned from each tangent.
-   * Returned rabbitholes are removed from active tracking.
+   * Returned branches are removed from active tracking.
    *
    * @param messages - All messages in the session so far
    * @param currentRecallPoint - The recall point the conversation should return to
-   * @param messageIndex - Index of the current message (used as return index)
-   * @returns Array of RabbitholeEvents that have returned (may be empty)
+   * @param branchPointMessageId - ID of the current message for marking return point
+   * @returns Array of Branches that have returned (may be empty)
    *
    * @example
    * ```typescript
    * const returns = await detector.detectReturns(
    *   sessionMessages,
    *   currentPoint,
-   *   messages.length - 1
+   *   'msg_abc123'
    * );
-   * for (const event of returns) {
-   *   console.log(`Returned from: ${event.topic}`);
+   * for (const branch of returns) {
+   *   console.log(`Returned from: ${branch.topic}`);
    * }
    * ```
    */
   async detectReturns(
     messages: SessionMessage[],
     currentRecallPoint: RecallPoint,
-    messageIndex: number
-  ): Promise<RabbitholeEvent[]> {
+    _branchPointMessageId: string
+  ): Promise<Branch[]> {
     // Get recent messages for return detection
     const recentMessages = this.getRecentMessages(messages);
 
-    // Skip if no active rabbitholes to check
-    if (this.activeRabbitholes.size === 0) {
+    // Skip if no active branches to check
+    if (this.activeBranches.size === 0) {
       return [];
     }
 
@@ -351,13 +369,13 @@ export class RabbitholeDetector {
       return [];
     }
 
-    const returnedEvents: RabbitholeEvent[] = [];
+    const returnedBranches: Branch[] = [];
 
-    // Check each active rabbithole for return
+    // Check each active branch for return
     // Note: We process sequentially to maintain state consistency
-    for (const [id, activeState] of this.activeRabbitholes.entries()) {
+    for (const [id, activeState] of this.activeBranches.entries()) {
       // Build the return detection prompt
-      const prompt = buildRabbitholeReturnPrompt(
+      const prompt = buildBranchReturnPrompt(
         activeState.topic,
         currentRecallPoint,
         recentMessages
@@ -370,99 +388,137 @@ export class RabbitholeDetector {
       });
 
       // Parse the response
-      const result = parseRabbitholeReturnResponse(response.text);
+      const result = parseBranchReturnResponse(response.text);
 
       // Only mark as returned if confidence threshold is met
       if (result.hasReturned && result.confidence >= this.config.returnConfidenceThreshold) {
-        // Create the completed event
-        const event: RabbitholeEvent = {
+        // Create the closed branch
+        const branch: Branch = {
           id,
+          parentBranchId: activeState.parentBranchId,
+          branchPointMessageId: activeState.branchPointMessageId,
           topic: activeState.topic,
-          triggerMessageIndex: activeState.triggerMessageIndex,
-          returnMessageIndex: messageIndex,
           depth: activeState.depth,
           relatedRecallPointIds: activeState.relatedRecallPointIds,
           userInitiated: activeState.userInitiated,
-          status: 'returned',
+          status: 'closed',
+          summary: null,
+          conversation: null,
+          closedAt: new Date(),
         };
 
-        returnedEvents.push(event);
+        returnedBranches.push(branch);
 
         // Remove from active tracking
-        this.activeRabbitholes.delete(id);
+        this.activeBranches.delete(id);
       }
     }
 
-    return returnedEvents;
+    return returnedBranches;
   }
 
   /**
-   * Force-closes all active rabbitholes at session end.
+   * Checks if a branch conversation has naturally concluded.
+   *
+   * Runs after each branch message to detect winding-down signals.
+   * This is distinct from return detection — conclusion checks whether
+   * the tangent itself has wound down, not whether the conversation
+   * returned to the main topic.
+   *
+   * @param branchConversation - The messages within the branch conversation
+   * @param topic - The branch topic being discussed
+   * @returns true if the branch conversation has naturally concluded
+   */
+  async detectConclusion(
+    branchConversation: Array<{ role: string; content: string }>,
+    topic: string
+  ): Promise<boolean> {
+    // Too early to conclude — need at least 4 messages for meaningful analysis
+    if (branchConversation.length < 4) return false;
+
+    const recentMessages = branchConversation.slice(-4);
+    const prompt = buildBranchConclusionPrompt(topic, recentMessages);
+
+    const response = await this.llmClient.complete(prompt, {
+      temperature: 0.3,
+      maxTokens: 128,
+    });
+
+    const result = parseBranchConclusionResponse(response.text);
+    return result.isConcluded && result.confidence >= this.config.confidenceThreshold;
+  }
+
+  /**
+   * Force-closes all active branches at session end.
    *
    * When a session ends (either completed or abandoned), any remaining
-   * active rabbitholes should be closed with 'abandoned' status. This
-   * ensures the session metrics include all rabbithole events.
+   * active branches should be closed with 'abandoned' status. This
+   * ensures the session metrics include all branch events.
    *
-   * @param finalMessageIndex - Index of the last message in the session
-   * @returns Array of closed RabbitholeEvents (may be empty)
+   * @returns Array of closed Branches with 'abandoned' status (may be empty)
    *
    * @example
    * ```typescript
    * // At session end
-   * const abandoned = detector.closeAllActive(messages.length - 1);
-   * sessionMetrics.rabbitholes.push(...abandoned);
+   * const abandoned = detector.closeAllActive();
+   * sessionMetrics.branches.push(...abandoned);
    * ```
    */
-  closeAllActive(finalMessageIndex: number): RabbitholeEvent[] {
-    const closedEvents: RabbitholeEvent[] = [];
+  closeAllActive(): Branch[] {
+    const closedBranches: Branch[] = [];
 
-    // Convert each active rabbithole to an abandoned event
-    for (const [id, activeState] of this.activeRabbitholes.entries()) {
-      const event: RabbitholeEvent = {
+    // Convert each active branch to an abandoned Branch
+    for (const [id, activeState] of this.activeBranches.entries()) {
+      const branch: Branch = {
         id,
+        parentBranchId: activeState.parentBranchId,
+        branchPointMessageId: activeState.branchPointMessageId,
         topic: activeState.topic,
-        triggerMessageIndex: activeState.triggerMessageIndex,
-        returnMessageIndex: finalMessageIndex, // Mark where we stopped
         depth: activeState.depth,
         relatedRecallPointIds: activeState.relatedRecallPointIds,
         userInitiated: activeState.userInitiated,
         status: 'abandoned', // Session ended without return
+        summary: null,
+        conversation: null,
+        closedAt: new Date(),
       };
 
-      closedEvents.push(event);
+      closedBranches.push(branch);
     }
 
-    // Clear all active rabbitholes
-    this.activeRabbitholes.clear();
+    // Clear all active branches
+    this.activeBranches.clear();
 
-    return closedEvents;
+    return closedBranches;
   }
 
   /**
-   * Returns all currently active (unreturned) rabbitholes.
+   * Returns all currently active (unreturned) branches.
    *
    * Useful for checking the current state of tangents during a session.
    *
-   * @returns Array of RabbitholeEvents representing active tangents
+   * @returns Array of Branches representing active tangents
    *
    * @example
    * ```typescript
-   * const active = detector.getActiveRabbitholes();
+   * const active = detector.getActiveBranches();
    * if (active.length > 2) {
    *   console.log('Multiple tangents detected, may need redirection');
    * }
    * ```
    */
-  getActiveRabbitholes(): RabbitholeEvent[] {
-    return Array.from(this.activeRabbitholes.values()).map((activeState) => ({
+  getActiveBranches(): Branch[] {
+    return Array.from(this.activeBranches.values()).map((activeState) => ({
       id: activeState.id,
+      parentBranchId: activeState.parentBranchId,
+      branchPointMessageId: activeState.branchPointMessageId,
       topic: activeState.topic,
-      triggerMessageIndex: activeState.triggerMessageIndex,
-      returnMessageIndex: null,
       depth: activeState.depth,
       relatedRecallPointIds: activeState.relatedRecallPointIds,
       userInitiated: activeState.userInitiated,
       status: 'active' as const,
+      summary: null,
+      conversation: null,
     }));
   }
 
@@ -479,31 +535,31 @@ export class RabbitholeDetector {
    * ```
    */
   reset(): void {
-    this.activeRabbitholes.clear();
+    this.activeBranches.clear();
     this.detectionQueue = [];
     this.detectionInProgress = false;
   }
 
   /**
-   * Returns the count of currently active rabbitholes.
+   * Returns the count of currently active branches.
    *
    * A quick way to check if there are any active tangents without
    * getting the full event data.
    *
-   * @returns Number of active rabbitholes
+   * @returns Number of active branches
    */
   getActiveCount(): number {
-    return this.activeRabbitholes.size;
+    return this.activeBranches.size;
   }
 
   /**
-   * Checks if a specific rabbithole is still active.
+   * Checks if a specific branch is still active.
    *
-   * @param rabbitholeId - ID of the rabbithole to check
-   * @returns true if the rabbithole is still active
+   * @param branchId - ID of the branch to check
+   * @returns true if the branch is still active
    */
-  isActive(rabbitholeId: string): boolean {
-    return this.activeRabbitholes.has(rabbitholeId);
+  isActive(branchId: string): boolean {
+    return this.activeBranches.has(branchId);
   }
 
   /**
@@ -528,7 +584,7 @@ export class RabbitholeDetector {
    *
    * @returns A copy of the current configuration
    */
-  getConfig(): RabbitholeDetectorConfig {
+  getConfig(): BranchDetectorConfig {
     return { ...this.config };
   }
 
@@ -539,7 +595,7 @@ export class RabbitholeDetector {
    *
    * @param config - Partial configuration to merge with current settings
    */
-  updateConfig(config: Partial<RabbitholeDetectorConfig>): void {
+  updateConfig(config: Partial<BranchDetectorConfig>): void {
     this.config = { ...this.config, ...config };
   }
 }

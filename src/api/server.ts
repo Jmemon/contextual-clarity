@@ -67,7 +67,7 @@ import { FSRSScheduler } from '@/core/fsrs/scheduler';
 import { RecallEvaluator } from '@/core/scoring/recall-evaluator';
 import { AnthropicClient } from '@/llm/client';
 import { SessionMetricsCollector } from '@/core/session/metrics-collector';
-import { RabbitholeDetector } from '@/core/analysis/rabbithole-detector';
+import { BranchDetector } from '@/core/analysis/branch-detector';
 import {
   config as appConfig,
   validateConfig,
@@ -447,9 +447,9 @@ function createWsDependencies(): WebSocketHandlerDependencies {
     scheduler,
     evaluator,
     llmClient,
-    // Phase 2: Metrics and rabbit hole detection
+    // Phase 2: Metrics and branch detection
     metricsCollector: new SessionMetricsCollector(),
-    rabbitholeDetector: new RabbitholeDetector(detectorClient),
+    branchDetector: new BranchDetector(detectorClient),
     metricsRepo: new SessionMetricsRepository(db),
     recallOutcomeRepo: new RecallOutcomeRepository(db),
     rabbitholeRepo: new RabbitholeEventRepository(db),

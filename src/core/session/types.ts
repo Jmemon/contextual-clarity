@@ -27,7 +27,7 @@ import type {
   RecallOutcomeRepository,
 } from '../../storage/repositories';
 import type { SessionMetricsCollector } from './metrics-collector';
-import type { RabbitholeDetector } from '../analysis/rabbithole-detector';
+import type { BranchDetector } from '../analysis/branch-detector';
 
 /**
  * Complete catalog of session engine events.
@@ -202,7 +202,7 @@ export const DEFAULT_SESSION_CONFIG: SessionEngineConfig = {
  *   messageRepo: new SessionMessageRepository(db),
  *   // Phase 2: Metrics collection (optional)
  *   metricsCollector: new SessionMetricsCollector(),
- *   branchDetector: new RabbitholeDetector(llmClient), // will become BranchDetector in Task 7
+ *   branchDetector: new BranchDetector(llmClient),
  *   metricsRepo: new SessionMetricsRepository(db),
  *   recallOutcomeRepo: new RecallOutcomeRepository(db),
  *   branchRepo: any, // BranchRepository — created in Task 3
@@ -249,10 +249,9 @@ export interface SessionEngineDependencies {
    * Detector for identifying conversational branches (tangents).
    * When provided, enables real-time detection and tracking of when
    * conversations drift from the main recall topic.
-   * Note: Still uses RabbitholeDetector class until Task 7 renames it to BranchDetector.
    * @since Phase 2
    */
-  branchDetector?: RabbitholeDetector;
+  branchDetector?: BranchDetector;
 
   /**
    * Repository for persisting session-level metrics.
