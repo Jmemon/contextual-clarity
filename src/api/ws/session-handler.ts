@@ -63,7 +63,7 @@ import type { SessionMessageRepository } from '@/storage/repositories/session-me
 import type {
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
+  BranchRepository,
 } from '@/storage/repositories';
 import type { FSRSScheduler } from '@/core/fsrs/scheduler';
 import type { RecallEvaluator } from '@/core/scoring/recall-evaluator';
@@ -139,8 +139,8 @@ export interface WebSocketSessionData {
   currentResponseChunks: string[];
   /** Current chunk index being sent */
   currentChunkIndex: number;
-  /** Serializes async message processing to prevent concurrent handler execution per connection */
-  processingLock: Promise<void>;
+  /** Per-branch processing locks — allows trunk and branches to process concurrently */
+  branchLocks: Map<string, Promise<void>>;
 }
 
 /**
@@ -163,7 +163,7 @@ export function createInitialSessionData(
     isStreaming: false,
     currentResponseChunks: [],
     currentChunkIndex: 0,
-    processingLock: Promise.resolve(),
+    branchLocks: new Map(),
   };
 }
 
@@ -199,8 +199,8 @@ export interface WebSocketHandlerDependencies {
   metricsRepo?: SessionMetricsRepository;
   /** Phase 2: Recall outcome repository */
   recallOutcomeRepo?: RecallOutcomeRepository;
-  /** Phase 2: Rabbithole event repository */
-  rabbitholeRepo?: RabbitholeEventRepository;
+  /** Branch repository for persisting branches */
+  branchRepo?: BranchRepository;
 }
 
 // ============================================================================
@@ -296,7 +296,7 @@ export class WebSocketSessionHandler {
         branchDetector: this.deps.branchDetector,
         metricsRepo: this.deps.metricsRepo,
         recallOutcomeRepo: this.deps.recallOutcomeRepo,
-        rabbitholeRepo: this.deps.rabbitholeRepo,
+        branchRepo: this.deps.branchRepo,
       });
 
       /**
@@ -308,12 +308,12 @@ export class WebSocketSessionHandler {
        *   -> frontend: animates circle fill (T11)
        *   -> agent asks about next unchecked point
        *
-       * Rabbit hole flow:
-       *   user tangent -> rabbithole_detected event -> frontend shows prompt
-       *   -> user clicks Explore -> client sends enter_rabbithole
-       *   -> engine emits rabbithole_entered -> frontend transitions
-       *   -> user clicks Return -> client sends exit_rabbithole
-       *   -> engine emits rabbithole_exited -> frontend transitions back
+       * Branch flow:
+       *   user tangent -> branch_detected event -> new tab appears
+       *   -> user clicks tab -> client sends activate_branch
+       *   -> engine emits branch_activated -> tab becomes active
+       *   -> user clicks close -> client sends close_branch
+       *   -> engine emits branch_closed + branch_summary_injected
        *
        * Auto-end flow (T08):
        *   last point recalled -> session_complete_overlay event -> overlay shown
@@ -360,38 +360,45 @@ export class WebSocketSessionHandler {
             });
             break;
 
-          case 'rabbithole_detected':
+          case 'branch_detected':
             this.send(ws, {
-              type: 'rabbithole_detected',
+              type: 'branch_detected',
+              branchId: d.branchId,
               topic: d.topic,
-              rabbitholeEventId: d.rabbitholeEventId,
+              parentBranchId: d.parentBranchId,
+              depth: d.depth,
             });
             break;
 
-          case 'rabbithole_entered':
+          case 'branch_activated':
             this.send(ws, {
-              type: 'rabbithole_entered',
+              type: 'branch_activated',
+              branchId: d.branchId,
               topic: d.topic,
             });
             break;
 
-          case 'rabbithole_exited':
+          case 'branch_closed':
             this.send(ws, {
-              type: 'rabbithole_exited',
-              label: d.label,
-              pointsRecalledDuring: d.pointsRecalledDuring,
-              completionPending: d.completionPending,
+              type: 'branch_closed',
+              branchId: d.branchId,
+              summary: d.summary,
             });
             break;
 
-          case 'rabbithole_declined':
+          case 'branch_summary_injected':
+            this.send(ws, {
+              type: 'branch_summary_injected',
+              branchId: d.branchId,
+              summary: d.summary,
+              branchPointMessageId: d.branchPointMessageId,
+            });
+            break;
+
           case 'session_started':
           case 'user_message':
           case 'assistant_message':
-            // These events are not forwarded as separate WS messages:
-            // - session_started is sent explicitly after getOpeningMessage()
-            // - user/assistant messages are handled by the streaming flow
-            // - rabbithole_declined has no client-side representation
+            // Not forwarded: session_started sent explicitly, user/assistant via streaming
             break;
 
           default: {
@@ -476,34 +483,28 @@ export class WebSocketSessionHandler {
       return;
     }
 
-    // Serialize all async message handlers via a per-connection processing lock.
-    // This prevents concurrent execution of e.g. user_message + enter_rabbithole,
-    // which would cause two streamResponse() calls to interleave on the same socket.
-    const prev = data.processingLock;
+    // Per-branch processing lock — trunk and branches can process concurrently,
+    // but messages within the same branch/trunk are serialized.
+    const lockKey = (parsed as { branchId?: string }).branchId ?? 'trunk';
+    const prev = data.branchLocks.get(lockKey) ?? Promise.resolve();
     let resolve!: () => void;
-    data.processingLock = new Promise<void>((r) => (resolve = r));
+    const lock = new Promise<void>((r) => (resolve = r));
+    data.branchLocks.set(lockKey, lock);
     await prev;
 
     try {
       switch (parsed.type) {
         case 'user_message':
-          await this.handleUserMessage(ws, parsed.content);
+          await this.handleUserMessage(ws, parsed.content, parsed.branchId);
           break;
         case 'leave_session':
-          // T08: leave_session pauses the session (non-destructive) instead of abandoning it
           await this.handleLeaveSession(ws);
           break;
-        case 'enter_rabbithole':
-          // T09: User opted into exploring a detected tangent
-          await this.handleEnterRabbithole(ws, parsed.rabbitholeEventId, parsed.topic);
+        case 'activate_branch':
+          await this.handleActivateBranch(ws, parsed.branchId);
           break;
-        case 'exit_rabbithole':
-          // T09: User wants to return from the rabbit hole to the main session
-          await this.handleExitRabbithole(ws);
-          break;
-        case 'decline_rabbithole':
-          // T09: User declined the rabbit hole prompt — set cooldown
-          this.handleDeclineRabbithole(ws);
+        case 'close_branch':
+          await this.handleCloseBranch(ws, parsed.branchId);
           break;
         case 'dismiss_overlay':
           // T13: User dismissed the completion overlay and wants to continue discussion
@@ -531,7 +532,8 @@ export class WebSocketSessionHandler {
    */
   private async handleUserMessage(
     ws: ServerWebSocket<WebSocketSessionData>,
-    content: string
+    content: string,
+    branchId?: string
   ): Promise<void> {
     const data = ws.data;
     console.log(`[WS] User message for session ${data.sessionId}: "${content.substring(0, 50)}..."`);
@@ -550,10 +552,10 @@ export class WebSocketSessionHandler {
     try {
       // Process the user message through the real SessionEngine
       // This generates an actual LLM response based on the conversation context
-      const result = await data.engine.processUserMessage(content);
+      const result = await data.engine.processUserMessage(content, branchId);
 
       // Stream the real response back to the client
-      await this.streamResponse(ws, result.response);
+      await this.streamResponse(ws, result.response, branchId);
 
       // T13: point_recalled messages are now forwarded via the engine event listener
       // (wired in handleOpen). No direct sends needed here.
@@ -569,23 +571,15 @@ export class WebSocketSessionHandler {
   }
 
   /**
-   * T09: Handles the user opting into a detected rabbit hole.
-   *
-   * Creates the RabbitholeAgent, streams back the opening message, and
-   * switches the session into rabbit hole mode. The 'rabbithole_entered'
-   * server event is emitted by the engine and forwarded via the event listener.
-   *
-   * @param ws - The WebSocket connection
-   * @param rabbitholeEventId - The DB event ID for this rabbit hole
-   * @param topic - The topic to explore
+   * Handles client activating a detected branch (first tab click).
+   * Creates the BranchAgent and streams the opening message.
    */
-  private async handleEnterRabbithole(
+  private async handleActivateBranch(
     ws: ServerWebSocket<WebSocketSessionData>,
-    rabbitholeEventId: string,
-    topic: string
+    branchId: string
   ): Promise<void> {
     const data = ws.data;
-    console.log(`[WS] Enter rabbithole for session ${data.sessionId}: "${topic}"`);
+    console.log(`[WS] Activate branch ${branchId} for session ${data.sessionId}`);
 
     if (!data.initialized || !data.engine) {
       this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
@@ -593,31 +587,24 @@ export class WebSocketSessionHandler {
     }
 
     try {
-      // enterRabbithole() creates the agent and emits 'rabbithole_entered' (forwarded by listener)
-      const openingMessage = await data.engine.enterRabbithole(topic, rabbitholeEventId);
-
-      // Stream the opening message back to the client
-      await this.streamResponse(ws, openingMessage);
+      const openingMessage = await data.engine.activateBranch(branchId);
+      await this.streamResponse(ws, openingMessage, branchId);
     } catch (error) {
-      console.error(`[WS] Error entering rabbit hole:`, error);
-      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Failed to enter rabbit hole');
+      console.error(`[WS] Error activating branch:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Failed to activate branch');
     }
   }
 
   /**
-   * T09: Handles the user exiting a rabbit hole.
-   *
-   * Persists the conversation, restores normal session mode, and emits
-   * 'rabbithole_exited' (forwarded by the event listener). If all points
-   * were recalled during the rabbit hole, session_complete_overlay fires next.
-   *
-   * @param ws - The WebSocket connection
+   * Handles client closing a branch (marking as done).
+   * Events emitted by the engine are forwarded via the event listener.
    */
-  private async handleExitRabbithole(
-    ws: ServerWebSocket<WebSocketSessionData>
+  private async handleCloseBranch(
+    ws: ServerWebSocket<WebSocketSessionData>,
+    branchId: string
   ): Promise<void> {
     const data = ws.data;
-    console.log(`[WS] Exit rabbithole for session ${data.sessionId}`);
+    console.log(`[WS] Close branch ${branchId} for session ${data.sessionId}`);
 
     if (!data.initialized || !data.engine) {
       this.sendError(ws, 'SESSION_NOT_ACTIVE', 'Session not initialized');
@@ -625,33 +612,12 @@ export class WebSocketSessionHandler {
     }
 
     try {
-      // exitRabbithole() persists conversation, resets mode, emits events (forwarded by listener)
-      await data.engine.exitRabbithole();
+      await data.engine.closeBranch(branchId);
+      // branch_closed and branch_summary_injected events forwarded by event listener
     } catch (error) {
-      console.error(`[WS] Error exiting rabbit hole:`, error);
-      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Failed to exit rabbit hole');
+      console.error(`[WS] Error closing branch:`, error);
+      this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Failed to close branch');
     }
-  }
-
-  /**
-   * T09: Handles the user declining a rabbit hole prompt.
-   *
-   * Sets a 3-message cooldown so the user isn't immediately prompted again
-   * after saying no. No response is sent to the client for this action.
-   *
-   * @param ws - The WebSocket connection
-   */
-  private handleDeclineRabbithole(
-    ws: ServerWebSocket<WebSocketSessionData>
-  ): void {
-    const data = ws.data;
-    console.log(`[WS] Decline rabbithole for session ${data.sessionId}`);
-
-    if (!data.initialized || !data.engine) {
-      return; // Silently ignore if session not ready
-    }
-
-    data.engine.declineRabbithole();
   }
 
   /**
@@ -827,7 +793,8 @@ export class WebSocketSessionHandler {
    */
   private async streamResponse(
     ws: ServerWebSocket<WebSocketSessionData>,
-    response: string
+    response: string,
+    branchId?: string
   ): Promise<void> {
     const data = ws.data;
     const chunkSize = 20; // Characters per chunk (adjustable)
@@ -848,6 +815,7 @@ export class WebSocketSessionHandler {
         type: 'assistant_chunk',
         content: chunks[i],
         chunkIndex: i,
+        branchId,
       });
 
       // Small delay between chunks (10-30ms to simulate streaming)
@@ -859,6 +827,7 @@ export class WebSocketSessionHandler {
       type: 'assistant_complete',
       fullContent: response,
       totalChunks: chunks.length,
+      branchId,
     });
   }
 

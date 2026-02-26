@@ -61,7 +61,7 @@ import {
   SessionMessageRepository,
   SessionMetricsRepository,
   RecallOutcomeRepository,
-  RabbitholeEventRepository,
+  BranchRepository,
 } from '@/storage/repositories';
 import { FSRSScheduler } from '@/core/fsrs/scheduler';
 import { RecallEvaluator } from '@/core/scoring/recall-evaluator';
@@ -429,7 +429,7 @@ function createWsDependencies(): WebSocketHandlerDependencies {
   // Create a dedicated LLM client for the evaluator (separate instance per spec requirement)
   const evaluatorClient = new AnthropicClient();
 
-  // Dedicated LLM client for rabbit hole detection (separate from tutor and evaluator)
+  // Dedicated LLM client for branch detection (separate from tutor and evaluator)
   const detectorClient = new AnthropicClient();
 
   // Create the FSRS scheduler for spaced repetition
@@ -452,7 +452,7 @@ function createWsDependencies(): WebSocketHandlerDependencies {
     branchDetector: new BranchDetector(detectorClient),
     metricsRepo: new SessionMetricsRepository(db),
     recallOutcomeRepo: new RecallOutcomeRepository(db),
-    rabbitholeRepo: new RabbitholeEventRepository(db),
+    branchRepo: new BranchRepository(db),
   };
 }
 
