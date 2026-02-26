@@ -36,6 +36,13 @@
       "when": 1771780017771,
       "tag": "0004_happy_crystal",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1772074886018,
+      "tag": "0005_branches_table",
+      "breakpoints": true
     }
   ]
 }

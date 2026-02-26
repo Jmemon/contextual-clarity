@@ -305,6 +305,11 @@ export const sessionMessages = sqliteTable('session_messages', {
 
   // Token count for the message (useful for API cost tracking and context management)
   tokenCount: integer('token_count'),
+
+  // null = trunk message; otherwise FK to the branch this message belongs to
+  // Note: no .references() here to avoid circular FK with the branches table,
+  // which itself references sessionMessages.id via branchPointMessageId.
+  branchId: text('branch_id'),
 });
 
 /**
@@ -493,70 +498,71 @@ export const recallOutcomes = sqliteTable(
 );
 
 /**
- * Rabbithole Events Table
+ * Branches Table
  *
- * Tracks when conversations veer off into tangential topics ("rabbitholes").
- * Rabbitholes can be valuable learning moments or distractions; tracking them
- * helps understand engagement patterns and optimize session structure.
- *
- * Depth levels:
- * - 1: Shallow tangent, easily returns to main topic
- * - 2: Medium depth, requires some effort to return
- * - 3: Deep tangent, significant departure from session goals
+ * Represents first-class conversation branches in a tree structure. Sessions
+ * have a trunk (main conversation) and branches (tangent explorations).
+ * Each branch forks from a specific message and can itself be branched,
+ * forming an arbitrarily deep tree.
  *
  * Status values:
- * - 'active': Currently in a rabbithole tangent
- * - 'returned': Successfully returned to main session flow
- * - 'abandoned': Session ended while still in rabbithole
+ * - 'detected': Tab appeared in the UI, user hasn't engaged yet
+ * - 'active': User has engaged, agent is/was alive
+ * - 'closed': Naturally concluded or user marked done
+ * - 'abandoned': Session ended with branch still open
  */
-export const rabbitholeEvents = sqliteTable(
-  'rabbithole_events',
+export const branches = sqliteTable(
+  'branches',
   {
-    // Unique identifier for the rabbithole event (UUID format recommended)
     id: text('id').primaryKey(),
 
-    // Foreign key reference to the session where this event occurred
     sessionId: text('session_id')
       .notNull()
       .references(() => sessions.id),
 
-    // The tangential topic that triggered the rabbithole
+    // null = branched from trunk; otherwise FK to parent branch
+    parentBranchId: text('parent_branch_id'),
+
+    // The exact message in the parent where this branch forks
+    branchPointMessageId: text('branch_point_message_id')
+      .notNull()
+      .references(() => sessionMessages.id),
+
     topic: text('topic').notNull(),
 
-    // Index of the message that triggered entry into the rabbithole
-    triggerMessageIndex: integer('trigger_message_index').notNull(),
+    // detected: tab appeared, user hasn't engaged yet
+    // active: user has engaged, agent is/was alive
+    // closed: naturally concluded or user marked done
+    // abandoned: session ended with branch still open
+    status: text('status', { enum: ['detected', 'active', 'closed', 'abandoned'] })
+      .notNull()
+      .default('detected'),
 
-    // Index of the message where conversation returned to main topic (null if still active or abandoned)
-    returnMessageIndex: integer('return_message_index'),
+    // Populated on close — brief summary of the branch conversation
+    summary: text('summary'),
 
-    // Depth of the rabbithole (1=shallow, 2=medium, 3=deep)
-    depth: integer('depth').notNull(),
+    // 1 = off trunk, 2 = off a branch, etc.
+    depth: integer('depth').notNull().default(1),
 
-    // Array of recall point IDs that relate to this rabbithole topic
-    // Stored as JSON array since a rabbithole may touch multiple recall points
     relatedRecallPointIds: text('related_recall_point_ids', { mode: 'json' })
       .$type<string[]>()
       .notNull()
       .default([]),
 
-    // Whether the user explicitly initiated the tangent (vs. AI-led exploration)
     userInitiated: integer('user_initiated', { mode: 'boolean' }).notNull(),
 
-    // Current status of the rabbithole event
-    status: text('status', { enum: ['active', 'returned', 'abandoned'] })
-      .notNull()
-      .default('active'),
-
-    // T09: Full conversation history from the RabbitholeAgent for this event.
-    // Stored as a JSON array of { role, content } objects. Null if the user
-    // declined or the agent was never activated for this detection event.
+    // Full exchange persisted as JSON array of { role, content }
     conversation: text('conversation', { mode: 'json' })
       .$type<Array<{ role: string; content: string }>>(),
 
-    // Timestamp when this rabbithole event was detected (milliseconds since epoch)
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+
+    closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
   },
-  (table) => [index('rabbithole_events_session_id_idx').on(table.sessionId)]
+  (table) => [
+    index('branches_session_id_idx').on(table.sessionId),
+    index('branches_parent_branch_id_idx').on(table.parentBranchId),
+  ]
 );
 
 /**
@@ -612,9 +618,9 @@ export type NewSessionMetrics = typeof sessionMetrics.$inferInsert;
 export type RecallOutcome = typeof recallOutcomes.$inferSelect;
 export type NewRecallOutcome = typeof recallOutcomes.$inferInsert;
 
-// Type exports for rabbithole events
-export type RabbitholeEvent = typeof rabbitholeEvents.$inferSelect;
-export type NewRabbitholeEvent = typeof rabbitholeEvents.$inferInsert;
+// Type exports for branches (replaces former rabbithole events)
+export type BranchRow = typeof branches.$inferSelect;
+export type NewBranchRow = typeof branches.$inferInsert;
 
 // Type exports for message timings
 export type MessageTiming = typeof messageTimings.$inferSelect;
