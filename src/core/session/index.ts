@@ -48,6 +48,10 @@ export { SessionEngine } from './session-engine';
 // Metrics collection
 export { SessionMetricsCollector } from './metrics-collector';
 
+// Context builder for tree-structured sessions
+export { buildTrunkContext, buildBranchContext } from './context-builder';
+export type { ContextMessage, BranchInfo } from './context-builder';
+
 // Type exports
 export type {
   SessionEventType,
