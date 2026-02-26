@@ -299,6 +299,9 @@ export interface ProcessMessageResult {
 
   /** List of point IDs recalled in this turn by the continuous evaluator */
   pointsRecalledThisTurn: string[];
+
+  /** Branch IDs detected during this turn (for deferred eager activation) */
+  detectedBranchIds: string[];
 }
 
 /**

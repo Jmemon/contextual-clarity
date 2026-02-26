@@ -586,8 +586,10 @@ export class SessionEngine {
     });
 
     // === Phase 2: Detect branches after user message ===
-    // Check if the user's message indicates a conversational tangent
-    await this.detectAndRecordBranch();
+    // Check if the user's message indicates a conversational tangent.
+    // Returns detected branch IDs so the handler can activate them AFTER
+    // the trunk response is fully streamed (avoids concurrent LLM calls).
+    const detectedBranchIds = await this.detectAndRecordBranch();
 
     // === T06: Continuous evaluation — evaluate ALL unchecked points after every user message ===
     const evalResult = await this.evaluateUncheckedPoints();
@@ -606,7 +608,7 @@ export class SessionEngine {
     // T08: If all points are recalled, emit overlay event instead of immediately completing.
     // The session is only finalized when the user leaves via leave_session / "Done" button.
     if (this.allPointsRecalled()) {
-      return this.handleAllPointsRecalled(evalResult);
+      return this.handleAllPointsRecalled(evalResult, detectedBranchIds);
     }
 
     // Update the LLM prompt to reflect newly recalled points (if any)
@@ -627,6 +629,7 @@ export class SessionEngine {
       recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
       pointsRecalledThisTurn: evalResult.recalledPointIds,
+      detectedBranchIds,
     };
   }
 
@@ -774,7 +777,7 @@ export class SessionEngine {
    * @param evalResult - The evaluation result from the last evaluateUncheckedPoints() call
    * @returns ProcessMessageResult with a continuation response (not marked completed yet)
    */
-  private async handleAllPointsRecalled(evalResult: ContinuousEvalResult): Promise<ProcessMessageResult> {
+  private async handleAllPointsRecalled(evalResult: ContinuousEvalResult, detectedBranchIds: string[] = []): Promise<ProcessMessageResult> {
     const recalledCount = this.getRecalledCount();
     const totalPoints = this.targetPoints.length;
 
@@ -797,6 +800,7 @@ export class SessionEngine {
       recalledCount,
       totalPoints,
       pointsRecalledThisTurn: evalResult.recalledPointIds,
+      detectedBranchIds,
     };
   }
 
@@ -980,6 +984,7 @@ export class SessionEngine {
       recalledCount: this.getRecalledCount(),
       totalPoints: this.targetPoints.length,
       pointsRecalledThisTurn: evalResult.recalledPointIds,
+      detectedBranchIds: [],
     };
   }
 
@@ -1454,10 +1459,10 @@ export class SessionEngine {
    *
    * @private
    */
-  private async detectAndRecordBranch(): Promise<void> {
+  private async detectAndRecordBranch(): Promise<string[]> {
     // Skip if branch detection is not enabled
     if (!this.branchDetector || !this.currentSession) {
-      return;
+      return [];
     }
 
     const currentPoint = this.getNextProbePoint() ?? this.targetPoints[this.targetPoints.length - 1];
@@ -1495,7 +1500,11 @@ export class SessionEngine {
         topic: branch.topic,
         depth: branch.depth,
       });
+
+      return [branch.id];
     }
+
+    return [];
   }
 
   /**

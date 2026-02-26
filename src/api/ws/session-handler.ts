@@ -368,11 +368,10 @@ export class WebSocketSessionHandler {
               parentBranchId: d.parentBranchId,
               depth: d.depth,
             });
-            // Eager activation: immediately spin up the branch agent and stream
-            // its opening message so content is ready before the user clicks the tab.
-            this.handleActivateBranch(ws, d.branchId).catch(err => {
-              console.error(`[WS] Eager branch activation failed for ${d.branchId}:`, err);
-            });
+            // NOTE: Eager activation is handled by handleUserMessage AFTER the
+            // trunk response is streamed, using result.detectedBranchIds. This
+            // avoids concurrent LLM calls (branch + eval + tutor) that would
+            // slow down all responses.
             break;
 
           case 'branch_activated':
@@ -566,6 +565,16 @@ export class WebSocketSessionHandler {
       // (wired in handleOpen). No direct sends needed here.
       // T13: point_transition is removed entirely — the checklist model replaces it.
       // T13: session_complete is now sent via the engine event when finalizeSession() is called.
+
+      // Eager branch activation — AFTER trunk response is fully streamed.
+      // This avoids concurrent LLM calls that would slow everything down.
+      for (const detectedId of result.detectedBranchIds) {
+        try {
+          await this.handleActivateBranch(ws, detectedId);
+        } catch (err) {
+          console.error(`[WS] Deferred branch activation failed for ${detectedId}:`, err);
+        }
+      }
     } catch (error) {
       console.error(`[WS] Error processing user message:`, error);
       this.sendError(ws, 'SESSION_ENGINE_ERROR', error instanceof Error ? error.message : 'Unknown error');
