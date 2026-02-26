@@ -458,6 +458,7 @@ export function SessionContainer({
             userMessageSent={activeBranch ? activeBranch.lastSentUserMessage : lastSentUserMessage}
             isLoading={activeBranch ? (activeBranch.isWaitingForResponse && !activeBranch.streamingContent) : (isWaitingForResponse && !streamingContent)}
             isOpeningMessage={activeBranch ? false : isOpeningMessage}
+            accent={activeBranchId ? 'branch' : 'trunk'}
             className="flex-1"
           />
 

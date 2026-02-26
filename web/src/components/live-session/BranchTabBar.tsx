@@ -6,7 +6,8 @@
  * appear with a slide-in animation when first detected, and support unread
  * indicators for branches the user isn't currently viewing.
  *
- * Only rendered when at least one branch exists — otherwise returns null.
+ * Always rendered — shows the "Session" trunk tab even when no branches exist,
+ * providing a consistent layout anchor for when branches appear.
  *
  * @example
  * ```tsx
@@ -74,9 +75,6 @@ export function BranchTabBar({
       }
     }
   }, [branches]);
-
-  // Don't render the tab bar at all if there are no branches
-  if (branches.length === 0) return null;
 
   return (
     <div

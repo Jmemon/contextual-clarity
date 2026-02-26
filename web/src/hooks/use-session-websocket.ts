@@ -548,8 +548,9 @@ export function useSessionWebSocket(
           callbacksRef.current.onSessionPaused?.();
           break;
 
-        // Server detected a tangent — create a new branch in 'detected' status.
-        // The user can choose to activate (explore) it or ignore it.
+        // Server detected a tangent — create the branch in 'detected' status.
+        // The server eagerly activates the branch agent, so it's already generating
+        // content. Mark isWaitingForResponse: true so the UI shows a loading state.
         case 'branch_detected': {
           const { branchId, topic, parentBranchId, depth } = message;
           setBranches(prev => {
@@ -558,7 +559,7 @@ export function useSessionWebSocket(
               branchId, topic, parentBranchId: parentBranchId ?? null, depth,
               status: 'detected',
               latestAssistantMessage: '', streamingContent: '',
-              lastSentUserMessage: null, isWaitingForResponse: false,
+              lastSentUserMessage: null, isWaitingForResponse: true,
               hasUnread: true, summary: null,
             });
             return next;
@@ -805,31 +806,18 @@ export function useSessionWebSocket(
   }, [sendMessage]);
 
   /**
-   * Switch the active view to a branch. If the branch is still in 'detected' status,
-   * this sends an activate_branch message to the server to spin up the branch agent.
-   * If the branch is already active, this just switches the UI view.
+   * Switch the active view to a branch tab. The server eagerly activates branches
+   * on detection, so this is purely a UI view switch — no server message needed.
+   * Clears the unread indicator on the tab being viewed.
    */
   const activateBranch = useCallback((branchId: string) => {
     setActiveBranchId(branchId);
-    const branch = branchesRef.current.get(branchId);
-    if (branch?.status === 'detected') {
-      // First activation — tell server to create the branch agent
-      setBranches(prev => {
-        const next = new Map(prev);
-        const b = next.get(branchId);
-        if (b) next.set(branchId, { ...b, isWaitingForResponse: true, hasUnread: false });
-        return next;
-      });
-      wsRef.current?.send(JSON.stringify({ type: 'activate_branch', branchId }));
-    } else {
-      // Already active — just switch view and clear unread badge
-      setBranches(prev => {
-        const next = new Map(prev);
-        const b = next.get(branchId);
-        if (b) next.set(branchId, { ...b, hasUnread: false });
-        return next;
-      });
-    }
+    setBranches(prev => {
+      const next = new Map(prev);
+      const b = next.get(branchId);
+      if (b) next.set(branchId, { ...b, hasUnread: false });
+      return next;
+    });
   }, []);
 
   /**

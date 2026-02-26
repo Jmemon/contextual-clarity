@@ -66,6 +66,8 @@ export interface SingleExchangeViewProps {
   isOpeningMessage: boolean;
   /** Additional CSS classes for the root element. */
   className?: string;
+  /** Accent color variant — 'branch' uses emerald, default uses clarity (blue). */
+  accent?: 'trunk' | 'branch';
 }
 
 // ============================================================================
@@ -90,10 +92,11 @@ export function SingleExchangeView({
   isLoading,
   isOpeningMessage,
   className = '',
+  accent = 'trunk',
 }: SingleExchangeViewProps) {
-  // Accent color for labels and loading indicators — always clarity colors.
-  const labelColor = 'text-clarity-400';
-  const dotColor = 'bg-clarity-400';
+  // Accent color for labels and loading indicators — emerald for branches, clarity for trunk.
+  const labelColor = accent === 'branch' ? 'text-emerald-400' : 'text-clarity-400';
+  const dotColor = accent === 'branch' ? 'bg-emerald-400' : 'bg-clarity-400';
   // Derived phase from the combination of incoming props.
   // Priority: ai_streaming > awaiting_response > showing_ai
   const [phase, setPhase] = useState<ExchangePhase>('showing_ai');

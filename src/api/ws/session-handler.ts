@@ -308,10 +308,10 @@ export class WebSocketSessionHandler {
        *   -> frontend: animates circle fill (T11)
        *   -> agent asks about next unchecked point
        *
-       * Branch flow:
+       * Branch flow (eager activation):
        *   user tangent -> branch_detected event -> new tab appears
-       *   -> user clicks tab -> client sends activate_branch
-       *   -> engine emits branch_activated -> tab becomes active
+       *   -> server immediately activates branch agent + streams opening message
+       *   -> user clicks tab -> content already loaded (pure UI switch)
        *   -> user clicks close -> client sends close_branch
        *   -> engine emits branch_closed + branch_summary_injected
        *
@@ -367,6 +367,11 @@ export class WebSocketSessionHandler {
               topic: d.topic,
               parentBranchId: d.parentBranchId,
               depth: d.depth,
+            });
+            // Eager activation: immediately spin up the branch agent and stream
+            // its opening message so content is ready before the user clicks the tab.
+            this.handleActivateBranch(ws, d.branchId).catch(err => {
+              console.error(`[WS] Eager branch activation failed for ${d.branchId}:`, err);
             });
             break;
 
@@ -571,8 +576,9 @@ export class WebSocketSessionHandler {
   }
 
   /**
-   * Handles client activating a detected branch (first tab click).
-   * Creates the BranchAgent and streams the opening message.
+   * Activates a branch — creates the BranchAgent and streams the opening message.
+   * Called eagerly on branch detection (so content is ready before the user clicks)
+   * and also available for explicit client activate_branch requests.
    */
   private async handleActivateBranch(
     ws: ServerWebSocket<WebSocketSessionData>,

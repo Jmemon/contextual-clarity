@@ -3,7 +3,7 @@
  *
  * Renders a single tab in the right-edge branch tab bar. Each tab represents
  * a detected or active conversation branch (tangent). Supports:
- * - Active/inactive visual state with clarity accent border
+ * - Active/inactive visual state with emerald accent border (distinct from trunk's blue)
  * - Unread indicator dot for branches with new content
  * - Depth-based indentation to show branch hierarchy
  * - Close button (visible on hover) to request branch closure
@@ -70,8 +70,8 @@ export function BranchTab({
         group relative w-full text-left px-3 py-2 text-xs rounded-l-lg
         transition-all duration-200 border-r-2
         ${isActive
-          ? 'bg-slate-800 border-clarity-400 text-white'
-          : 'bg-transparent border-transparent text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+          ? 'bg-emerald-950/40 border-emerald-400 text-emerald-50'
+          : 'bg-transparent border-transparent text-slate-400 hover:bg-emerald-950/20 hover:text-emerald-200'
         }
         ${className}
       `}
@@ -81,7 +81,7 @@ export function BranchTab({
     >
       {/* Unread indicator — small dot shown on inactive tabs with new content */}
       {hasUnread && !isActive && (
-        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-clarity-400" />
+        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />
       )}
       <span className="block truncate max-w-[80px]">{topic}</span>
       {/* Close button — visible on hover, stops propagation to avoid activating the tab */}
