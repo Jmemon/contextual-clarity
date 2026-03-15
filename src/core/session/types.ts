@@ -119,7 +119,7 @@ export type SessionEventData =
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_completed'; sessionId: string; summary: SessionCompletionSummary }
   | { type: 'point_recalled'; pointId: string; label: string; recalledCount: number; totalPoints: number }
-  | { type: 'branch_detected'; branchId: string; topic: string; parentBranchId?: string; depth: number }
+  | { type: 'branch_detected'; branchId: string; topic: string; parentBranchId?: string; depth: number; restored?: boolean }
   | { type: 'branch_activated'; branchId: string; topic: string }
   | { type: 'branch_closed'; branchId: string; summary: string }
   | { type: 'branch_summary_injected'; branchId: string; summary: string; branchPointMessageId: string }

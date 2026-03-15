@@ -72,7 +72,6 @@ interface ContinuousEvalResult {
 }
 import type { RecallEvaluation } from '../scoring/types';
 import type { RecallRating } from '../fsrs/types';
-import type { LLMMessage } from '../../llm/types';
 import { buildSocraticTutorPrompt } from '../../llm/prompts';
 import {
   type SessionEngineDependencies,
@@ -197,6 +196,9 @@ export class SessionEngine {
 
   /** Messages in the current session, loaded from DB and kept in sync */
   private messages: SessionMessage[] = [];
+
+  /** Whether the current session is being resumed (vs fresh start) — drives recap logic in getOpeningMessage() */
+  private isResumedSession = false;
 
   /** Optional event listener for session events */
   private eventListener?: (event: SessionEvent) => void;
@@ -389,6 +391,7 @@ export class SessionEngine {
     this.currentProbeIndex = 0;
     this.messages = [];
     this.currentPointStartIndex = 0;
+    this.isResumedSession = false;
 
     // === Phase 2: Initialize metrics collection for the new session ===
     // Start tracking session metrics if the collector is available
@@ -446,6 +449,7 @@ export class SessionEngine {
     this.currentRecallSet = recallSet;
     this.targetPoints = points;
     this.messages = existingMessages;
+    this.isResumedSession = true;
 
     // T08: Reconstruct checklist from persisted recalledPointIds for paused sessions.
     // This restores progress without re-evaluating the conversation history.
@@ -480,9 +484,31 @@ export class SessionEngine {
       this.metricsCollector.startSession(session.id, this.currentModel);
     }
 
-    // Reset branch detector state for the resumed session
+    // Reset branch detector state, then restore any persisted branches so the
+    // detector can track returns and the frontend gets tab-creation events.
     if (this.branchDetector) {
       this.branchDetector.reset();
+    }
+
+    if (this.branchRepo) {
+      const activeBranches = await this.branchRepo.findActiveBySessionId(session.id);
+      if (activeBranches.length > 0) {
+        // Restore detector state so it can track returns
+        if (this.branchDetector) {
+          this.branchDetector.restoreFromPersistedBranches(activeBranches);
+        }
+        // Emit events so frontend creates branch tabs
+        for (const branch of activeBranches) {
+          this.emitEvent({
+            type: 'branch_detected',
+            branchId: branch.id,
+            topic: branch.topic,
+            parentBranchId: branch.parentBranchId ?? undefined,
+            depth: branch.depth as 1 | 2 | 3,
+            restored: true,
+          });
+        }
+      }
     }
 
     // Configure the LLM with the appropriate prompt
@@ -499,6 +525,50 @@ export class SessionEngine {
     });
 
     return session;
+  }
+
+  /**
+   * Generates a recap welcome-back message for resumed sessions.
+   *
+   * Uses the full prior exchange to give the LLM context, then asks for a
+   * condensed welcome-back message that transitions into the next recall probe.
+   */
+  private async generateResumeRecapMessage(): Promise<string> {
+    const exchange = this.serializeExchange();
+    const recalledCount = this.getRecalledCount();
+    const totalPoints = this.targetPoints.length;
+
+    const basePrompt = this.llmClient.getSystemPrompt() ?? '';
+    const recapPrompt = `${basePrompt}
+
+## Exchange so far
+
+${exchange}
+
+## Resume instruction
+
+You are resuming a paused recall session. ${recalledCount} of ${totalPoints} points have been recalled.
+
+Generate a brief welcome-back message (2-3 sentences max) that:
+1. Summarizes what was covered so far in one sentence
+2. Transitions directly into probing the next unchecked point
+
+Do NOT list out points. Do NOT be overly formal. Be concise and conversational — like picking up a conversation with a friend. End with your next recall-probing question. Output ONLY the message content — no XML tags, no role labels.`;
+
+    this.llmClient.setSystemPrompt(recapPrompt);
+    const response = await this.llmClient.complete('Resume the session.', {
+      temperature: this.config.tutorTemperature,
+      maxTokens: this.config.tutorMaxTokens,
+    });
+    this.llmClient.setSystemPrompt(basePrompt);
+
+    const cleanText = response.text.replace(/<\/?tutor>/g, '').trim();
+
+    await this.saveMessage('assistant', cleanText, response.usage?.inputTokens, response.usage?.outputTokens);
+    this.emitEvent({ type: 'assistant_message', content: cleanText, isOpening: true });
+
+    this.isResumedSession = false;
+    return cleanText;
   }
 
   /**
@@ -519,6 +589,11 @@ export class SessionEngine {
    */
   async getOpeningMessage(): Promise<string> {
     this.validateActiveSession();
+
+    // Resumed sessions get a recap message instead of a fresh opening question
+    if (this.isResumedSession) {
+      return this.generateResumeRecapMessage();
+    }
 
     // T13: Removed emitEvent('point_started') — replaced by checklist model from T01.
     // The tutor probes the next unchecked point via prompt, not a discrete event.
@@ -1232,41 +1307,41 @@ export class SessionEngine {
   }
 
   /**
-   * Generates a tutor response for the current conversation.
+   * Generates a tutor response by serializing the conversation exchange into
+   * the system prompt. This prevents the LLM from confusing evaluator feedback
+   * with its own prior output (which caused evaluator observation leaks).
    *
-   * Builds the conversation history from session messages and requests
-   * a follow-up response from the LLM. When evaluatorFeedback is provided,
-   * it is injected as an ephemeral assistant message at the start of
-   * conversation history — NOT persisted to this.messages or DB.
-   * The feedback is prefixed with an instruction telling the tutor not to
-   * reference it directly.
+   * The exchange is appended to the base system prompt as XML-tagged turns,
+   * and the LLM receives a single trigger message. The base prompt is restored
+   * after the call so it doesn't accumulate.
    *
    * @param evaluatorFeedback - Optional feedback from the continuous evaluator
    * @returns The tutor's response
    */
   private async generateTutorResponse(evaluatorFeedback?: string): Promise<string> {
-    // Build conversation history for the LLM
-    const conversationHistory = this.buildConversationHistory();
+    const exchange = this.serializeExchange(evaluatorFeedback);
 
-    // T06: Inject evaluator feedback as an ephemeral assistant message at the start.
-    // This shapes the tutor's next response invisibly — NOT saved to messages or DB.
-    if (evaluatorFeedback) {
-      conversationHistory.unshift({
-        role: 'assistant',
-        content: `[Internal observation — do not reference or quote directly to the user]: ${evaluatorFeedback}`,
-      });
-    }
+    // Temporarily append the exchange to the system prompt for this call
+    const basePrompt = this.llmClient.getSystemPrompt() ?? '';
+    const fullPrompt = `${basePrompt}\n\n## Exchange so far\n\n${exchange}\n\nGenerate the next <tutor> message. Output ONLY the message content — no XML tags, no role labels.`;
 
-    // Generate response
-    const response = await this.llmClient.complete(conversationHistory, {
+    this.llmClient.setSystemPrompt(fullPrompt);
+
+    const response = await this.llmClient.complete('Continue the exchange.', {
       temperature: this.config.tutorTemperature,
       maxTokens: this.config.tutorMaxTokens,
     });
 
+    // Restore base prompt so it doesn't accumulate exchange history
+    this.llmClient.setSystemPrompt(basePrompt);
+
+    // Strip any <tutor> tags the LLM may have wrapped its output in
+    const cleanText = response.text.replace(/<\/?tutor>/g, '').trim();
+
     // Save the assistant message with token usage (Phase 2: metrics tracking)
     await this.saveMessage(
       'assistant',
-      response.text,
+      cleanText,
       response.usage?.inputTokens,
       response.usage?.outputTokens
     );
@@ -1274,27 +1349,32 @@ export class SessionEngine {
     // Emit assistant message event
     this.emitEvent({
       type: 'assistant_message',
-      content: response.text,
+      content: cleanText,
     });
 
-    return response.text;
+    return cleanText;
   }
 
   /**
-   * Builds the conversation history in LLM message format.
-   *
-   * Converts SessionMessage objects to the format expected by the LLM client.
-   * Only includes user and assistant messages (not system messages).
-   *
-   * @returns Array of LLM messages representing the conversation
+   * Serializes the conversation exchange into XML-tagged format for inclusion
+   * in the system prompt. Each message becomes a <user> or <tutor> block.
+   * Evaluator feedback (if any) is appended as an <evaluator> block — visible
+   * to the LLM as instructional context but structurally separated from the
+   * conversation turns it generated.
    */
-  private buildConversationHistory(): LLMMessage[] {
-    return this.messages
-      .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-      .map((msg) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      }));
+  private serializeExchange(evaluatorFeedback?: string): string {
+    const lines: string[] = [];
+    for (const msg of this.messages) {
+      if (msg.role === 'user') {
+        lines.push(`<user>${msg.content}</user>`);
+      } else if (msg.role === 'assistant') {
+        lines.push(`<tutor>${msg.content}</tutor>`);
+      }
+    }
+    if (evaluatorFeedback) {
+      lines.push(`<evaluator>${evaluatorFeedback}</evaluator>`);
+    }
+    return lines.join('\n\n');
   }
 
   /**
@@ -1430,6 +1510,7 @@ export class SessionEngine {
     this.pointChecklist = new Map();
     this.currentProbeIndex = 0;
     this.messages = [];
+    this.isResumedSession = false;
     this.llmClient.setSystemPrompt(undefined);
 
     // Destroy all active branch agents and clear metrics

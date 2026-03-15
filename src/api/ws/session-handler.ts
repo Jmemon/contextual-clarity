@@ -367,6 +367,7 @@ export class WebSocketSessionHandler {
               topic: d.topic,
               parentBranchId: d.parentBranchId,
               depth: d.depth,
+              restored: d.restored,
             });
             // NOTE: Eager activation is handled by handleUserMessage AFTER the
             // trunk response is streamed, using result.detectedBranchIds. This

@@ -77,7 +77,7 @@ export type ServerMessage =
   | { type: 'session_complete'; summary: SessionCompleteSummary }
   | { type: 'session_complete_overlay'; sessionId: string; recalledCount: number; totalPoints: number; message: string; canContinue: boolean }
   | { type: 'session_paused'; sessionId: string; recalledCount: number; totalPoints: number }
-  | { type: 'branch_detected'; branchId: string; topic: string; parentBranchId?: string; depth: number }
+  | { type: 'branch_detected'; branchId: string; topic: string; parentBranchId?: string; depth: number; restored?: boolean }
   | { type: 'branch_activated'; branchId: string }
   | { type: 'branch_closed'; branchId: string; summary: string }
   | { type: 'branch_summary_injected'; branchId: string }
@@ -552,19 +552,24 @@ export function useSessionWebSocket(
         // The server eagerly activates the branch agent, so it's already generating
         // content. Mark isWaitingForResponse: true so the UI shows a loading state.
         case 'branch_detected': {
-          const { branchId, topic, parentBranchId, depth } = message;
+          const { branchId, topic, parentBranchId, depth, restored } = message;
           setBranches(prev => {
             const next = new Map(prev);
             next.set(branchId, {
               branchId, topic, parentBranchId: parentBranchId ?? null, depth,
               status: 'detected',
               latestAssistantMessage: '', streamingContent: '',
-              lastSentUserMessage: null, isWaitingForResponse: true,
-              hasUnread: true, summary: null,
+              lastSentUserMessage: null,
+              // Restored branches don't show loading spinners or unread badges
+              isWaitingForResponse: !restored,
+              hasUnread: !restored,
+              summary: null,
             });
             return next;
           });
-          callbacksRef.current.onBranchDetected?.(branchId, topic);
+          if (!restored) {
+            callbacksRef.current.onBranchDetected?.(branchId, topic);
+          }
           break;
         }
 

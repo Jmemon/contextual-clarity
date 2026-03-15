@@ -523,6 +523,30 @@ export class BranchDetector {
   }
 
   /**
+   * Restores activeBranches map from persisted DB records on session resume.
+   * This allows the detector to track returns for branches that existed before the pause.
+   */
+  restoreFromPersistedBranches(branches: Array<{
+    id: string; topic: string; depth: number;
+    parentBranchId: string | null; branchPointMessageId: string;
+    relatedRecallPointIds: string[]; userInitiated: boolean; createdAt: Date;
+  }>): void {
+    for (const branch of branches) {
+      this.activeBranches.set(branch.id, {
+        id: branch.id,
+        topic: branch.topic,
+        triggerMessageIndex: -1,
+        depth: branch.depth as 1 | 2 | 3,
+        relatedRecallPointIds: branch.relatedRecallPointIds,
+        userInitiated: branch.userInitiated,
+        detectedAt: branch.createdAt,
+        parentBranchId: branch.parentBranchId,
+        branchPointMessageId: branch.branchPointMessageId,
+      });
+    }
+  }
+
+  /**
    * Resets all detector state for starting a new session.
    *
    * This should be called when beginning a new session to ensure

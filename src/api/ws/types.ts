@@ -268,6 +268,8 @@ export interface BranchDetectedPayload {
   parentBranchId?: string;
   /** How far from the main topic (1 = off trunk, 2 = nested, etc.) */
   depth: number;
+  /** True when this event is replayed from persisted state on session resume */
+  restored?: boolean;
 }
 
 /** Confirms a branch agent is ready after the client sent activate_branch */

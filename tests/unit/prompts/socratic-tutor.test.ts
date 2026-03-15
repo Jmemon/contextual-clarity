@@ -8,7 +8,8 @@
  *
  * T07: Updated to reflect the tone overhaul — new Socratic approach section,
  * new guidelines section, removed "Encourage elaboration" / "Celebrate recall",
- * and added "I RECALL NOTHING" and "HANDLING EVALUATOR OBSERVATIONS" sections.
+ * and added "I RECALL NOTHING" section. Evaluator observations are now handled
+ * via XML-tagged exchange format in the system prompt (not in guidelines).
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -76,10 +77,10 @@ describe('buildSocraticTutorPrompt', () => {
       expect(prompt).toContain('practice retrieval');
     });
 
-    it('mentions the evaluator system', () => {
+    it('mentions the evaluator exchange format', () => {
       const prompt = buildSocraticTutorPrompt(buildDefaultParams());
-      expect(prompt).toContain('evaluator system');
-      expect(prompt).toContain('observations');
+      expect(prompt).toContain('<evaluator>');
+      expect(prompt).toContain('observations are internal');
     });
 
     it('states the UI handles positive reinforcement', () => {
@@ -356,9 +357,10 @@ describe('buildSocraticTutorPrompt', () => {
       expect(prompt).toContain('HANDLING "I RECALL NOTHING"');
     });
 
-    it('contains the "HANDLING EVALUATOR OBSERVATIONS" section', () => {
+    it('contains exchange format instructions for evaluator observations', () => {
       const prompt = buildSocraticTutorPrompt(buildDefaultParams());
-      expect(prompt).toContain('HANDLING EVALUATOR OBSERVATIONS');
+      expect(prompt).toContain('<evaluator> observations are internal');
+      expect(prompt).toContain('no XML tags');
     });
 
     it('contains the no meta-commentary rule', () => {
@@ -376,7 +378,7 @@ describe('buildSocraticTutorPrompt', () => {
 
     it('instructs not to reference the evaluator to the user', () => {
       const prompt = buildSocraticTutorPrompt(buildDefaultParams());
-      expect(prompt).toContain('Never reference the evaluator or the evaluation system to the user');
+      expect(prompt).toContain('never reference, quote, or reveal them to the user');
     });
   });
 
@@ -441,7 +443,7 @@ describe('buildSocraticTutorPrompt', () => {
       // T07: New guidelines section present
       expect(prompt).toContain('## Guidelines');
       expect(prompt).toContain('1-3 sentences');
-      expect(prompt).toContain('HANDLING EVALUATOR OBSERVATIONS');
+      expect(prompt).toContain('<evaluator> observations are internal');
       // Supplementary guidelines present
       expect(prompt).toContain('Use simple language for this set.');
       expect(prompt).toContain('<supplementary_guidelines>');
